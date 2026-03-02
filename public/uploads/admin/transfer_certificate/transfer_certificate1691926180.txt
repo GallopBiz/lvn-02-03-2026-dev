@@ -1,0 +1,102 @@
+-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: 127.0.0.1
+-- Generation Time: Jul 20, 2023 at 09:36 AM
+-- Server version: 10.4.28-MariaDB
+-- PHP Version: 8.1.17
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Database: `school_erp`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `states`
+--
+
+CREATE TABLE `states` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `country_id` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `states`
+--
+
+INSERT INTO `states` (`id`, `name`, `country_id`, `created_at`, `updated_at`) VALUES
+(1, 'ANDHRA PRADESH', 105, NULL, NULL),
+(2, 'ASSAM', 105, NULL, NULL),
+(3, 'ARUNACHAL PRADESH', 105, NULL, NULL),
+(4, 'BIHAR', 105, NULL, NULL),
+(5, 'GUJRAT', 105, NULL, NULL),
+(6, 'HARYANA', 105, NULL, NULL),
+(7, 'HIMACHAL PRADESH', 105, NULL, NULL),
+(8, 'JAMMU & KASHMIR', 105, NULL, NULL),
+(9, 'KARNATAKA', 105, NULL, NULL),
+(10, 'KERALA', 105, NULL, NULL),
+(11, 'MADHYA PRADESH', 105, NULL, NULL),
+(12, 'MAHARASHTRA', 105, NULL, NULL),
+(13, 'MANIPUR', 105, NULL, NULL),
+(14, 'MEGHALAYA', 105, NULL, NULL),
+(15, 'MIZORAM', 105, NULL, NULL),
+(16, 'NAGALAND', 105, NULL, NULL),
+(17, 'ORISSA', 105, NULL, NULL),
+(18, 'PUNJAB', 105, NULL, NULL),
+(19, 'RAJASTHAN', 105, NULL, NULL),
+(20, 'SIKKIM', 105, NULL, NULL),
+(21, 'TAMIL NADU', 105, NULL, NULL),
+(22, 'TRIPURA', 105, NULL, NULL),
+(23, 'UTTAR PRADESH', 105, NULL, NULL),
+(24, 'WEST BENGAL', 105, NULL, NULL),
+(25, 'DELHI', 105, NULL, NULL),
+(26, 'GOA', 105, NULL, NULL),
+(27, 'PONDICHERY', 105, NULL, NULL),
+(28, 'LAKSHDWEEP', 105, NULL, NULL),
+(29, 'DAMAN & DIU', 105, NULL, NULL),
+(30, 'DADRA & NAGAR', 105, NULL, NULL),
+(31, 'CHANDIGARH', 105, NULL, NULL),
+(32, 'ANDAMAN & NICOBAR', 105, NULL, NULL),
+(33, 'UTTARANCHAL', 105, NULL, NULL),
+(34, 'JHARKHAND', 105, NULL, NULL),
+(35, 'CHATTISGARH', 105, NULL, NULL);
+
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `states`
+--
+ALTER TABLE `states`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `states`
+--
+ALTER TABLE `states`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

@@ -1,0 +1,362 @@
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<!-- Latest compiled and minified CSS -->
+<!-- jQuery library -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+<!-- Latest compiled JavaScript -->
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+<!-- Latest glyphonic cdn -->
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css" integrity="sha384-50oBUHEmvpQ+1lW4y57PTFmhCaXp0ML5d60M1M7uH2+nqUivzIebhndOJK28anvf" crossorigin="anonymous">
+
+<!-- ******************************* -->
+<div class="nk-content ">
+                    <div class="container-fluid">
+                        <div class="nk-content-inner">
+                            <div class="nk-content-body">
+                                <div class="nk-block-head nk-block-head-sm">
+                                    <div class="nk-block-between">
+                                        <div class="nk-block-head-content">
+                                            <h3 class="nk-block-title page-title">Driver Live Traking</h3>
+                                            <div class="nk-block-des text-soft">
+                                                <p>You have total <?php echo count($driverdata);?> Drivers.</p>
+                                            </div>
+                                        </div><!-- .nk-block-head-content -->
+                                        <div class="nk-block-head-content">
+                                            <div class="toggle-wrap nk-block-tools-toggle">
+                                                <!--<a href="#" class="btn btn-icon btn-trigger toggle-expand mr-n1" data-target="pageMenu"><em class="icon ni ni-menu-alt-r"></em></a>-->
+                                                <div class="toggle-expand-content" data-content="pageMenu">
+                                                    <ul class="nk-block-tools g-3">
+                                                   
+                                                        <li class="nk-block-tools-opt">
+                                                            <!--<a href="#" data-toggle="modal" data-target="#profile-edit" class="btn btn-primary addAttrremove"><em class="icon ni ni-plus"></em><span>Add Vehical</span></a>-->
+                                                            </li>
+                                                    </ul>
+                                                </div>
+                                            </div><!-- .toggle-wrap -->
+                                        </div><!-- .nk-block-head-content -->
+                                    </div><!-- .nk-block-between -->
+                                </div><!-- .nk-block-head --><br>
+                                            <?php if(session()->getFlashdata('msg')):?>
+                                                
+                                                <div class="alert alert-fill alert-success alert-icon alert-dismissible fade show">
+                                                    <em class="icon ni ni-check-circle"></em> <strong></strong><?= session()->getFlashdata('msg') ?>  <button class="close" data-dismiss="alert"></button>
+                                                </div>
+                                            <?php endif;?>
+                                            <?php if(session()->getFlashdata('msgerror')):?>
+                                                <div class="alert alert-fill alert-success alert-icon alert-dismissible fade show" id="alert">
+                                                    <em class="icon ni ni-cross-circle"></em> <strong>Insert error !</strong><?= session()->getFlashdata('msgerror') ?>  <button class="close" data-dismiss="alert"></button>
+                                                </div>
+                                            <?php endif;?>                
+                                        </div>
+                                        <div class="card card-bordered">
+                                            <div class="card-inner">
+                                                
+                                               
+                                    <div class="nk-block"> 
+                                    <table class="datatable-init nowrap table">
+                                    <thead>
+                                     <tr class="nk-tb-item nk-tb-head">
+                                      <th class="nk-tb-col colwidth"><span class="sub-text">S No.</span></th>
+                                      
+                                      <th class="nk-tb-col"><span class="sub-text">Image</span></th>
+                                      
+                                      <th class="nk-tb-col tb-col-mb"><span class="sub-text">Name</span></th>
+                                      
+                                     
+                                      <th class="nk-tb-col tb-col-mb"><span class="sub-text">Mobile</span></th>
+                                      
+                                      <!--<th class="nk-tb-col tb-col-mb"><span class="sub-text">Total Amount</span></th>-->
+                                      
+                                      <th class="nk-tb-col tb-col-mb"><span class="sub-text">Agency</span></th>
+                                      
+                                      <th class="nk-tb-col tb-col-mb"><span class="sub-text">Track</span></th>
+                                      
+                                      <!--<th class="nk-tb-col tb-col-mb"><span class="sub-text">Action</span></th>-->
+                                     </tr>
+                                        </thead>
+                                        <tbody>
+                                        <?php $c=0; $d=1;
+                                        foreach ($driverdata as $row){ 
+                                         
+                                        $builder = $db->table('booking');      
+                                        $builder->select('*');       
+                                        $builder->where('booking_driver_id', $row->user_id);
+                                        $builder->where('oneway_status', 'Start');
+                                        $query = $builder->get();
+                                        $ridestatus =$query->getResult();?>
+                                        <tr class="nk-tb-item">
+                                            <td class="nk-tb-col"><span><?php echo ++$c; ?></span></td>
+                                            
+                                            <td class="nk-tb-col">
+                                        <?php if($row->profile_photo==''){ ?>
+                                                <div class="user-avatar bg-primary">
+                                        <?php
+                                        $str1=$row->user_firstname;
+                                        $str2=$row->user_lastname;
+                                        ?><span><?php echo strtoupper($str1[0].$str2[0]); ?></span>
+                                        </div>
+                                        <?php }else{ ?>
+                                        <div class="user-avatar sq bg-purple">
+                                          <img src="<?php echo base_url(); ?>/src/driver_docs/<?php echo $row->profile_photo; ?>" style="border-radius:100px;height:40px;width:40px;object-fit:cover;"> 
+                                        </div><?php } ?></td>
+                                            
+                                            <td class="nk-tb-col"><span><?php echo $row->user_firstname.' '.$row->user_lastname; ?></span></td>
+                                            
+                                           
+                                            
+                                            <td class="nk-tb-col"><span><?php echo $row->user_mobileno; ?></span></td>
+                                            
+                                    
+                                            <td class="nk-tb-col"><span><?php $aid = $row->agency_id;
+                                        $builder = $db->table('user_metadata');
+                                        $builder->select('agency_name');      
+                                        $builder->where('user_id', $aid);
+                                        $query = $builder->get();
+                                        foreach($query->getResult() as $ad){echo $ad->agency_name; }?></span></td>
+                                            
+                                            
+                                        <td class="nk-tb-col"><span><?php if($row->user_status=='1'){ ?>
+                                        <!--<a href="<?php //echo base_url(); ?>/driver_track_admin?did=<?php //echo $row->user_id; ?>" target="_blank">TRACK</a>-->
+                                         <?php echo $aid3 = $row->user_id;
+                                        $builder = $db->table('gps_track');
+                                        $builder->select('*');      
+                                        $builder->where('rider_id', $aid3);
+                                        $query = $builder->get();
+                                        foreach($query->getResult() as $ad3){
+                                            echo $ad3->track_lat; echo $ad3->track_lng;
+                                           }  ?>
+   
+                                        <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#myModalmap<?php echo $d;?>" onclick="initialize([<?php echo $ad3->track_lat;?>,<?php echo $ad3->track_lng;?>]);"><i class="fas fa-info-circle"></i>TRACK</button>
+<!--<select id="coordinatechoice" type="hidden"> -->
+<!--<option value="0">First coordinate</option>-->
+<!--<option value="1">Second coordinate</option>-->
+<!--</select>-->
+                                        <?php }else{ ?>
+                                         <span class="tb-status text-danger">Suspend</span>
+                                           <?php } ?></span></td>
+                                        
+                                        
+                                       
+                                        </tr>
+                                        <!-- Map MODAL-->
+            <div class="modal fade" id="myModalmap<?php echo $d;?>" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <!--<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>-->
+                    <h4 class="modal-title" id="myModalLabel">Track </h4>
+                  </div>
+                  <div class="modal-body">
+                     
+                      
+                  </div>
+                  <div id="mapCanvas"></div>
+<style>
+#mapCanvas{
+    width: 100%;
+    height: 400px;
+}</style>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBtWLee-k12lI_rpjToG0PfhAagpe49DDI"></script>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+               
+                  </div>
+                </div>
+              </div>
+            </div>
+            <script>
+           <?php $aid3 = $row->user_id;
+                                        $builder = $db->table('gps_track');
+                                        $builder->select('*');      
+                                        $builder->where('rider_id', $aid3);
+                                        $query = $builder->get();
+                                        foreach($query->getResult() as $ad3){
+                                           }  ?>
+     //var latlong = [{lat:21.2513844, long:81.6296413}];
+    var latlong = [{lat: <?php echo $ad3->track_lat;?>, long:<?php echo $ad3->track_lng;?>}];
+     
+//var i=$('select#coordinatechoice').val();
+
+// $("select#coordinatechoice").change(function(){
+//   i=$('select#coordinatechoice').val();
+//   init();
+// }); 
+ function init(){
+$('#myModalmap<?php echo $d;?>').on('shown.bs.modal', (function() {
+      var mapIsAdded = false;
+    
+      return function() {
+        // if (!mapIsAdded) { 
+            
+        //   $('.modal-body').html('<iframe src="https://maps.google.com/maps?q='+latlong[0].lat+','+latlong[0].long+'&hl=es;z=14&amp;output=embed" width="100%" height="400" frameborder="0" style="border:0"></iframe>');
+    
+        //   mapIsAdded = true;
+        // }    
+      };
+    })());
+}
+init();
+
+
+</script>  
+
+
+                                            <?php  $d++; } ?>
+                                            <!-- .nk-tb-item -->
+                                            
+                                        </tbody>
+                                    </table><!-- .nk-tb-list -->
+                                    
+                                </div><!-- .nk-block -->
+                                    </div><!-- .nk-block -->
+                                    
+                                </div><!-- .components-preview -->
+                                 </div>
+                                        </div>
+          <!-- @@ Profile Edit Modal @e -->
+<script>
+//var position = [40.748774, -73.985763];
+var  position;
+function changeposition(potio)
+{ 
+    //alert(potio);
+    var position = potio;
+    initialize(potio);
+    
+}
+//var position = [22.6594454,75.8021388];
+//var position = [23.1456465,75.8164348];
+var position;
+
+function initialize(position) {  
+   alert(position); 
+    var latlng = new google.maps.LatLng(position[0], position[1]);
+   // alert(latlng);
+    var myOptions = {
+        zoom: 16,
+        center: latlng,
+        mapTypeId: google.maps.MapTypeId.ROADMAP
+    };
+    map = new google.maps.Map(document.getElementById("mapCanvas"), myOptions);
+
+    marker = new google.maps.Marker({
+        position: latlng,
+        map: map,
+        //  icon: '<?php echo base_url();?>/src/images/icons8-car-top-view-48.png',
+        title: "Latitude:"+position[0]+" | Longitude:"+position[1]
+    });
+
+    google.maps.event.addListener(map, 'click', function(event) {
+        var result = [event.latLng.lat(), event.latLng.lng()];
+        //alert(result);
+        transition(result);
+    });
+    
+// setInterval(function(){ 
+//     // var result = [40.748514,-73.985848];
+//     var result = [23.1309,75.8188];
+//     transition(result);
+// },10000);
+exit; 
+ }
+
+//Load google map
+ google.maps.event.addDomListener(window, 'load', initialize);
+
+
+var numDeltas = 100;
+var delay = 10; //milliseconds
+var i = 0;
+var deltaLat;
+var deltaLng;
+
+function transition(result){
+    i = 1;
+    deltaLat = (result[0] - position[0])/numDeltas;
+    deltaLng = (result[1] - position[1])/numDeltas;
+    moveMarker();
+}
+
+
+function moveMarker(){
+    position[0] += deltaLat;
+    position[1] += deltaLng;
+    var latlng = new google.maps.LatLng(position[0], position[1]);
+    marker.setTitle("Latitude:"+position[0]+" | Longitude:"+position[1]);
+    marker.setPosition(latlng);
+    if(i!=numDeltas){
+        i++;
+        setTimeout(moveMarker, delay);
+    }
+ 
+}
+
+</script>          
+   
+<script asynczdefer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBtWLee-k12lI_rpjToG0PfhAagpe49DDI"></script>
+            <!-- .tab-pane -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+                </div>
+              
+<style>
+    .colwidth{ width :100px; }
+</style>               
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+
+
+<script>
+// $(document).on('click','.myHref',function(e) {
+//     var id = $(this).attr('id');
+//     //var id = Id
+
+//         $.ajax({
+       
+//             url: '<?php //echo base_url("removevehicletype"); ?>',
+//             dataType: 'html',
+//             data: {id: id},
+//             success: function(response,res){
+//                 window.location.reload(true);
+
+//              }
+//          });
+// });
+
+setInterval(function() {
+    var coords = getLatLng(); // Grab the coordinates from url
+   // updateMapMarker(coords); // Similar to what you've got
+}, 10000); // 30 seconds
+
+setInterval(function(){ 
+    // var result = [40.748514,-73.985848];
+    //var result = [21.31658883435677,76.23461971282376];
+     var result = getLatLng(); // Grab the coordinates from url
+    // updateMapMarker(coords); // Similar to what you've got
+   // alert(result);
+    //transition(result);
+},10000);
+
+function getLatLng() {
+   // var id = $(this).attr('id');     
+    var id = '161';
+    $.ajax({
+        url: '<?php echo base_url("driverlivetrakingajax"); ?>',
+        dataType : 'json',
+        data: {id: id},
+        success: function(data) {
+             transition(data);
+        //alert(data);
+            return data;
+            //getLatLng(data);
+            
+           // return [data.x, data.y];
+        },
+    });
+}
+ </script>
+
+
+ 

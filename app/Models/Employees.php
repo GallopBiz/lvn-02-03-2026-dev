@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Employees extends Model
+{
+    use HasFactory;
+    protected $table="employees";
+    protected $primarykey="id";    
+
+    protected $fillable = [
+        'FirstName',
+        'LastName',
+        'Father_Name',
+        'Email',
+        'Phone',
+        'mobile',
+        'Address',
+        'DateOfBirth',
+        'JoiningDate',
+        'DepartureDate',
+        'DepartmentID',
+        'PositionID',
+        'ess_emp_code',
+        'DeviceCode',
+        'Company',
+        'Location',
+        'Designation',
+        'Grade',
+        'Team',
+        'Category',
+        'EmploymentType',
+        'Gender',
+        'DOJ',
+        'DOC',
+        'CardNumber',
+        'ShiftRoaster',
+        'Status',
+        'City',
+        'Taluka',
+        'District',
+        'PIN_Code',
+        'Experience',
+        'Educational_Qualification',
+        'Previous_Employer',
+        'Prevoius_Designation',
+        'Previous_Salary',
+        'Duration',
+        'Maratial_Status',
+        'Spouse_Name',
+        'Spouse_Contact_No',
+        'No_of_Childern',
+        'Serial_No',
+        'Joining_Designation',
+        'Joining_Grade',
+        'Current_Grade',
+        'Working_Shift',
+        'Default_In_Time',
+        'Default_Out_Time',
+        'Default_Total_Time',
+        'Bank_Name',
+        'Bank_Branch_Name',
+        'Account_No',
+        'Do_Not_Apply_EPF_Limit',
+        'ESI_No',
+        'PAN_No',
+        'Ward_Study_in_Institute',
+        'Is_Discontinued',
+        'Leaving_Date',
+        'Adhar_CardNo',
+        'UAN_No',
+        'IFSCCODE',
+        'AyushmanNo',
+        'IsFirstDoseVaccinated',
+        'FirstDoseVaccinatedDate',
+        'IsSecondDoseVaccinated',
+        'SecondDoseVaccinatedDate',
+        'IsBoosterDoseVaccinated',
+        'BoosterDoseVaccinatedDate',
+        'samagra_id',
+        'Police_Verification',
+        'EmpName_as_on_Adhaar',
+        'PersonalEmail',
+        'staff_type',
+        'shift_type',
+        'is_vacatation_staff'
+    ];
+}
