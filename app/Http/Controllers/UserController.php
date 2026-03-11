@@ -4,11 +4,12 @@ namespace App\Http\Controllers;
     
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\Staff;
 use Spatie\Permission\Models\Role;
 use DB;
 use Hash;
 use Illuminate\Support\Arr;
+use App\Models\StaffUser;
 use Illuminate\Support\Facades\Gate;
 
 class UserController extends Controller
@@ -24,11 +25,9 @@ class UserController extends Controller
         // print_r($user); die();
         if (!$user->hasRole('Admin')) {
             $userId = auth()->id();
-            $data = User::where('id',$userId)->get();
-// print_r($data); die();
-
+            $data = Staff::where('id',$userId)->get();
         } else {
-            $data = User::orderBy('id','DESC')->where('status','a')->get();
+            $data = Staff::orderBy('id','DESC')->get();
         }
         return view('users.index',compact('data'));
             // ->with('i', ($request->input('page', 1) - 1) * 10);
@@ -43,10 +42,19 @@ class UserController extends Controller
     {
         // $roles = Role::pluck('student_name','student_name')->all();
         $roles = Role::pluck('name','name')->all();
-        
-        // print_r($data); die();
+        $employees = \App\Models\HrmsEmployee::with('biometricDetail')
+            ->select('id', 'first_name', 'last_name')
+            ->get()
+            ->mapWithKeys(function($emp) {
+                $display = trim($emp->first_name . ' ' . $emp->last_name);
+                $essEmpCode = $emp->biometricDetail ? $emp->biometricDetail->ess_emp_code : null;
+                if (!empty($essEmpCode)) {
+                    $display .= ' (' . $essEmpCode . ')';
+                }
+                return [$emp->id => $display];
+            })->toArray();
 
-        return view('users.create',compact('roles'));
+        return view('users.create', compact('roles', 'employees'));
     }
     
     /**
@@ -58,7 +66,6 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $input = $request->all();
-        $jsondata =  $input['jsoninput'];
         
         // $this->validate($request, [
         //     'student_name' => 'required',
@@ -72,21 +79,15 @@ class UserController extends Controller
         //     'password' => 'required|same:confirm-password',
         //     'roles' => 'required',
         // ]);
-        $input = $request->all();
+        $input = $request->only(['username', 'password', 'employee_id', 'role']);
         $input['password'] = Hash::make($input['password']);
-        $input['jsondata'] = $jsondata;
-    
-        // return $jsondata;
-
-        // $jsondata = $request->input('jsoninput');
-        // $input['jsondata'] = $jsondata;
-
-
-        $user = User::create($input);
-        $user->assignRole($request->input('roles'));
-    
+        $user = StaffUser::create($input);
+        // Assign role if using spatie/laravel-permission
+        if ($request->filled('role')) {
+            $user->assignRole($request->input('role'));
+        }
         return redirect()->route('users.index')
-                        ->with('success','User created successfully');
+            ->with('success','User created successfully');
     }
     
 
@@ -205,7 +206,7 @@ class UserController extends Controller
      */
     public function show($id)
     {
-        $user = User::find($id);
+        $user = Staff::find($id);
         return view('users.show',compact('user'));
     }
     
@@ -217,11 +218,21 @@ class UserController extends Controller
      */
     public function edit($id)
     {
-        $user = User::find($id);
+        $user = Staff::find($id);
         $roles = Role::pluck('name','name')->all();
-        $userRole = $user->roles->pluck('name','name')->all();
-    
-        return view('users.edit',compact('user','roles','userRole'));
+        $userRole = [$user->role];
+        $employees = \App\Models\HrmsEmployee::with('biometricDetail')
+            ->select('id', 'first_name', 'last_name')
+            ->get()
+            ->mapWithKeys(function($emp) {
+                $display = trim($emp->first_name . ' ' . $emp->last_name);
+                $essEmpCode = $emp->biometricDetail ? $emp->biometricDetail->ess_emp_code : null;
+                if (!empty($essEmpCode)) {
+                    $display .= ' (' . $essEmpCode . ')';
+                }
+                return [$emp->id => $display];
+            })->toArray();
+        return view('users.edit', compact('user', 'roles', 'userRole', 'employees'));
     }
     
     /**

@@ -34,16 +34,6 @@
     </div>
     <div class="col-xs-12 col-sm-12 col-md-12 row">
         <div class="form-group col-2">
-            <strong>Permission:</strong>
-            <br />
-            @foreach($permission as $value)
-            <label>{{ Form::checkbox('permission[]', $value->id, false, array('class' => 'name')) }}
-                {{ $value->name }}</label>
-            <br />
-            @endforeach
-        </div>
-
-        <div class="form-group col-2">
             <strong>Scholars functions</strong>
             <br />        
             {{-- for functions only --}}
@@ -94,6 +84,16 @@
             @foreach($hrms_functions as $value)
             <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
                 {{ $value['label'] }}</label>
+            <br />
+            @endforeach
+        </div>
+
+        <div class="form-group col-2">
+            <strong>Permission:</strong>
+            <br />
+            @foreach($permission as $value)
+            <label>{{ Form::checkbox('permission[]', $value->id, false, array('class' => 'name')) }}
+                {{ $value->name }}</label>
             <br />
             @endforeach
         </div>

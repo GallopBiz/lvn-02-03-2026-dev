@@ -22,8 +22,8 @@
                       <thead>
                         <tr>
                             <th>No</th>
-                            <th>Student Name</th>
-                            <th>Form Number</th>
+                            <th>Username</th>
+                            <th>Full Name</th>
                             <th>Roles</th>
                             <th width="280px">Action</th>
                         </tr>
@@ -34,15 +34,17 @@
                           @foreach($data as $key => $user)
                           <tr>
                               <td>{{ ++$i }}</td>
-                              <td>{{ $user->student_name }}</td>
-                              <td>{{ $user->form_number }}</td>
-                              <td>
-                                  @if(!empty($user->getRoleNames()))
-                                      @foreach($user->getRoleNames() as $v)
-                                          <span class="badge rounded-pill bg-dark">{{ $v }}</span>
-                                      @endforeach
+                                <td>{{ $user->username ?? $user->name }}</td>
+                                <td>
+                                  @if($user->hrmsEmployee)
+                                    {{ $user->hrmsEmployee->first_name }} {{ $user->hrmsEmployee->last_name }}
+                                  @else
+                                    N/A
                                   @endif
-                              </td>
+                                </td>
+                                <td>
+                                  <span class="badge rounded-pill bg-dark">{{ $user->role ?? 'N/A' }}</span>
+                                </td>
                               <td>
                                   <!-- <a class="btn btn-info" href="{{ route('users.show',$user->id) }}">Show</a> -->
                                   <a class="btn btn-primary" href="{{ route('users.edit',$user->id) }}">Edit</a>

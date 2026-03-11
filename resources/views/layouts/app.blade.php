@@ -2,7 +2,7 @@
 @section('main-container')
 <div class="main-content">
     <div class="breadcrumb">
-        @yield('content')
+        @yield('main-container')
     </div>
 </div>
 @endsection 

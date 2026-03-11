@@ -40,6 +40,10 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'staff' => [
+            'driver' => 'session',
+            'provider' => 'staff',
+        ],
     ],
 
     /*
@@ -64,7 +68,14 @@ return [
             'driver' => 'eloquent',
             'model' => App\Models\User::class,
         ],
-
+        'staff' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Staff::class,
+        ],
+        // 'staff' => [
+        //     'driver' => 'eloquent',
+        //     'model' => App\Models\HrmsEmployee::class,
+        // ],
         // 'users' => [
         //     'driver' => 'database',
         //     'table' => 'users',
@@ -89,6 +100,12 @@ return [
     'passwords' => [
         'users' => [
             'provider' => 'users',
+            'table' => 'password_resets',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+        'staff' => [
+            'provider' => 'staff',
             'table' => 'password_resets',
             'expire' => 60,
             'throttle' => 60,

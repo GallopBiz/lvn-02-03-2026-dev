@@ -54,6 +54,49 @@
             </li>
             @endrole
 
+					@can('dashboard')
+					<li class="nav-item" data-item="dashboard">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Dashboard"></i><span class="nav-text">Dashboard</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('scholars')
+					<li class="nav-item" data-item="scholars">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Student-Hat-2"></i><span class="nav-text">Scholars</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('fees')
+					<li class="nav-item" data-item="fees">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Money-2"></i><span class="nav-text">Fees</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('transport')
+					<li class="nav-item" data-item="transport">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Jeep"></i><span class="nav-text">Transport</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('academic')
+					<li class="nav-item" data-item="Academic">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Book"></i><span class="nav-text">Academic</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('hrms')
+					<li class="nav-item" data-item="hrms">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Add-UserStar"></i><span class="nav-text">HRMS</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+					@can('setting')
+					<li class="nav-item" data-item="setting">
+						<a class="nav-item-hold" href="#"><i class="nav-icon i-Gear"></i><span class="nav-text">Setting</span></a>
+						<div class="triangle"></div>
+					</li>
+					@endcan
+
 
 
 

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->bigIncrements('id');
             $table->string('name')->nullable();
             $table->integer('form_number');
-            $table->string('email')->unique();
+            $table->string('email')->nullable();
             $table->string('username')->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');

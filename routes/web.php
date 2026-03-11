@@ -129,7 +129,7 @@ use App\Http\Controllers\ManualAttendanceController;
 use App\Http\Controllers\EmployeeCompOffController;
 use App\Http\Controllers\EmployeeSecurityDepositController;
 use App\Http\Controllers\backend\SmlBusGpsController;
-
+use App\Http\Controllers\Staff\StaffLoginController as StaffAreaLoginController;
 
 
 
@@ -949,8 +949,6 @@ Route::post('change_password', [Changepassword::class, 'create']);
     /*Student registration data*/
     Route::get('student-registrations', [StudentRegistrationController::class,'student_registrations'])->name('student-registrations');
     Route::get('add-student-registrations',[StudentRegistrationController::class,'add_student_registrations'])->name('add-student-registrations');
-//     Route::get('student-registrations', [StudentRegistrationController::class,'student_registrations'])->name('student-registrations');
-//     Route::get('add-student-registrations',[StudentRegistrationController::class,'add_student_registrations'])->name('add-student-registrations');
 
     Route::get('generate-due-chart', [FeesDuechart::class, 'generate_due_chart'])->name('generate-due-chart');
     Route::post('classsection-view/{id}', [FeesDuechart::class, 'class_student']);
@@ -1297,3 +1295,22 @@ Route::get(
 
 
 });
+
+// Staff Portal Authentication
+// Staff login routes (only StaffAreaLoginController)
+Route::get('/staff-login', [StaffAreaLoginController::class, 'showLoginForm'])->name('staff.login');
+Route::post('/staff-login', [StaffAreaLoginController::class, 'login'])->name('staff.login.perform');
+Route::post('/staff-logout', [StaffLoginController::class, 'logout'])->name('staff.logout');
+Route::get('/staff/dashboard', function () {
+    return view('staff.dashboard');
+})->middleware('auth:staff')->name('staff.dashboard');
+// End of file: ensure no stray or unclosed curly braces remain
+
+// Staff login routes
+Route::get('/staff-login', [StaffAreaLoginController::class, 'showLoginForm'])->name('staff.login');
+Route::post('/staff-login', [StaffAreaLoginController::class, 'login'])->name('staff.login.perform');
+Route::post('/staff-logout', [StaffAreaLoginController::class, 'logout'])->name('staff.logout');
+
+// Staff dashboard route
+use App\Http\Controllers\Staff\StaffDashboardController;
+Route::get('/staff/dashboard', [StaffDashboardController::class, 'index'])->middleware('auth:staff')->name('staff.dashboard');

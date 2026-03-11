@@ -454,11 +454,20 @@ class RoleController extends Controller
     {
         $role = Role::find($id);
         $permission = Permission::get();
-        $rolePermissions = DB::table("role_has_permissions")->where("role_has_permissions.role_id",$id)
-            ->pluck('role_has_permissions.permission_id','role_has_permissions.permission_id')
-            ->all();
-    
-        return view('roles.edit',compact('role','permission','rolePermissions'));
+        // Get assigned permission names for this role
+        $rolePermissions = Permission::join("role_has_permissions","role_has_permissions.permission_id","=","permissions.id")
+            ->where("role_has_permissions.role_id",$id)
+            ->pluck('name')
+            ->toArray();
+
+        // Pass module functions as variables
+        $Scholars_functions = Scholars_functions;
+        $Fees_functions = Fees_functions;
+        $Transport_functions = Transport_functions;
+        $Academic_functions = Academic_functions;
+        $hrms_functions = hrms_functions;
+
+        return view('roles.edit', compact('role','permission','rolePermissions', 'Scholars_functions', 'Fees_functions', 'Transport_functions', 'Academic_functions', 'hrms_functions'));
     }
     
     /**
@@ -472,15 +481,16 @@ class RoleController extends Controller
     {
         $this->validate($request, [
             'name' => 'required',
-            'permission' => 'required',
+            'permission' => 'array', // allow empty
         ]);
-    
+
         $role = Role::find($id);
         $role->name = $request->input('name');
         $role->save();
-    
-        $role->syncPermissions($request->input('permission'));
-    
+
+        // Always sync permissions, even if empty
+        $role->syncPermissions($request->input('permission', []));
+
         return redirect()->route('roles.index')
                         ->with('success','Role updated successfully');
     }

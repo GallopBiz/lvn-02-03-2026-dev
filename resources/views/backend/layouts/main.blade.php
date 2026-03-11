@@ -60,17 +60,30 @@
             @include('backend.layouts.footer')
          </div>
       </div>
-      @include('backend.layouts.headerSearchBar')
-      <!-- script js -->
-      <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/plugins/perfect-scrollbar.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/script.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/sidebar.large.script.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/plugins/echarts.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/echart.options.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/dashboard.v1.script.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
+         @include('backend.layouts.headerSearchBar')
+         <!-- script js -->
+         <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
+         <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+         <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+         <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/plugins/perfect-scrollbar.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/scripts/script.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/scripts/sidebar.large.script.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/plugins/echarts.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/scripts/echart.options.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/scripts/dashboard.v1.script.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
+         <script>
+            $(document).ready(function() {
+               if ($('.select2').length) {
+                  $('.select2').select2({
+                     width: '100%',
+                     placeholder: 'Select employee',
+                     allowClear: true
+                  });
+               }
+            });
+         </script>
       @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
       <script src="{{url('assets/backend')}}/js/scripts/tooltip.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/script_2.min.js"></script>
