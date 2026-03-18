@@ -261,7 +261,7 @@ class UserController extends Controller
     
 
 
-        $user = User::find($id);
+        $user = StaffUser::find($id);
         $user->update($input);
         DB::table('model_has_roles')->where('model_id',$id)->delete();
     
@@ -279,8 +279,14 @@ class UserController extends Controller
      */
     public function destroy($id)
     {
-        User::find($id)->delete();
-        return redirect()->route('users.index')
-                        ->with('success','User deleted successfully');
+        $user = StaffUser::find($id);
+        if ($user) {
+            $user->delete();
+            return redirect()->route('users.index')
+                ->with('success','User deleted successfully');
+        } else {
+            return redirect()->route('users.index')
+                ->with('error','User not found');
+        }
     }
 }

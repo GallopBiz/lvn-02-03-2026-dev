@@ -1,5 +1,5 @@
 <?php
-    
+
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -7,364 +7,6 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use DB;
 
-const Scholars_functions = [
-    ['label' => 'filter_followup','functionname' => 'filter_followup'],
-    ['label' => 'admin_preenquiryform','functionname' => 'admin_preenquiryform'],
-    ['label' => 'adminpreenquiryform','functionname' => 'adminpreenquiryform'],
-    ['label' => 'preenquiryviewlist','functionname' => 'preenquiryviewlist'],
-    ['label' => 'enquiryform','functionname' => 'enquiryform'],
-    ['label' => 'adminenquirylist','functionname' => 'adminenquirylist'],
-    ['label' => 'enquiryviewlist','functionname' => 'enquiryviewlist'],
-    ['label' => 'enquiryeditlist','functionname' => 'enquiryeditlist'],
-    ['label' => 'index(enquiryrecipt)','functionname' => 'index'],
-    ['label' => 'followupdate','functionname' => 'followupdate'],
-    ['label' => 'selection_process','functionname' => 'selection_process'],
-    ['label' => 'add_student_registrations','functionname' => 'add_student_registrations'],
-    ['label' => 'student_registrations','functionname' => 'student_registrations'],
-    ['label' => 'registrationviewlist','functionname' => 'registrationviewlist'],
-    ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    
-    // ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    // ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    // ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    // ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    // ['label' => 'registrationeditlist','functionname' => 'registrationeditlist'],
-    
-];
-
-const Fees_functions = [
-    ['label' => 'index(fees-types-master)','functionname' => 'index'],
-    ['label' => 'edit(fees-types-master-edit)','functionname' => 'edit'],
-    ['label' => 'index(bus-fees-master)','functionname' => 'index'],
-    ['label' => 'edit(bus-fees-master-edit)','functionname' => 'edit'],
-    ['label' => 'student_feesmaster','functionname' => 'student_feesmaster'],
-    ['label' => 'adminpreenquiryfeeslist','functionname' => 'adminpreenquiryfeeslist'],
-    ['label' => 'preenquiryviewlist','functionname' => 'preenquiryviewlist'],
-    ['label' => 'course_fees_structure_master_list','functionname' => 'course_fees_structure_master_list'],
-    ['label' => 'course_fees_head_orders_list','functionname' => 'course_fees_head_orders_list'],
-    ['label' => 'late_fees_master','functionname' => 'late_fees_master'],
-    ['label' => 'late_fees_master_edit','functionname' => 'late_fees_master_edit'],
-    ['label' => 'generate_due_chart','functionname' => 'generate_due_chart'],
-    ['label' => 'index(fees_receipt_challan)','functionname' => 'index'],
-    ['label' => 'student_ledger','functionname' => 'student_ledger'],
-    ['label' => 'student_ledger_delete','functionname' => 'student_ledger_delete'],
-    ['label' => 'search_cancle_student_ledger','functionname' => 'search_cancle_student_ledger'],
-    ['label' => 'index(defaulters_list)','functionname' => 'index'],
-    ['label' => 'view(view_defaulters_list)','functionname' => 'view'],
-    ['label' => 'index(classes)','functionname' => 'index'],
-    ['label' => 'view(classes)','functionname' => 'view'],
-    ['label' => 'store(classes)','functionname' => 'store'],
-    ['label' => 'classname_delete','functionname' => 'classname_delete'],
-    ['label' => 'classes_delete','functionname' => 'classes_delete'],
-    ['label' => 'editclasses','functionname' => 'editclasses'],
-    ['label' => 'delete(classes)','functionname' => 'delete'],
-    ['label' => 'storeg','functionname' => 'storeg'],
-    ['label' => 'editg','functionname' => 'editg'],
-    ['label' => 'index(collection)','functionname' => 'index'],
-];
-
-const Transport_functions = [
-    ['label' => 'index(addvehical)','functionname' => 'index'],
-    ['label' => 'addvehical','functionname' => 'addvehical'],
-    ['label' => 'list(addvehical)','functionname' => 'list'],   
-    ['label' => 'view(addvehical)','functionname' => 'view'],
-    ['label' => 'store(addvehical)','functionname' => 'store'],
-    ['label' => 'busstaff','functionname' => 'busstaff'],
-    ['label' => 'addvehical_delete','functionname' => 'addvehical_delete'],
-    ['label' => 'registerstaff','functionname' => 'registerstaff'],
-    ['label' => 'index(area-master)','functionname' => 'index'],
-    ['label' => 'view(area-master)','functionname' => 'view'],
-    ['label' => 'store(area-master)','functionname' => 'store'],
-    ['label' => 'delete(area-master)','functionname' => 'delete'],
-    ['label' => 'index(bus-stop)','functionname' => 'index'],
-    ['label' => 'store(bus-stop)','functionname' => 'store'],
-    ['label' => 'view(bus-stop)','functionname' => 'view'],
-    ['label' => 'create(bus-stop)','functionname' => 'create'],
-    ['label' => 'busstop_delete','functionname' => 'busstop_delete'],
-    ['label' => 'bs_soft_delete','functionname' => 'bs_soft_delete'],
-    ['label' => 'delete(bus-stop)','functionname' => 'delete'],
-    ['label' => 'index(bus-attandence-list)','functionname' => 'filter_followup'],
-    ['label' => 'Attendance','functionname' => 'Attendance'],
-    ['label' => 'list_busAttendence','functionname' => 'list_busAttendence'],
-    ['label' => 'filter_Attendance','functionname' => 'filter_Attendance'],
-    ['label' => 'index(NatureOfWork)','functionname' => 'index'],
-    ['label' => 'create(NatureOfWork)','functionname' => 'create'],
-    ['label' => 'view(NatureOfWork)','functionname' => 'create'],
-    ['label' => 'store(NatureOfWork)','functionname' => 'store'],
-    ['label' => 'Natureofwork_delete','functionname' => 'Natureofwork_delete'],
-    ['label' => 'delete(NatureOfWork)','functionname' => 'delete'],
-    ['label' => 'index(driver-conductor-master)','functionname' => 'index'],
-    ['label' => 'create(driver-conductor-master)','functionname' => 'create'],
-    ['label' => 'view(driver-conductor-master)','functionname' => 'view'],
-    ['label' => 'store(driver-conductor-master)','functionname' => 'store'],
-    ['label' => 'delete(driver-conductor-master)','functionname' => 'delete'],
-    ['label' => 'busstaff_delete','functionname' => 'busstaff_delete'],
-    ['label' => 'index(rtopaper)','functionname' => 'index'],
-    ['label' => 'create(rtopaper)','functionname' => 'create'],
-    ['label' => 'view(rtopaper)','functionname' => 'view'],
-    ['label' => 'store(rtopaper)','functionname' => 'store'],
-    ['label' => 'delete(rtopaper)','functionname' => 'delete'],
-    ['label' => 'rtopaper_delete','functionname' => 'rtopaper_delete'],
-    ['label' => 'index(maintenance-head-master)','functionname' => 'index'],
-    ['label' => 'view(maintenance-head-master)','functionname' => 'view'],
-    ['label' => 'editg(maintenance-head-master)','functionname' => 'editg'],
-    ['label' => 'store(maintenance-head-master)','functionname' => 'store'],
-    ['label' => 'storeg(maintenance-head-master)','functionname' => 'storeg'],
-    ['label' => 'maintenancegroupmaster_delete','functionname' => 'maintenancegroupmaster_delete'],
-    ['label' => 'maintenanceheadpmaster_delete','functionname' => 'maintenanceheadpmaster_delete'],
-    ['label' => 'delete(maintenance-head-master)','functionname' => 'delete'],
-    ['label' => 'index(route-master)','functionname' => 'index'],
-    ['label' => 'view(route-master)','functionname' => 'view'],
-    ['label' => 'store(route-master)','functionname' => 'store'],
-    ['label' => 'delete(route-master)','functionname' => 'delete'],
-    ['label' => 'route_name_delete','functionname' => 'route_name_delete'],
-    ['label' => 'route_delete','functionname' => 'route_delete'],
-    ['label' => 'view_bus','functionname' => 'view_bus'],
-    ['label' => 'index(schedulemaster)','functionname' => 'index'],
-    ['label' => 'store(schedulemaster)','functionname' => 'store'],
-    ['label' => 'create(schedulemaster)','functionname' => 'create'],
-    ['label' => 'index(list-party-master)','functionname' => 'index'],
-    ['label' => 'list_party_master','functionname' => 'list_party_master'],
-    ['label' => 'view(list-party-master)','functionname' => 'view'],
-    ['label' => 'store(list_party_master)','functionname' => 'store'],
-    ['label' => 'party_master_delete','functionname' => 'party_master_delete'],
-    ['label' => 'delete(list_party_master)','functionname' => 'delete'],
-    ['label' => 'index(scholarbusassign)','functionname' => 'index'],
-    ['label' => 'create(scholarbusassign)','functionname' => 'create'],
-    ['label' => 'view(scholarbusassign)','functionname' => 'view'],
-    ['label' => 'store(scholarbusassign)','functionname' => 'store'],
-    ['label' => 'delete(scholarbusassign)','functionname' => 'delete'],
-    ['label' => 'busstaff_delete','functionname' => 'busstaff_delete'],
-    ['label' => 'scholarbusassign_post_pickup','functionname' => 'scholarbusassign_post_pickup'],
-    ['label' => 'scholarbusassign_post_drop','functionname' => 'scholarbusassign_post_drop'],
-    ['label' => 'index(teacherbusassign)','functionname' => 'index'],
-    ['label' => 'create(teacherbusassign)','functionname' => 'create'],
-    ['label' => 'view(teacherbusassign)','functionname' => 'view'],
-    ['label' => 'store(teacherbusassign)','functionname' => 'store'],
-    ['label' => 'delete(teacherbusassign)','functionname' => 'delete'],
-    ['label' => 'busstaff_delete(teacherbusassign)','functionname' => 'busstaff_delete'],
-    ['label' => 'scholarbusassign_post_pickup(teacherbusassign)','functionname' => 'scholarbusassign_post_pickup'],
-    ['label' => 'scholarbusassign_post_drop(teacherbusassign)','functionname' => 'scholarbusassign_post_drop'],
-    ['label' => 'index(bus_data)','functionname' => 'index'],
-    ['label' => 'bus_details','functionname' => 'bus_details'],
-    ['label' => 'create(bus_data)','functionname' => 'create'],
-    ['label' => 'view(bus_data)','functionname' => 'view'],
-    ['label' => 'store(bus_data)','functionname' => 'store'],
-    ['label' => 'delete(bus_data)','functionname' => 'delete'],
-    ['label' => 'scholarbusassign_post_pickup','functionname' => 'scholarbusassign_post_pickup'],
-    ['label' => 'busstaff_delete(bus_data)','functionname' => 'busstaff_delete'],
-    ['label' => 'scholarbusassign_post_drop','functionname' => 'scholarbusassign_post_drop'],
-    ['label' => 'data_foredit_pickup','functionname' => 'data_foredit_pickup']
-];
-
-const Academic_functions = [
-    ['label' => 'create(session)','functionname' => 'create'],
-    ['label' => 'index(session)','functionname' => 'index'],
-    ['label' => 'index(exammaste)','functionname' => 'index'],
-    ['label' => 'create(exammaste)','functionname' => 'create'],
-    ['label' => 'view(exammaste)','functionname' => 'view'],
-    ['label' => 'store(exammaste)','functionname' => 'store'],
-    ['label' => 'exam_master_delete','functionname' => 'exam_master_delete'],
-    ['label' => 'delete(exammaste)','functionname' => 'delete'],
-
-    ['label' => 'index(examtype)','functionname' => 'index'],
-    ['label' => 'create(examtype)','functionname' => 'create'],
-    ['label' => 'view(examtype)','functionname' => 'view'],
-    ['label' => 'store(examtype)','functionname' => 'store'],
-    ['label' => 'examtype_delete','functionname' => 'examtype_delete'],
-    ['label' => 'delete(examtype)','functionname' => 'delete'],
-
-    ['label' => 'index(teachers)','functionname' => 'index'],
-    ['label' => 'create(teachers)','functionname' => 'create'],
-    ['label' => 'view(teachers)','functionname' => 'view'],
-    ['label' => 'store(teachers)','functionname' => 'store'],
-    ['label' => 'teaches_delete','functionname' => 'teaches_delete'],
-    ['label' => 'delete(teachers)','functionname' => 'delete'],
-    ['label' => 'index(marksheet)','functionname' => 'index'],
-
-
-    ['label' => 'index(marks)','functionname' => 'index'],
-    ['label' => 'create(marks)','functionname' => 'create'],
-    ['label' => 'view(marks)','functionname' => 'view'],
-    ['label' => 'store(marks)','functionname' => 'store'],
-    ['label' => 'marks_delete','functionname' => 'marks_delete'],
-    ['label' => 'delete(marks)','functionname' => 'delete'],
-    ['label' => 'classstudentdata','functionname' => 'classstudentdata'],
-
-    ['label' => 'index(AssignSubject)','functionname' => 'index'],
-    ['label' => 'create(AssignSubject)','functionname' => 'create'],
-    ['label' => 'view(AssignSubject)','functionname' => 'view'],
-    ['label' => 'store(AssignSubject)','functionname' => 'store'],
-    ['label' => 'AssignSubject_delete','functionname' => 'AssignSubject_delete'],
-    ['label' => 'delete(AssignSubject)','functionname' => 'delete'],
-
-    ['label' => 'student_combination_data','functionname' => 'student_combination_data'],
-
-    ['label' => 'index(subjectmaster)','functionname' => 'index'],
-    ['label' => 'create(subjectmaster)','functionname' => 'create'],
-    ['label' => 'view(subjectmaster)','functionname' => 'view'],
-    ['label' => 'store(subjectmaster)','functionname' => 'store'],
-    ['label' => 'subjects_delete','functionname' => 'subjects_delete'],
-    
-    ['label' => 'index(teachersubject)','functionname' => 'index'],
-    ['label' => 'create(teachersubject)','functionname' => 'create'],
-    ['label' => 'view(teachersubject)','functionname' => 'view'],
-    ['label' => 'store(teachersubject)','functionname' => 'store'],
-    ['label' => 'teachersubject_delete','functionname' => 'teachersubject_delete'],
-    ['label' => 'delete(teachersubject)','functionname' => 'delete'],
-
-
-    ['label' => 'getteachersandsubject','functionname' => 'getteachersandsubject'],
-    ['label' => 'getteachersdata','functionname' => 'getteachersdata'],
-    ['label' => 'teachersubject_copy','functionname' => 'teachersubject_copy'],
-    ['label' => 'index(Attandencereports)','functionname' => 'index'],
-
-    ['label' => 'classattandence','functionname' => 'classattandence'],
-
-
-    ['label' => 'index(dailyattandence)','functionname' => 'index'],
-    ['label' => 'array_unique','functionname' => 'array_unique'],
-    ['label' => 'Attendance','functionname' => 'Attendance'],
-
-
-    ['label' => 'index(primarygroup)','functionname' => 'index'],
-    ['label' => 'create(primarygroup)','functionname' => 'create'],
-    ['label' => 'view(primarygroup)','functionname' => 'view'],
-    ['label' => 'store(primarygroup)','functionname' => 'store'],
-    ['label' => 'primarygroup_master_delete','functionname' => 'primarygroup_master_delete'],
-    ['label' => 'delete(primarygroup)','functionname' => 'delete'],
-
-    ['label' => 'index(groupmaster)','functionname' => 'index'],
-    ['label' => 'create(groupmaster)','functionname' => 'create'],
-    ['label' => 'view(groupmaster)','functionname' => 'view'],
-    ['label' => 'store(groupmaster)','functionname' => 'store'],
-    ['label' => 'groupmaster_delete','functionname' => 'groupmaster_delete'],
-    ['label' => 'delete(groupmaster)','functionname' => 'delete'],
-
-    ['label' => 'index(headmaster)','functionname' => 'index'],
-    ['label' => 'create(headmaster)','functionname' => 'create'],
-    ['label' => 'view(headmaster)','functionname' => 'view'],
-    ['label' => 'store(headmaster)','functionname' => 'store'],
-    ['label' => 'headmaster_delete','functionname' => 'headmaster_delete'],
-    ['label' => 'delete(headmaster)','functionname' => 'delete'],
-
-
-    ['label' => 'index(subheadmaster)','functionname' => 'index'],
-    ['label' => 'create(subheadmaster)','functionname' => 'create'],
-    ['label' => 'view(subheadmaster)','functionname' => 'view'],
-    ['label' => 'store(subheadmaster)','functionname' => 'store'],
-    ['label' => 'subheadmaster_delete','functionname' => 'subheadmaster_delete'],
-    ['label' => 'delete(subheadmaster)','functionname' => 'delete'],
-
-    ['label' => 'index(greadingmaster)','functionname' => 'index'],
-    ['label' => 'create(greadingmaster)','functionname' => 'create'],
-    ['label' => 'view(greadingmaster)','functionname' => 'view'],
-    ['label' => 'store(greadingmaster)','functionname' => 'store'],
-    ['label' => 'grade_master_delete','functionname' => 'grade_master_delete'],
-    ['label' => 'delete(greadingmaster)','functionname' => 'delete'],
-
-
-    ['label' => 'index(gread)','functionname' => 'index'],
-    ['label' => 'create(gread)','functionname' => 'create'],
-    ['label' => 'view(gread)','functionname' => 'view'],
-    ['label' => 'store(gread)','functionname' => 'store'],
-    ['label' => 'grade_delete','functionname' => 'grade_delete'],
-    ['label' => 'delete(gread)','functionname' => 'delete'],
-
-    
-    ['label' => 'index(calssese-assigne-to-teacher)','functionname' => 'index'],
-    ['label' => 'saveclassdata(calssese-assigne-to-teacher)','functionname' => 'saveclassdata'],
-    ['label' => 'view(calssese-assigne-to-teacher)','functionname' => 'view'],
-    ['label' => 'store(calssese-assigne-to-teacher)','functionname' => 'store'],
-    ['label' => 'class_teacherdelete','functionname' => 'class_teacherdelete'],
-
-
-    ['label' => 'index(streammaster)','functionname' => 'index'],
-    ['label' => 'create(streammaster)','functionname' => 'create'],
-    ['label' => 'view(streammaster)','functionname' => 'view'],
-    ['label' => 'store(streammaster)','functionname' => 'store'],
-    ['label' => 'stream_master_delete','functionname' => 'stream_master_delete'],
-    ['label' => 'delete(streammaster)','functionname' => 'delete'],
-
-    ['label' => 'index(sectionmaster)','functionname' => 'index'],
-    ['label' => 'create(sectionmaster)','functionname' => 'create'],
-    ['label' => 'view(sectionmaster)','functionname' => 'view'],
-    ['label' => 'store(sectionmaster)','functionname' => 'store'],
-    ['label' => 'section_master_delete','functionname' => 'section_master_delete'],
-    ['label' => 'delete(sectionmaster)','functionname' => 'delete'],
-
-    ['label' => 'index(remarkmaster)','functionname' => 'index'],
-    ['label' => 'create(remarkmaster)','functionname' => 'create'],
-    ['label' => 'view(remarkmaster)','functionname' => 'view'],
-    ['label' => 'store(remarkmaster)','functionname' => 'store'],
-    ['label' => 'remarkmaster_delete','functionname' => 'remarkmaster_delete'],
-    ['label' => 'delete(remarkmaster)','functionname' => 'delete'],
-
-
-    ['label' => 'index(subjectcombinatiomaster)','functionname' => 'index'],
-    ['label' => 'create(subjectcombinatiomaster)','functionname' => 'create'],
-    ['label' => 'view(subjectcombinatiomaster)','functionname' => 'view'],
-    ['label' => 'store(subjectcombinatiomaster)','functionname' => 'store'],
-    ['label' => 'subjectcombinatio_master_delete','functionname' => 'subjectcombinatio_master_delete'],
-    ['label' => 'subject_delete','functionname' => 'subject_delete'],
-    ['label' => 'delete(subjectcombinatiomaster)','functionname' => 'delete'],
-];
-
-const hrms_functions = [
-    
-    ['label' => 'index(employee)','functionname' => 'index'],
-    ['label' => 'create(employee)','functionname' => 'create'],
-    ['label' => 'view(employee)','functionname' => 'view'],
-    ['label' => 'store(employee)','functionname' => 'store'],
-    ['label' => 'employee_delete','functionname' => 'employee_delete'],
-    ['label' => 'delete(employee)','functionname' => 'delete'],
-
-
-    ['label' => 'index(department)','functionname' => 'index'],
-    ['label' => 'create(department)','functionname' => 'create'],
-    ['label' => 'view(department)','functionname' => 'view'],
-    ['label' => 'store(department)','functionname' => 'store'],
-    ['label' => 'department_delete','functionname' => 'department_delete'],
-    ['label' => 'delete(department)','functionname' => 'delete'],
-
-    ['label' => 'index(position)','functionname' => 'index'],
-    ['label' => 'create(position)','functionname' => 'create'],
-    ['label' => 'view(position)','functionname' => 'view'],
-    ['label' => 'store(position)','functionname' => 'store'],
-    ['label' => 'position_delete','functionname' => 'position_delete'],
-    ['label' => 'delete(position)','functionname' => 'delete'],
-
-    ['label' => 'index(attendance)','functionname' => 'index'],
-    ['label' => 'create(attendance)','functionname' => 'create'],
-    ['label' => 'view(attendance)','functionname' => 'view'],
-    ['label' => 'store(position)','functionname' => 'store'],
-    ['label' => 'attendance_delete','functionname' => 'attendance_delete'],
-    ['label' => 'delete(attendance)','functionname' => 'delete'],
-
-
-    ['label' => 'index(holidays)','functionname' => 'index'],
-    ['label' => 'create(holidays)','functionname' => 'create'],
-    ['label' => 'view(holidays)','functionname' => 'view'],
-    ['label' => 'store(holidays)','functionname' => 'store'],
-    ['label' => 'holidays_delete','functionname' => 'holidays_delete'],
-    ['label' => 'delete(holidays)','functionname' => 'delete'],
-
-
-    ['label' => 'index(salaries)','functionname' => 'index'],
-    ['label' => 'create(salaries)','functionname' => 'create'],
-    ['label' => 'view(salaries)','functionname' => 'view'],
-    ['label' => 'store(salaries)','functionname' => 'store'],
-    ['label' => 'salaries_delete','functionname' => 'salaries_delete'],
-    ['label' => 'delete(salaries)','functionname' => 'delete'],
-
-    ['label' => 'index(leaverequests)','functionname' => 'index'],
-    ['label' => 'create(leaverequests)','functionname' => 'create'],
-    ['label' => 'view(leaverequests)','functionname' => 'view'],
-    ['label' => 'store(leaverequests)','functionname' => 'store'],
-    ['label' => 'leaverequests_delete','functionname' => 'leaverequests_delete'],
-    ['label' => 'delete(leaverequests)','functionname' => 'delete'],
-
-];
     
 class RoleController extends Controller
 {
@@ -401,12 +43,7 @@ class RoleController extends Controller
     public function create()
     {
         $permission = Permission::get();
-        $Scholars_functions = Scholars_functions;
-        $Fees_functions = Fees_functions;
-        $Transport_functions = Transport_functions;
-        $Academic_functions = Academic_functions;
-        $hrms_functions = hrms_functions;
-        return view('roles.create',compact('permission', 'Scholars_functions', 'Fees_functions', 'Transport_functions', 'Academic_functions', 'hrms_functions'));
+        return view('roles.create',compact('permission'));
     }
     
     /**
@@ -488,8 +125,52 @@ class RoleController extends Controller
         $role->name = $request->input('name');
         $role->save();
 
-        // Always sync permissions, even if empty
-        $role->syncPermissions($request->input('permission', []));
+        // Debug: log received permissions
+        \Log::info('Role update permissions:', [
+            'role_id' => $id,
+            'permissions' => $request->input('permission', [])
+        ]);
+
+        // Debug: log role guard_name
+        \Log::info('Role guard_name:', [
+            'role_id' => $id,
+            'guard_name' => $role->guard_name
+        ]);
+
+        // Debug: log permissions guard_name
+        $permissionNames = $request->input('permission', []);
+        $permissions = \Spatie\Permission\Models\Permission::whereIn('name', $permissionNames)->get();
+        $permissionGuardNames = $permissions->pluck('guard_name')->unique()->toArray();
+        \Log::info('Permissions guard_names:', [
+            'permission_names' => $permissionNames,
+            'guard_names' => $permissionGuardNames
+        ]);
+
+
+        // Extra debug: log permission IDs and SQL errors
+        try {
+            $permissionIds = $permissions->pluck('id')->toArray();
+            \Log::info('Permission IDs to sync:', [
+                'role_id' => $id,
+                'permission_ids' => $permissionIds,
+                'permission_names' => $permissionNames
+            ]);
+            // Always sync permissions, even if empty
+            $role->syncPermissions($permissionNames);
+        } catch (\Exception $e) {
+            \Log::error('Error syncing permissions:', [
+                'role_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+
+        // Debug: log permissions in DB after update
+        $dbPermissions = $role->permissions()->pluck('name')->toArray();
+        \Log::info('Role DB permissions after update:', [
+            'role_id' => $id,
+            'db_permissions' => $dbPermissions
+        ]);
 
         return redirect()->route('roles.index')
                         ->with('success','Role updated successfully');
@@ -507,3 +188,152 @@ class RoleController extends Controller
                         ->with('success','Role deleted successfully');
     }
 }
+
+// Scholars Module Functions
+const Scholars_functions = [
+    ['label' => 'filter_followup','functionname' => 'scholars-filter_followup'],
+    ['label' => 'admin_preenquiryform','functionname' => 'scholars-admin_preenquiryform'],
+    ['label' => 'adminpreenquiryform','functionname' => 'scholars-adminpreenquiryform'],
+    ['label' => 'preenquiryviewlist','functionname' => 'scholars-preenquiryviewlist'],
+    ['label' => 'enquiryform','functionname' => 'scholars-enquiryform'],
+    ['label' => 'adminenquirylist','functionname' => 'scholars-adminenquirylist'],
+    ['label' => 'enquiryviewlist','functionname' => 'scholars-enquiryviewlist'],
+    ['label' => 'enquiryeditlist','functionname' => 'scholars-enquiryeditlist'],
+    ['label' => 'index(enquiryrecipt)','functionname' => 'scholars-index'],
+    ['label' => 'followupdate','functionname' => 'scholars-followupdate'],
+    ['label' => 'selection_process','functionname' => 'scholars-selection_process'],
+    ['label' => 'add_student_registrations','functionname' => 'scholars-add_student_registrations'],
+    ['label' => 'student_registrations','functionname' => 'scholars-student_registrations'],
+    ['label' => 'registrationviewlist','functionname' => 'scholars-registrationviewlist'],
+    ['label' => 'registrationeditlist','functionname' => 'scholars-registrationeditlist'],
+];
+
+// Fees Module Functions
+const Fees_functions = [
+    ['label' => 'index(fees-types-master)','functionname' => 'fees-index'],
+    ['label' => 'edit(fees-types-master-edit)','functionname' => 'fees-edit'],
+    ['label' => 'index(bus-fees-master)','functionname' => 'fees-bus-index'],
+    ['label' => 'edit(bus-fees-master-edit)','functionname' => 'fees-bus-edit'],
+    ['label' => 'student_feesmaster','functionname' => 'fees-student_feesmaster'],
+    ['label' => 'adminpreenquiryfeeslist','functionname' => 'fees-adminpreenquiryfeeslist'],
+    ['label' => 'preenquiryviewlist','functionname' => 'fees-preenquiryviewlist'],
+    ['label' => 'course_fees_structure_master_list','functionname' => 'fees-course_fees_structure_master_list'],
+    ['label' => 'course_fees_head_orders_list','functionname' => 'fees-course_fees_head_orders_list'],
+    ['label' => 'late_fees_master','functionname' => 'fees-late_fees_master'],
+    ['label' => 'late_fees_master_edit','functionname' => 'fees-late_fees_master_edit'],
+    ['label' => 'generate_due_chart','functionname' => 'fees-generate_due_chart'],
+    ['label' => 'index(fees_receipt_challan)','functionname' => 'fees-receipt-index'],
+    ['label' => 'student_ledger','functionname' => 'fees-student_ledger'],
+    ['label' => 'student_ledger_delete','functionname' => 'fees-student_ledger_delete'],
+    ['label' => 'search_cancle_student_ledger','functionname' => 'fees-search_cancle_student_ledger'],
+    ['label' => 'index(defaulters_list)','functionname' => 'fees-defaulters-index'],
+    ['label' => 'view(view_defaulters_list)','functionname' => 'fees-defaulters-view'],
+    ['label' => 'index(classes)','functionname' => 'fees-classes-index'],
+    ['label' => 'view(classes)','functionname' => 'fees-classes-view'],
+    ['label' => 'store(classes)','functionname' => 'fees-classes-store'],
+    ['label' => 'classname_delete','functionname' => 'fees-classname_delete'],
+    ['label' => 'classes_delete','functionname' => 'fees-classes_delete'],
+    ['label' => 'editclasses','functionname' => 'fees-editclasses'],
+    ['label' => 'delete(classes)','functionname' => 'fees-classes-delete'],
+    ['label' => 'storeg','functionname' => 'storeg'],
+    ['label' => 'editg','functionname' => 'editg'],
+    ['label' => 'index(collection)','functionname' => 'index'],
+];
+
+// Transport Module Functions
+const Transport_functions = [
+    ['label' => 'index(addvehical)','functionname' => 'transport-index-addvehical'],
+    ['label' => 'addvehical','functionname' => 'transport-addvehical'],
+    ['label' => 'list(addvehical)','functionname' => 'transport-list-addvehical'],   
+    ['label' => 'view(addvehical)','functionname' => 'transport-view-addvehical'],
+    ['label' => 'store(addvehical)','functionname' => 'transport-store-addvehical'],
+];
+
+// Academic Module Functions
+const Academic_functions = [
+    ['label' => 'store(greadingmaster)','functionname' => 'academic-store-greadingmaster'],
+    ['label' => 'grade_master_delete','functionname' => 'academic-grade_master_delete'],
+    ['label' => 'delete(greadingmaster)','functionname' => 'academic-delete-greadingmaster'],
+    ['label' => 'index(gread)','functionname' => 'academic-index-gread'],
+    ['label' => 'create(gread)','functionname' => 'academic-create-gread'],
+    ['label' => 'view(gread)','functionname' => 'academic-view-gread'],
+    ['label' => 'store(gread)','functionname' => 'academic-store-gread'],
+    ['label' => 'grade_delete','functionname' => 'academic-grade_delete'],
+    ['label' => 'delete(gread)','functionname' => 'academic-delete-gread'],
+    ['label' => 'index(calssese-assigne-to-teacher)','functionname' => 'academic-index-calssese-assigne-to-teacher'],
+    ['label' => 'saveclassdata(calssese-assigne-to-teacher)','functionname' => 'academic-saveclassdata-calssese-assigne-to-teacher'],
+    ['label' => 'view(calssese-assigne-to-teacher)','functionname' => 'academic-view-calssese-assigne-to-teacher'],
+    ['label' => 'store(calssese-assigne-to-teacher)','functionname' => 'academic-store-calssese-assigne-to-teacher'],
+    ['label' => 'class_teacherdelete','functionname' => 'academic-class_teacherdelete'],
+    ['label' => 'index(streammaster)','functionname' => 'academic-index-streammaster'],
+    ['label' => 'create(streammaster)','functionname' => 'academic-create-streammaster'],
+    ['label' => 'view(streammaster)','functionname' => 'academic-view-streammaster'],
+    ['label' => 'store(streammaster)','functionname' => 'academic-store-streammaster'],
+    ['label' => 'stream_master_delete','functionname' => 'academic-stream_master_delete'],
+    ['label' => 'delete(streammaster)','functionname' => 'academic-delete-streammaster'],
+    ['label' => 'index(sectionmaster)','functionname' => 'academic-index-sectionmaster'],
+    ['label' => 'create(sectionmaster)','functionname' => 'academic-create-sectionmaster'],
+    ['label' => 'view(sectionmaster)','functionname' => 'academic-view-sectionmaster'],
+    ['label' => 'store(sectionmaster)','functionname' => 'academic-store-sectionmaster'],
+    ['label' => 'section_master_delete','functionname' => 'academic-section_master_delete'],
+    ['label' => 'delete(sectionmaster)','functionname' => 'academic-delete-sectionmaster'],
+    ['label' => 'index(remarkmaster)','functionname' => 'academic-index-remarkmaster'],
+    ['label' => 'create(remarkmaster)','functionname' => 'academic-create-remarkmaster'],
+    ['label' => 'view(remarkmaster)','functionname' => 'academic-view-remarkmaster'],
+    ['label' => 'store(remarkmaster)','functionname' => 'academic-store-remarkmaster'],
+    ['label' => 'remarkmaster_delete','functionname' => 'academic-remarkmaster_delete'],
+    ['label' => 'delete(remarkmaster)','functionname' => 'academic-delete-remarkmaster'],
+    ['label' => 'index(subjectcombinatiomaster)','functionname' => 'academic-index-subjectcombinatiomaster'],
+    ['label' => 'create(subjectcombinatiomaster)','functionname' => 'academic-create-subjectcombinatiomaster'],
+    ['label' => 'view(subjectcombinatiomaster)','functionname' => 'academic-view-subjectcombinatiomaster'],
+    ['label' => 'store(subjectcombinatiomaster)','functionname' => 'academic-store-subjectcombinatiomaster'],
+    ['label' => 'subjectcombinatio_master_delete','functionname' => 'academic-subjectcombinatio_master_delete'],
+    ['label' => 'subject_delete','functionname' => 'academic-subject_delete'],
+    ['label' => 'delete(subjectcombinatiomaster)','functionname' => 'academic-delete-subjectcombinatiomaster'],
+];
+
+// HRMS Module Functions
+const hrms_functions = [
+    ['label' => 'index(employee)','functionname' => 'hrms-index-employee'],
+    ['label' => 'create(employee)','functionname' => 'hrms-create-employee'],
+    ['label' => 'view(employee)','functionname' => 'hrms-view-employee'],
+    ['label' => 'store(employee)','functionname' => 'hrms-store-employee'],
+    ['label' => 'employee_delete','functionname' => 'hrms-employee_delete'],
+    ['label' => 'delete(employee)','functionname' => 'hrms-delete-employee'],
+    ['label' => 'index(department)','functionname' => 'hrms-index-department'],
+    ['label' => 'create(department)','functionname' => 'hrms-create-department'],
+    ['label' => 'view(department)','functionname' => 'hrms-view-department'],
+    ['label' => 'store(department)','functionname' => 'hrms-store-department'],
+    ['label' => 'department_delete','functionname' => 'hrms-department_delete'],
+    ['label' => 'delete(department)','functionname' => 'hrms-delete-department'],
+    ['label' => 'index(position)','functionname' => 'hrms-index-position'],
+    ['label' => 'create(position)','functionname' => 'hrms-create-position'],
+    ['label' => 'view(position)','functionname' => 'hrms-view-position'],
+    ['label' => 'store(position)','functionname' => 'hrms-store-position'],
+    ['label' => 'position_delete','functionname' => 'hrms-position_delete'],
+    ['label' => 'delete(position)','functionname' => 'hrms-delete-position'],
+    ['label' => 'index(attendance)','functionname' => 'hrms-index-attendance'],
+    ['label' => 'create(attendance)','functionname' => 'hrms-create-attendance'],
+    ['label' => 'view(attendance)','functionname' => 'hrms-view-attendance'],
+    ['label' => 'store(position)','functionname' => 'hrms-store-position'],
+    ['label' => 'attendance_delete','functionname' => 'hrms-attendance_delete'],
+    ['label' => 'delete(attendance)','functionname' => 'hrms-delete-attendance'],
+    ['label' => 'index(holidays)','functionname' => 'hrms-index-holidays'],
+    ['label' => 'create(holidays)','functionname' => 'hrms-create-holidays'],
+    ['label' => 'view(holidays)','functionname' => 'hrms-view-holidays'],
+    ['label' => 'store(holidays)','functionname' => 'hrms-store-holidays'],
+    ['label' => 'holidays_delete','functionname' => 'hrms-holidays_delete'],
+    ['label' => 'delete(holidays)','functionname' => 'hrms-delete-holidays'],
+    ['label' => 'index(salaries)','functionname' => 'hrms-index-salaries'],
+    ['label' => 'create(salaries)','functionname' => 'hrms-create-salaries'],
+    ['label' => 'view(salaries)','functionname' => 'hrms-view-salaries'],
+    ['label' => 'store(salaries)','functionname' => 'hrms-store-salaries'],
+    ['label' => 'salaries_delete','functionname' => 'hrms-salaries_delete'],
+    ['label' => 'delete(salaries)','functionname' => 'hrms-delete-salaries'],
+    ['label' => 'index(leaverequests)','functionname' => 'hrms-index-leaverequests'],
+    ['label' => 'create(leaverequests)','functionname' => 'hrms-create-leaverequests'],
+    ['label' => 'view(leaverequests)','functionname' => 'hrms-view-leaverequests'],
+    ['label' => 'store(leaverequests)','functionname' => 'hrms-store-leaverequests'],
+    ['label' => 'leaverequests_delete','functionname' => 'hrms-leaverequests_delete'],
+    ['label' => 'delete(leaverequests)','functionname' => 'hrms-delete-leaverequests'],
+];
