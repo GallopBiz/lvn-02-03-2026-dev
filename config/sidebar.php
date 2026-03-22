@@ -42,7 +42,7 @@ return [
         'route' => 'fees',
         'icon' => 'i-Money-2',
         'permission' => 'fees',
-        'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
+        'roles' => ['Admin', 'Student', 'Academic'],
         'children' => [
             [
                 'title' => 'Collection',

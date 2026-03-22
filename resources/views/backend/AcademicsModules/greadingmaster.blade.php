@@ -417,14 +417,14 @@ $i = 0;
                         {{-- <tbody> --}}
 
 
-                            {{-- @if(!empty($stream))
+                            @if(!empty($stream))
                             @foreach($stream as $streams)
                             <tr>
                                 <td>{{++$i}}</td>
-                                <td class= "uperletter">{{$streams->term-i-grade-co-scholasticareas}}</td>
-                                <td class= "uperletter">{{$streams->term-ii-grade-co-scholasticareas}}</td>
-                                <td>{{$streams->term-i-grade-dicipline	}}</td>
-                                <td>{{$streams->term-ii-grade-dicipline	}}</td>
+                                <td class= "uperletter">{{$streams['term-i-grade-co-scholasticareas']}}</td>
+                                <td class= "uperletter">{{$streams['term-ii-grade-co-scholasticareas']}}</td>
+                                <td>{{$streams['term-i-grade-dicipline']}}</td>
+                                <td>{{$streams['term-ii-grade-dicipline']}}</td>
                                 {{-- <td class= "uperletter">{{$streams->grade}}</td> --}}
 
                                 {{-- <td class='d-flex'>
@@ -440,12 +440,12 @@ $i = 0;
                                 </td> --}}
                             {{-- </tr> --}}
                             <!-- </?php $i++; ?> -->
-                            {{-- @endforeach
-                            @else --}}
-                            {{-- <tr>
+                            @endforeach
+                            @else
+                            <tr>
                                 <td colspan="9" class="text-center">No Data Found</td>
-                            </tr> --}}
-                            {{-- @endif --}}
+                            </tr>
+                            @endif
                         {{-- </tbody> --}}
                         {{-- <tfoot>
 

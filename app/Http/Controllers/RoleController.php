@@ -104,7 +104,16 @@ class RoleController extends Controller
         $Academic_functions = Academic_functions;
         $hrms_functions = hrms_functions;
 
-        return view('roles.edit', compact('role','permission','rolePermissions', 'Scholars_functions', 'Fees_functions', 'Transport_functions', 'Academic_functions', 'hrms_functions'));
+        // Load menu config and saved menu for this role
+        $menu = config('sidebar');
+        $roleMenu = \App\Models\RoleMenu::where('role_id', $id)->first();
+        $selectedMenu = $roleMenu ? json_decode($roleMenu->menu, true) : [];
+
+        return view('roles.edit', compact(
+            'role','permission','rolePermissions',
+            'Scholars_functions', 'Fees_functions', 'Transport_functions', 'Academic_functions', 'hrms_functions',
+            'menu', 'selectedMenu'
+        ));
     }
     
     /**
@@ -171,6 +180,13 @@ class RoleController extends Controller
             'role_id' => $id,
             'db_permissions' => $dbPermissions
         ]);
+
+        // Save sidebar menu selection as JSON in role_menus table
+        $menuSelection = $request->input('menu', []);
+        \App\Models\RoleMenu::updateOrCreate(
+            ['role_id' => $id],
+            ['menu' => json_encode($menuSelection)]
+        );
 
         return redirect()->route('roles.index')
                         ->with('success','Role updated successfully');
