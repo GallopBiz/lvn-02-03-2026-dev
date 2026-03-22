@@ -33,28 +33,9 @@
         <!-- Sidebar Menu Permissions -->
         <div class="form-group col-md-12 mt-4">
             <strong>Sidebar Menu Permissions</strong>
-            <ul style="list-style: none;">
-                @php
-                function renderMenuTree($items, $selected, $prefix = '') {
-                    foreach ($items as $item) {
-                        $key = $prefix . $item['title'];
-                        $isChecked = is_array($selected) && in_array($key, $selected);
-                        echo '<li>';
-                        echo '<label>';
-                        echo '<input type="checkbox" name="menu[]" value="' . $key . '" ' . ($isChecked ? 'checked' : '') . '> ';
-                        echo $item["title"];
-                        echo '</label>';
-                        if (!empty($item['children'])) {
-                            echo '<ul style="list-style: none; margin-left:20px;">';
-                            renderMenuTree($item['children'], $selected, $key . ' > ');
-                            echo '</ul>';
-                        }
-                        echo '</li>';
-                    }
-                }
-                renderMenuTree($menu, $selectedMenu);
-                @endphp
-            </ul>
+            @include('backend.layouts.menu_columns_checkboxes', [
+                'selectedMenus' => $selectedMenu
+            ])
         </div>
     </div>
     <script>
