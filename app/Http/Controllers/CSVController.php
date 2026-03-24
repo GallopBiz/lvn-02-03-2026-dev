@@ -362,7 +362,7 @@ class CSVController extends Controller
             return $query->where('student_registration.student_name', 'LIKE', '%' . $student_name . '%');
         })
         ->when(!empty($fromdate) && !empty($todate), function ($query) use ($fromdate, $todate) {
-            return $query->whereBetween('totalnextyear.created_at', [$fromdate, $todate]);
+            return $query->whereBetween('totalnextyear.fees_date', [$fromdate, $todate]);
         })
         ->when(!empty($reciptno), function ($query) use ($reciptno) {
             return $query->where('totalnextyear.receipt_number', $reciptno);
@@ -372,42 +372,19 @@ class CSVController extends Controller
         // echo"<pre>";print_r($all_inquiry);exit;
         $csv = Writer::createFromFileObject(new \SplTempFileObject());
 
-        $date_text =  "Print Date : ".date('d-M-Y');
-        $extraHeaders = ['','','','Lokmanya Vidya Niketan','Student Balance Report','Date From 01-Apr-2023 To 31-Mar-2024',$date_text];
-        
-        $csv->insertOne($extraHeaders);
-
-        $csvExporter=['Index        ','Class        ','Section        ','Scholar No', 'Enrollment No', 'Student Name', 'Father Name','Gender        ', 'OPENING        ', 'CURRENT FEE ASSIGNED        ', 'TOTALDUES        ', 'RECEIVED        ', 'Late Fee        ', 'FEE DUES        ' , 'Father Mob        ', 'Student Mob        ', 'Remarks        ' , 'Category        ', 'Batch Name        '];
-        $csv->insertOne($csvExporter);
+        // Header row matching the view
+        $csv->insertOne(['S No.', 'Fees date', 'Due date', 'Student Name', 'Amount', 'Mode', 'Receipt No.', 'Scholar No']);
 
         foreach ($all_inquiry as $index => $row) {
-            $arr_data = json_decode($row->json_str, true);
-            $fatherName = $arr_data['fathername'];
-            $gender = (!empty($arr_data['gender'])) ? $arr_data['gender'] : '';
-            $father_mob = $arr_data['father_mobile'];
-            $student_mob = $arr_data['phone_number'];
-            $category = (!empty($arr_data['category'])) ? $arr_data['category'] : '';
-            $batchname = (!empty($arr_data['batch'])) ? $arr_data['batch'] : '';
             $csv->insertOne([
-                $index + 1, 
-                $row->class_name,
-                '-',
-                $row->scholar_no,
-                '-',
+                $index + 1,
+                $row->fees_date,
+                $row->due_date,
                 $row->student_name,
-                $fatherName,
-                $gender,
-                '0',
-                '0',
-                '0',
-                '-'.$row->totalnextyear,
-                '0',
-                '-'.$row->totalnextyear,
-                $father_mob,
-                $student_mob,
-                '-',
-                $category,
-                $batchname,               
+                $row->totalnextyear,
+                $row->received_type,
+                $row->receipt_number,
+                $row->scholar_no,
             ]);
         }
         // echo"<pre>";print_r($csv);exit;

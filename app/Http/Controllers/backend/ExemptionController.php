@@ -45,11 +45,13 @@ class ExemptionController extends Controller
             }
 
             foreach ($account_name as $index => $accountName) {
-                if (trim($accountName) === trim($row->head_name)) {
-                    $discountTotal += $fees[$index] - $discount_fees[$index];
-                }
-                $totalFees += $fees[$index];
-                $totalDiscountedFees += $discount_fees[$index];
+				$fee = $fees[$index] ?? 0;
+				$discountFee = $discount_fees[$index] ?? 0;
+				if (trim($accountName) === trim($row->head_name)) {
+					$discountTotal += $fee - $discountFee;
+				}
+				$totalFees += $fee;
+				$totalDiscountedFees += $discountFee;
             }
 
             $results[] = [

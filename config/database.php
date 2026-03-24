@@ -38,7 +38,7 @@ return [
 			'driver' => 'mysql',  // or any other database driver you're using (pgsql, sqlite, etc.)
 			'host' => env('DB_HOST', '127.0.0.1'),
 			'port' => env('DB_PORT', '3306'),
-			'database' => env('DB_DATABASE', '2025_2026'), // Default database name
+			'database' => env('DB_DATABASE', '2026_2027'), // Default database name
 			'username' => env('DB_USERNAME', 'root'),
 			'password' => env('DB_PASSWORD', ''),
 			
@@ -47,7 +47,7 @@ return [
 			'driver' => 'mysql',  // or any other database driver you're using (pgsql, sqlite, etc.)
 			'host' => env('DB_HOST', '127.0.0.1'),
 			'port' => env('DB_PORT', '3306'),
-			'database' => env('DB_DATABASE_NEXT', '2025_2026'), // Default database name
+			'database' => env('DB_DATABASE_NEXT', '2027_2028'), // Default database name
 			'username' => env('DB_USERNAME', 'root'),
 			'password' => env('DB_PASSWORD', ''),
     ],
@@ -56,7 +56,7 @@ return [
             'driver' => 'mysql',
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', '2025_2026'),
+            'database' => env('DB_DATABASE', '2026_2027'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
         ],

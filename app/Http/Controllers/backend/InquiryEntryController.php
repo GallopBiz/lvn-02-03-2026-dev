@@ -380,7 +380,7 @@ class InquiryEntryController extends Controller
             return $query->where('student_registration.student_name', 'LIKE', '%' . $student_name . '%');    //, 'student_registration.scholar_no'
         })
         ->when($fromdate && $todate, function ($query) use ($fromdate, $todate) {
-            return $query->whereBetween('totalnextyear.created_at', [$fromdate, $todate]);
+            return $query->whereBetween('totalnextyear.fees_date', [$fromdate, $todate]);
         })
         ->when($reciptno, function ($query) use ($reciptno) {
             return $query->where('totalnextyear.receipt_number', $reciptno);
