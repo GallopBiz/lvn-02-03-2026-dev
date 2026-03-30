@@ -7,7 +7,7 @@ return [
         'permission' => 'dashboard',
         'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
     ],
-    [
+	[
         'title' => 'Scholars',
         'icon' => 'i-Student-Hat-2',
         'permission' => 'scholars',
@@ -33,6 +33,22 @@ return [
                 'children' => [
                     [ 'title' => 'Student Registration', 'route' => 'add-student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
                     [ 'title' => 'Registration List', 'route' => 'student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
+                ],
+            ],
+            [
+                'title' => 'Certificates',
+                'icon' => 'i-Certificate',
+                'children' => [
+                    [ 'title' => 'Bonafide Certificate', 'route' => 'bonafide-certificate', 'roles' => ['Admin'] ],
+                ],
+            ],
+            [
+                'title' => 'Reports',
+                'icon' => 'i-Bar-Chart',
+                'children' => [
+                    [ 'title' => 'Inquiry Reports', 'route' => 'inquiry-report', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Form Fee Reports', 'route' => 'admin-pre-enquiryfeeslist', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Admission Fee Reports', 'route' => 'duestuamount', 'roles' => ['Admin'] ],
                 ],
             ],
         ],
