@@ -41,7 +41,7 @@
                             <div class="col-md-4 form-group mb-3">
                                 <div class="form-outline w-auto p-4 progress-form">
                                     <label class="form-label" for="form1">Student Search</label>
-                                    <select class="form-control" onchange="select_data(this);" name="search_student" id="search_student" data-live-search="true">
+                                    <select class="form-control select2" onchange="select_data(this);" name="search_student" id="search_student" data-live-search="true">
                                         <option data-tokens="china">Select The Student</option>
                                         <?php if(!empty($data_student_name)) {
                                             foreach($data_student_name as $name){
@@ -52,7 +52,7 @@
                                                     }
                                                 }
                                                 echo '<option '.$selected.' value="'.$name->id.'" data-tokens="'.$name->student_name.' '.$name->scholar_no.'">'.$name->student_name.' '.$name->scholar_no.'</option>';
-                                                    
+                                                                    
                                             }
                                         }
                                         ?>
@@ -673,15 +673,6 @@
     <div class="flex-grow-1"></div>
 
 </div>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.full.min.js"></script>
-<script type="text/javascript">
-   $.noConflict();
-        jQuery(document).ready(function($){
-  $("#search_student").select2();
-}); </script>
-<!-- <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script> -->
-<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.10.0/js/bootstrap-select.min.js"></script> -->
 
 <script>
 $( document ).ready(function() {
