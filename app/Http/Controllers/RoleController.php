@@ -43,7 +43,37 @@ class RoleController extends Controller
     public function create()
     {
         $permission = Permission::get();
-        return view('roles.create',compact('permission'));
+
+        // Example arrays, replace with your actual logic/data source
+        $Scholars_functions = [
+            ['label' => 'View Scholars', 'functionname' => 'view_scholars'],
+            // ... add more as needed
+        ];
+        $Fees_functions = [
+            ['label' => 'View Fees', 'functionname' => 'view_fees'],
+            // ... add more as needed
+        ];
+        $Transport_functions = [
+            ['label' => 'View Transport', 'functionname' => 'view_transport'],
+            // ... add more as needed
+        ];
+        $Academic_functions = [
+            ['label' => 'View Academic', 'functionname' => 'view_academic'],
+            // ... add more as needed
+        ];
+        $hrms_functions = [
+            ['label' => 'View HRMS', 'functionname' => 'view_hrms'],
+            // ... add more as needed
+        ];
+
+        return view('roles.create', compact(
+            'permission',
+            'Scholars_functions',
+            'Fees_functions',
+            'Transport_functions',
+            'Academic_functions',
+            'hrms_functions'
+        ));
     }
     
     /**
