@@ -1,9 +1,25 @@
 @extends('layouts.app')
 
-@section('content')
+@section('main-container')
+
 <div class="container">
     <h2 class="mb-4">Student Fee Exemptions</h2>
     <a href="{{ route('exemptions.export') }}" class="btn btn-success mb-3">Export to CSV</a>
+
+    <form method="get" class="mb-3" action="">
+        <div class="row">
+            <div class="col-md-4 mb-2 mb-md-0">
+                <input type="text" name="scholar_no" class="form-control" placeholder="Search Scholar No" value="{{ request('scholar_no', $scholar_no ?? '') }}">
+            </div>
+            <div class="col-md-4 mb-2 mb-md-0">
+                <input type="text" name="student_name" class="form-control" placeholder="Search Student Name" value="{{ request('student_name', $student_name ?? '') }}">
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary me-2">Search</button>
+                <a href="{{ url()->current() }}" class="btn btn-secondary">Reset</a>
+            </div>
+        </div>
+    </form>
 
     <table class="table table-bordered table-striped">
         <thead class="thead-dark">
@@ -21,8 +37,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($exempted_students as $student)
-                @if ($student['total_discount_amount'] > 0)
+            @forelse($exempted_students as $student)
                 <tr>
                     <td>{{ $student['scholar_no'] }}</td>
                     <td>{{ $student['student_name'] }}</td>
@@ -46,9 +61,18 @@
                     <td>₹{{ number_format($student['total_discount_amount'], 2) }}</td>
                     <td>₹{{ number_format($student['total_fees_after_discount'], 2) }}</td>
                 </tr>
-                @endif
-            @endforeach
+            @empty
+                <tr>
+                    <td colspan="10" class="text-center">No exemption data found.</td>
+                </tr>
+            @endforelse
         </tbody>
     </table>
+
+    <div class="row mt-3">
+        <div class="col-12 d-flex justify-content-center">
+            {!! $exempted_students->links('pagination::bootstrap-4') !!}
+        </div>
+    </div>
 </div>
 @endsection

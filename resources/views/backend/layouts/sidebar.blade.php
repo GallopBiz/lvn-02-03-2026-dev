@@ -98,22 +98,13 @@ $staffUser = Auth::guard('staff')->user();
 			   @if (isset($item['children']) && count($item['children']))
 				   <ul class="childNav" data-parent="{{ strtolower($item['title']) }}">
 					   @foreach($item['children'] as $child)
-						   <li class="nav-item dropdown-sidemenu">
-							   @php
-								   $settingMenu = strtolower($item['title']) === 'setting';
-								   $directLink = $settingMenu && in_array(strtolower($child['title']), ['users', 'roles', 'permission']);
-							   @endphp
-							   <a href="{{ $directLink && isset($child['route']) ? url($child['route']) : (isset($child['route']) ? url($child['route']) : '#') }}">
-								   <i class="nav-icon {{ $child['icon'] ?? '' }}"></i>
-								   <span class="item-name">
-									   {{ $child['title'] }}
-								   </span>
-								   @if(isset($child['children']))
+						   @if (isset($child['children']) && count($child['children']))
+							   <li class="nav-item dropdown-sidemenu">
+								   <a href="#">
+									   <i class="nav-icon {{ $child['icon'] ?? '' }}"></i>
+									   <span class="item-name">{{ $child['title'] }}</span>
 									   <i class="dd-arrow i-Arrow-Down"></i>
-								   @endif
-							   </a>
-							   {{-- SUBMENU --}}
-							   @if(isset($child['children']) && count($child['children']))
+								   </a>
 								   <ul class="submenu">
 									   @foreach($child['children'] as $sub)
 										   <li>
@@ -123,8 +114,15 @@ $staffUser = Auth::guard('staff')->user();
 										   </li>
 									   @endforeach
 								   </ul>
-							   @endif
-						   </li>
+							   </li>
+						   @else
+							   <li class="nav-item">
+								   <a href="{{ isset($child['route']) ? url($child['route']) : '#' }}">
+									   <i class="nav-icon {{ $child['icon'] ?? '' }}"></i>
+									   <span class="item-name">{{ $child['title'] }}</span>
+								   </a>
+							   </li>
+						   @endif
 					   @endforeach
 				   </ul>
 			   @endif
