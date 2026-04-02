@@ -21,6 +21,14 @@ class StaffLoginController extends Controller
         if (Auth::guard('staff')->attempt($credentials)) {
             Log::info('Staff login successful', ['username' => $credentials['username']]);
             $request->session()->regenerate();
+
+            // Store selected session in session and cookie
+            $selectedYear = $request->input('year');
+            if ($selectedYear) {
+                $request->session()->put('selectedYear', $selectedYear);
+                setcookie('selectedYear', $selectedYear, time() + (86400 * 30), "/"); // 30 days
+            }
+
             return redirect()->intended('/staff/dashboard');
         }
         Log::warning('Staff login failed', ['username' => $credentials['username']]);
@@ -34,6 +42,9 @@ class StaffLoginController extends Controller
         Auth::guard('staff')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+        $request->session()->regenerate(); // Ensure a fresh session
+        // Clear selectedYear cookie
+        setcookie('selectedYear', '', time() - 3600, '/');
         return redirect('/staff-login');
     }
 }

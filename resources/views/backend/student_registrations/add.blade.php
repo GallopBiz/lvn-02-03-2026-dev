@@ -89,7 +89,7 @@
 
         <div class="col-md-6 p-2">
             <label for="firstName1">Select Form No to Pick Information form inquiry</label>
-            <select id="inq-form-no" class="form-control uperletter" onchange="getValAndAssign(this);" name="inq_form_selection" required>
+                <select id="inq-form-no" class="form-control uperletter select2" onchange="getValAndAssign(this);" name="inq_form_selection" required>
                 <option selected>Please select</option>
                 @if (!empty($inqArr))
                 @foreach ($inqArr as $each)
@@ -370,7 +370,7 @@
                                         <label for="address">Aadhar No.:</label>
                                         <input class="form-control" id="AadharNo" type="text" placeholder="Enter Aadhar Number" name="AadharNo" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
                                     </div>
-                                    <div class="col-md-6 form-group mb`-3">
+                                    <div class="col-md-6 form-group mb-3">
                                         <label for="remark">Medical Conserns (any)</label>
                                         <input name='student_medical_conserns' class="form-control uperletter" id="Medical Conserns (any)" type="text" placeholder="Enter Medical Conserns (any)" />
                                     </div>
@@ -397,10 +397,7 @@
                                                     <button type="button" class="btn btn-primary pick_inq_data2" onclick="getsiblingbyfathers();" data-form_number="" fdprocessedid="7t8lyh">Pick Data</button>
                                                 </div>
                                             </div>
-                                            <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-                                            <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.2/css/bootstrap.min.css" rel="stylesheet"/> -->
                                             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
-
                                             <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.0/js/bootstrap.min.js"></script>
                                             <div class="group_wrapper">
 
@@ -971,20 +968,32 @@
     <!-- end of main-content -->
 </div>
 
-<script src="{{ url('assets/backend') }}/js/plugins/jquery-3.3.1.min.js"></script>
+
+
+
+<!-- jQuery 3.6.0 (only once, before plugins) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<!-- Select2 CSS & JS CDN (after jQuery) -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
 
 
 <script type="text/javascript">
     $(window).ready(function() {
         $("#form-id").on("keypress", function(event) {
-            console.log("aaya");
             var keyPressed = event.keyCode || event.which;
             if (keyPressed === 13) {
-                //alert("You pressed the Enter key!!");
                 event.preventDefault();
                 return false;
             }
         });
+        // Initialize Select2 for the dropdown
+        if ($.fn.select2) {
+            $('#inq-form-no.select2').select2({
+                width: '100%',
+                placeholder: 'Select or search student...'
+            });
+        }
     });
 
     function getValAndAssign(selectOption) {
@@ -1679,17 +1688,19 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
         });
     });
 </script>
-<script type="text/javascript">
-    $.noConflict();
-    jQuery(document).ready(function($) {
-        $("#inq-form-no").select2();
-        $("#sibling_name").select2();
 
-        setTimeout(function() {
-            var year = $("#year").val()
-            $("#session_name").val(year);
-        }, 1000);
-    });
+
+
+<script type="text/javascript">
+$(document).ready(function() {
+    // Only one select2 dropdown with search
+    if ($.fn.select2) {
+        $('#inq-form-no').select2({
+            width: '100%',
+            placeholder: 'Select or search student...'
+        });
+    }
+});
 </script>
 
 
