@@ -14,13 +14,13 @@
 <div class="main-content">
     <div class="form_section1_div">
         <div class="breadcrumb">
-            <h1 class="me-2">Leave Requests</h1>
+            <h1 class="me-2">Leave Requests (Staff)</h1>
         </div>
 
         <div class="separator-breadcrumb border-top"></div>
 
         <form id="progress-form" class="p-4 progress-form"
-            action="{{ !empty($stream_master) ? url('store-leaverequests') : url('save-leaverequests') }}" method="post">
+            action="{{ url('save-leaverequests-staff') }}" method="post">
             @if (!empty($stream_master))
                 <input type="hidden" name="id" value="{{ $stream_master->id }}">
             @endif
@@ -41,10 +41,7 @@
 
                 <div class="col-md-3 form-group mb-3">
                     <label for="employee_id">Employee</label>
-                    <select name="employee_id" id="employee_id" class="form-control">
-                        @if (count($employees) > 1)
-                            <option value="">Select Employee</option>
-                        @endif
+                    <select name="employee_id" id="employee_id" class="form-control" readonly>
                         @foreach ($employees as $employee)
                             <option value="{{ $employee->id }}" selected>
                                 {{ $employee->first_name }} {{ $employee->last_name }}
@@ -57,27 +54,6 @@
                     <label for="leave_type_id">Leave Type</label>
                     <select name="leave_type_id" id="leave_type_id" class="form-control">
                         <option value="">Select Leave Type</option>
-                        @if (isset($stream_master))
-                            @foreach ($leaveTypes as $leaveType)
-                                @php
-                                    $empBalance = \App\Models\HrmsEmployeeLeaveBalance::where('employee_id', $stream_master->employee_id)
-                                        ->where('leave_type_id', $leaveType->id)
-                                        ->first();
-                                    $balance = $empBalance ? $empBalance->balance : 0;
-
-                                    if ($stream_master->leave_type_id == $leaveType->id && $stream_master->is_half_day) {
-                                        $balance -= 0.5;
-                                    }
-
-                                    $formattedBalance = number_format(max($balance, 0), 1, '.', '');
-                                @endphp
-
-                                <option value="{{ $leaveType->id }}"
-                                    {{ $stream_master->leave_type_id == $leaveType->id ? 'selected' : '' }}>
-                                    {{ $leaveType->name }} ({{ $formattedBalance }} available)
-                                </option>
-                            @endforeach
-                        @endif
                     </select>
                 </div>
 
@@ -106,12 +82,7 @@
 
                 <div class="col-md-12">
                     <button type="submit" class="btn btn-primary">Submit</button>
-                    @if (request()->route()->getName() == 'leaverequests')
-                        <button type="button" class="btn btn-secondary" id="reset-button">Reset</button>
-                    @endif
-                    @if (request()->route()->getName() !== 'leaverequests')
-                        <a href="{{ url('leaverequests') }}" class="btn btn-primary">Add New</a>
-                    @endif
+                    <button type="button" class="btn btn-secondary" id="reset-button">Reset</button>
                 </div>
             </div>
         </form>
@@ -119,21 +90,6 @@
     </div>
 
     <div class="separator-breadcrumb border-top"></div>
-
-    {{-- FILTERS --}}
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <input type="text" id="searchInput" class="form-control" placeholder="Search by employee, note, leave type">
-        </div>
-        <div class="col-md-3">
-            <select id="statusFilter" class="form-control">
-                <option value="">Filter by Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-            </select>
-        </div>
-    </div>
 
     {{-- TABLE --}}
     <div class="row">
@@ -150,7 +106,6 @@
                             <thead>
                                 <tr>
                                     <th>Sr.</th>
-                                    <th>Employee Name</th>
                                     <th>Start Date</th>
                                     <th>End Date</th>
                                     <th>Total Days</th>
@@ -161,14 +116,10 @@
                                     <th>Action</th>
                                 </tr>
                             </thead>
-
                             <tbody>
                                 @foreach ($stream as $streams)
                                     <tr>
                                         <td>{{ ++$i }}</td>
-                                        <td class="uperletter">
-                                            {{ $streams->employee->first_name ?? '' }} {{ $streams->employee->last_name ?? '' }}
-                                        </td>
                                         <td>{{ date('d-m-Y', strtotime($streams->start_date)) }}</td>
                                         <td>{{ date('d-m-Y', strtotime($streams->end_date)) }}</td>
                                         <td>
@@ -184,7 +135,6 @@
                                         </td>
                                         <td>{{ Str::limit($streams->reason, 60) }}</td>
                                         <td class="uperletter">{{ $streams->status }}</td>
-
                                         <td class="d-flex">
                                             @if ($streams->status === 'Pending')
                                                 <a class="btn btn-primary m-1" href="{{ url('view-leaverequests/' . $streams->id) }}">Edit</a>
@@ -193,14 +143,12 @@
                                         </td>
                                     </tr>
                                 @endforeach
-
                                 @if ($stream->isEmpty())
                                     <tr>
-                                        <td colspan="10" class="text-center">No Data Found</td>
+                                        <td colspan="9" class="text-center">No Data Found</td>
                                     </tr>
                                 @endif
                             </tbody>
-
                         </table>
                     </div>
                 </div>
@@ -209,10 +157,8 @@
     </div>
 </div>
 
-
 {{-- JS --}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
-
 <script>
     function confirmDelete(event) {
         event.preventDefault();
@@ -231,78 +177,42 @@
         });
     }
 
-    // Search + Filter
-    document.getElementById("searchInput").addEventListener("keyup", filterTable);
-    document.getElementById("statusFilter").addEventListener("change", filterTable);
-
-    function filterTable() {
-        let searchValue = document.getElementById("searchInput").value.toLowerCase();
-        let statusValue = document.getElementById("statusFilter").value.toLowerCase();
-
-        let rows = document.querySelectorAll("#leaveTable tbody tr");
-
-        rows.forEach(row => {
-            let rowText = row.innerText.toLowerCase();
-            let statusText = row.querySelector("td:nth-child(9)")?.innerText.toLowerCase();
-
-            let matchesSearch = rowText.includes(searchValue);
-            let matchesStatus = statusValue ? statusText === statusValue : true;
-
-            row.style.display = (matchesSearch && matchesStatus) ? "" : "none";
-        });
-    }
-
     // Reset form
     document.getElementById('reset-button')?.addEventListener('click', function () {
         document.getElementById("reason").value = "";
         document.getElementById("start_date").value = "";
         document.getElementById("end_date").value = "";
-        document.getElementById("employee_id").value = "";
         document.getElementById("leave_type_id").innerHTML = '<option value="">Select Leave Type</option>';
     });
 
-    // Dynamic leave types
-    function setupDynamicLeaveTypeUpdate(employeeSelectId, leaveTypeSelectId) {
-        const employeeSelect = document.getElementById(employeeSelectId);
-        const leaveTypeSelect = document.getElementById(leaveTypeSelectId);
+    // Load leave types for logged-in staff
 
-        employeeSelect.addEventListener('change', function () {
-            const employeeId = this.value;
-            leaveTypeSelect.innerHTML = '<option value="">Select Leave Type</option>';
-
-            if (employeeId) {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-                fetch("{{ route('getLeaveTypes') }}", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-TOKEN": csrfToken,
-                    },
-                    body: JSON.stringify({ employee_id: employeeId }),
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        data.forEach(leaveType => {
-                            const option = document.createElement('option');
-                            option.value = leaveType.id;
-                            option.text = leaveType.name;
-                            leaveTypeSelect.appendChild(option);
-                        });
-                    })
-                    .catch(error => console.error('Error fetching leave types:', error));
-            }
-        });
+    function loadStaffLeaveTypes() {
+        const leaveTypeSelect = document.getElementById('leave_type_id');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        fetch("{{ route('getLeaveTypes.staff') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-TOKEN": csrfToken,
+            },
+            body: JSON.stringify({}),
+        })
+            .then(response => response.json())
+            .then(data => {
+                leaveTypeSelect.innerHTML = '<option value="">Select Leave Type</option>';
+                data.forEach(leaveType => {
+                    const option = document.createElement('option');
+                    option.value = leaveType.id;
+                    option.text = leaveType.name; // Already includes balance
+                    leaveTypeSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching leave types:', error));
     }
 
-    setupDynamicLeaveTypeUpdate('employee_id', 'leave_type_id');
     document.addEventListener('DOMContentLoaded', function() {
-        var employeeSelect = document.getElementById('employee_id');
-        // If only one employee (staff panel), trigger change to load leave types
-        if (employeeSelect && employeeSelect.options.length === 2 && employeeSelect.value) {
-            employeeSelect.dispatchEvent(new Event('change'));
-        }
+        loadStaffLeaveTypes();
     });
 </script>
-
 @endsection

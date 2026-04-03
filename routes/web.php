@@ -1,6 +1,5 @@
 <?php
 
-
 use App\Http\Controllers\LeaveStaffAllocation;
 use App\Http\Controllers\LeaveTypeMaster;
 use Illuminate\Support\Facades\Route;
@@ -1305,6 +1304,14 @@ Route::get('/staff/dashboard', function () {
     return view('staff.dashboard');
 })->middleware('auth:staff')->name('staff.dashboard');
 // End of file: ensure no stray or unclosed curly braces remain
+
+Route::group(['middleware' => ['auth:staff']], function() {
+    Route::get('leaverequests-staff',[LeaverequestsController::class, 'index'])->name('leaverequests.staff');
+    // Staff POST for creating leave request (uses create, not store)
+    Route::post('save-leaverequests-staff', [LeaverequestsController::class, 'create'])->name('save-leaverequests.staff');
+    Route::post('store-leaverequests-staff', [LeaverequestsController::class, 'store'])->name('store-leaverequests.staff');
+    Route::post('/get-leave-types-staff', [LeaverequestsController::class, 'getLeaveTypesStaff'])->name('getLeaveTypes.staff');
+});
 
 // Staff login routes
 Route::get('/staff-login', [StaffAreaLoginController::class, 'showLoginForm'])->name('staff.login');

@@ -29,30 +29,52 @@ use Illuminate\Support\Facades\DB;
 
 class LeaverequestsController extends Controller
 {
-    public function index(){
-        $stream = HrmsLeaveRequest::all();
-        $employees = HrmsEmployee::all();
-        $leaveTypes = HrmsLeaveType::all();
-        return view('backend.HRMS.leaverequests', compact('stream','employees','leaveTypes'));
+        // Staff-only: Return leave types with balance for logged-in staff
+        public function getLeaveTypesStaff(Request $request)
+        {
+            $user = auth()->guard('staff')->user();
+            $employeeId = $user->employee_id;
+            $leaveTypes = HrmsLeaveType::all();
+            foreach ($leaveTypes as $leaveType) {
+                $employeeLeaveBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
+                    ->where('leave_type_id', $leaveType->id)
+                    ->first();
+                $balance = $employeeLeaveBalance ? rtrim(rtrim(number_format($employeeLeaveBalance->balance, 1, '.', ''), '0'), '.') : '0';
+                $leaveType->name = $leaveType->name . ' (' . $balance . ' available)';
+            }
+            return response()->json($leaveTypes);
+        }
+    public function index(Request $request){
+        // If staff panel (route is leaverequests-staff or guard is staff), show only logged-in user
+        if ($request->route()->uri() === 'leaverequests-staff' || auth()->guard('staff')->check()) {
+            $user = auth()->guard('staff')->user();
+            $stream = HrmsLeaveRequest::where('employee_id', $user->employee_id)->get();
+            $employees = HrmsEmployee::where('id', $user->employee_id)->get();
+            $leaveTypes = HrmsLeaveType::all();
+            return view('backend.HRMS.leaverequests_staff', compact('stream','employees','leaveTypes'));
+        } else {
+            // Admin panel: show all
+            $user = auth()->user();
+            $stream = HrmsLeaveRequest::all();
+            $employees = HrmsEmployee::all();
+            $leaveTypes = HrmsLeaveType::all();
+            return view('backend.HRMS.leaverequests', compact('stream','employees','leaveTypes'));
+        }
     }
 
     public function getLeaveTypesByEmployee(Request $request)
     {
         $employeeId = $request->employee_id;
-        $employee = HrmsEmployee::where('id', $employeeId)->first();
-        $leaveAllocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)->get();
-        $leaveAllocatedIds = $leaveAllocated->pluck('leave_type_id')->toArray();
-        $leaveTypes = HrmsLeaveType::whereIn('id', $leaveAllocatedIds)->get();
+        // Always show all leave types
+        $leaveTypes = HrmsLeaveType::all();
 
         foreach ($leaveTypes as $leaveType) {
             $employeeLeaveBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
                 ->where('leave_type_id', $leaveType->id)
                 ->first();
 
-            if (!is_null($employeeLeaveBalance)) {
-                $balance = rtrim(rtrim(number_format($employeeLeaveBalance->balance, 1, '.', ''), '0'), '.');
-                $leaveType->name = $leaveType->name . ' (' . $balance . ' available)';
-            }
+            $balance = $employeeLeaveBalance ? rtrim(rtrim(number_format($employeeLeaveBalance->balance, 1, '.', ''), '0'), '.') : '0';
+            $leaveType->name = $leaveType->name . ' (' . $balance . ' available)';
         }
 
         return response()->json($leaveTypes);
@@ -198,7 +220,7 @@ class LeaverequestsController extends Controller
         }
         return view('backend.HRMS.leaverequests', compact('stream_master','stream','leaveTypes','employees'));
     }
-
+    
     public function store(Request $request){
         $leaveRequest = HrmsLeaveRequest::findOrFail($request->id);
 
