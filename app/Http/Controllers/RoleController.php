@@ -256,12 +256,12 @@ class RoleController extends Controller
             ->pluck('name')
             ->toArray();
 
-        // Pass module functions as variables
-        $Scholars_functions = Scholars_functions;
-        $Fees_functions = Fees_functions;
-        $Transport_functions = Transport_functions;
-        $Academic_functions = Academic_functions;
-        $hrms_functions = hrms_functions;
+        // Pass module functions as variables (use static properties)
+        $Scholars_functions = self::$Scholars_functions;
+        $Fees_functions = self::$Fees_functions;
+        $Transport_functions = self::$Transport_functions;
+        $Academic_functions = self::$Academic_functions;
+        $hrms_functions = self::$hrms_functions;
 
         // Load menu config and saved menu for this role
         $menu = config('sidebar');

@@ -113,7 +113,7 @@
                                     <th>Half Day Type</th>
                                     <th>Note</th>
                                     <th>Status</th>
-                                    <th>Action</th>
+                                    {{-- <th>Action</th> --}}
                                 </tr>
                             </thead>
                             <tbody>
@@ -135,12 +135,12 @@
                                         </td>
                                         <td>{{ Str::limit($streams->reason, 60) }}</td>
                                         <td class="uperletter">{{ $streams->status }}</td>
-                                        <td class="d-flex">
+                                        {{-- <td class="d-flex">
                                             @if ($streams->status === 'Pending')
                                                 <a class="btn btn-primary m-1" href="{{ url('view-leaverequests/' . $streams->id) }}">Edit</a>
                                                 <a class="btn btn-danger m-1" href="{{ url('delete-leaverequests/' . $streams->id) }}" onclick="confirmDelete(event)">Delete</a>
                                             @endif
-                                        </td>
+                                        </td> --}}
                                     </tr>
                                 @endforeach
                                 @if ($stream->isEmpty())
@@ -150,6 +150,10 @@
                                 @endif
                             </tbody>
                         </table>
+                    </div>
+                    {{-- Pagination links --}}
+                    <div class="d-flex justify-content-center mt-3">
+                        {!! $stream->links() !!}
                     </div>
                 </div>
             </div>

@@ -48,7 +48,10 @@ class LeaverequestsController extends Controller
         // If staff panel (route is leaverequests-staff or guard is staff), show only logged-in user
         if ($request->route()->uri() === 'leaverequests-staff' || auth()->guard('staff')->check()) {
             $user = auth()->guard('staff')->user();
-            $stream = HrmsLeaveRequest::where('employee_id', $user->employee_id)->get();
+            // Paginate staff leave requests (20 per page)
+            $stream = HrmsLeaveRequest::where('employee_id', $user->employee_id)
+                ->orderByDesc('id')
+                ->paginate(20);
             $employees = HrmsEmployee::where('id', $user->employee_id)->get();
             $leaveTypes = HrmsLeaveType::all();
             return view('backend.HRMS.leaverequests_staff', compact('stream','employees','leaveTypes'));
@@ -84,21 +87,35 @@ class LeaverequestsController extends Controller
     {
         Log::info('Leave request initiated.', $request->all());
 
-        $validator = Validator::make($request->all(), [
+        // Determine if this is a staff request (auth:staff guard)
+        $isStaff = auth()->guard('staff')->check();
+
+        // Validation rules
+        $rules = [
             'start_date' => 'required|date',
             'end_date' => 'required|date',
             'leave_type_id' => 'required|integer|exists:hrms_leave_types,id',
-            'employee_id' => 'required|integer|exists:hrms_employees,id',
             'reason' => 'required|string',
             'half_day_type' => 'nullable|in:first,second',
-        ]);
+        ];
+        // Only require employee_id for admin
+        if (!$isStaff) {
+            $rules['employee_id'] = 'required|integer|exists:hrms_employees,id';
+        }
 
+        $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             Log::warning('Validation failed.', $validator->errors()->toArray());
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        $employeeId = $request->input('employee_id');
+        // Get employee id securely
+        if ($isStaff) {
+            $user = auth()->guard('staff')->user();
+            $employeeId = $user->employee_id;
+        } else {
+            $employeeId = $request->input('employee_id');
+        }
         $leaveTypeId = $request->input('leave_type_id');
 
         Carbon::setWeekendDays([Carbon::SUNDAY]);
@@ -200,7 +217,12 @@ class LeaverequestsController extends Controller
         Log::info('Sending leave notification email.', $leaveDetails);
         // Mail::to($leaveDetails['employee_email'])->send(new LeaveAppliedNotification($leaveDetails));
 
-        return redirect()->route('leaverequests')->with('success', 'Leave request has been created successfully.');
+        // Redirect to correct route for staff or admin
+        if ($isStaff) {
+            return redirect()->route('leaverequests.staff')->with('success', 'Leave request has been created successfully.');
+        } else {
+            return redirect()->route('leaverequests')->with('success', 'Leave request has been created successfully.');
+        }
     }
 
     public function view($id){

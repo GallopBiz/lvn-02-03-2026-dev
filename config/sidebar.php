@@ -269,6 +269,8 @@ return [
                     [ 'title' => 'Leave Requests', 'route' => 'leaverequests', 'roles' => ['Admin'] ],
                     [ 'title' => 'Admin Leave Requests', 'route' => 'employeeleaves', 'roles' => ['Admin'] ],
                     [ 'title' => 'Employee Wise Leave Report', 'route' => 'employee-leave-report', 'roles' => ['Admin'] ],
+                    // Staff menu item
+                    [ 'title' => 'My Leave Requests', 'route' => 'leaverequests-staff', 'roles' => ['Academic Staff (Teacher)', 'Staff'] ],
                 ],
             ],
             [
