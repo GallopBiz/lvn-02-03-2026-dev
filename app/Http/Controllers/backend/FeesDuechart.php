@@ -61,19 +61,25 @@ class FeesDuechart extends Controller
     public function save_due_chart(Request $request)
     {
         $classname = $request->classname;
-        $sectionname = $request->secationname1;
-        // $data['datas'] = DB::connection('dynamic')->table('student_registration')->select('class_name')->distinct()->get();
         $data['datas'] = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-        $data['duachart'] = DB::connection('dynamic')
-        ->table('student_registration')
-        ->where('class_name', $classname)
-        ->whereRaw("JSON_EXTRACT(json_str, '$.section_name') = ?", [$sectionname])
-        ->get();
-        //DB::connection('dynamic')->table('student_registration')->where('class_name',$classname)->get(); //CommanModel::fetchDataWhere('student_registration', ['class_name' => $classname]);
-        $data['feesstructure'] = DB::connection('dynamic')->table('course_fees_structure_master')->where('class_name',$classname)->get(); //CommanModel::fetchDataWhere('course_fees_structure_master', ['class_name' => $classname]);
-        $data['duachart_data'] = DB::connection('dynamic')->table('generate_duechartstatus')->where('class_name', '=', $classname)->where('sectionname', '=', $sectionname)->get();
+        // Fetch all students in the selected class
+        $students = DB::connection('dynamic')->table('student_registration')
+            ->where('class_name', $classname)
+            ->get();
+        // Group students by section (from json_str->section_name)
+        $sections = [];
+        foreach ($students as $student) {
+            $json = json_decode($student->json_str, true);
+            $section = isset($json['section_name']) ? $json['section_name'] : 'N/A';
+            if (!isset($sections[$section])) {
+                $sections[$section] = [];
+            }
+            $sections[$section][] = $student;
+        }
+        $data['sections'] = $sections;
+        $data['feesstructure'] = DB::connection('dynamic')->table('course_fees_structure_master')->where('class_name',$classname)->get();
+        $data['duachart_data'] = DB::connection('dynamic')->table('generate_duechartstatus')->where('class_name', '=', $classname)->get();
         $data['classname'] = $classname;
-        $data['sectionname'] = $sectionname;
         return view('backend.FeesDue-chart.Generate_due_chart', $data);
 
     }
@@ -93,6 +99,7 @@ class FeesDuechart extends Controller
         $currentYear = date("Y");
         $nextYear = $currentYear + 1;
         $session = '"'.$currentYear . '_' . $nextYear.'"';
+        // Section is no longer used in the form or query
         foreach ($sid as $id) {
             // $name = DB::table('student_registration')->select('id','student_name')->where('id','=',$id['student_id'])->first();
             $admission_type = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.admission_type") = "RTE" as admission_type'))->where('id', '=', $id)->first();
@@ -339,13 +346,12 @@ class FeesDuechart extends Controller
                 'student_id' => $id,
                 'class_name' => $request->classname,
                 'session_name' => $session_name ? $session_name->session_name : null,
-                'sectionname' => $request->sectionname,
-                'amount' => $amount = ($admission_type && $admission_type->admission_type != 1) ? $feesSum : '0',//(!empty($feesSum)) ? $feesSum : $request->amount,
+                // 'sectionname' => $request->sectionname, // Section removed
+                'amount' => $amount = ($admission_type && $admission_type->admission_type != 1) ? $feesSum : '0',
                 'json_str' => $course_fees_structure_master_data_json,
                 'is_rte' => (!empty($admission_type->admission_type)) ? 1 : 0,
                 'status' => 'g',
             ];
-            
             if (empty($select_id)) {
                 DB::connection('dynamic')->table('generate_duechartstatus')->insert($insertArr[$i]);
             }
@@ -358,7 +364,7 @@ class FeesDuechart extends Controller
                 'student_name' => $name->student_name,
                 'class_name' => $request->classname,
                 'session_name' => $session_name->session_name,
-                'sectionname' => $request->sectionname,
+                // 'sectionname' => $request->sectionname, // Section removed
                 'amount' => $arr['amount'],
                 'json_str' => $course_fees_structure_master_data_json,
                 'status' => 'g',
@@ -366,7 +372,7 @@ class FeesDuechart extends Controller
         }
         // echo '<pre>';print_r($insertArrnext);die();
         // return redirect('generate-due-chart-list')->with('success', 'Fees Due Chart Generate successfully')->with('data', $insertArrnext);
-        return redirect()->to('generate-due-chart-list/'.$request->classname.'/'.$request->sectionname)->with('success','Fees Due Chart Generate successfully')->with('data', $insertArrnext);
+        return redirect()->to('generate-due-chart-list/'.$request->classname)->with('success','Fees Due Chart Generate successfully')->with('data', $insertArrnext);
     }
 
     // public function generate_due_chart_list($id,$session){
@@ -389,16 +395,12 @@ class FeesDuechart extends Controller
     // }
 
 
-    public function generate_due_chart_list($id, $session, Request $request) {
-        $searchTerm = $request->input('search_term'); 
-        
+    public function generate_due_chart_list($id, Request $request) {
+        $searchTerm = $request->input('search_term');
         $query = DB::connection('dynamic')->table('generate_duechartstatus')
             ->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')
             ->select('generate_duechartstatus.*', 'student_registration.student_name')
             ->where('generate_duechartstatus.class_name', $id);
-        if($session != "") {
-            $query->where('sectionname', '=', $session);
-        }
         if (!empty($searchTerm)) {
             $query->where(function ($query) use ($searchTerm) {
                 $query->where('generate_duechartstatus.student_id', '=', $searchTerm)
@@ -406,10 +408,8 @@ class FeesDuechart extends Controller
                       ->orWhere('generate_duechartstatus.class_name', 'like', '%' . $searchTerm . '%');
             });
         }
-    
         $data = $query->get();
         $info['id'] = $id;
-        $info['session'] = $session;
         $data = $data->map(function ($i) {
             return (array) $i;
         })->toArray();

@@ -32,18 +32,7 @@
                               @endif
                               </select>
                            </div>
-                           <div class="col-md-4 form-group mb-3">
-                              <label for="studentname">Section</label>
-                              <select id="secationname" class="form-control" name="secationname1" autocomplete="shipping address-level1" required>
-                              <?php //print_r($sectionname);die(); ?>
-                              @if(!empty($sectionname))
-                                <option selected value="{{$sectionname}}">{{$sectionname}}</option>
-                              @else
-                              @endif
-                                <option value=""> -- Please select -- </option>
-                                <option value="A"> -- Select All -- </option>
-                              </select> 
-                           </div>
+                           <!-- Section filter removed: Only class is required -->
                 <div class="col-md-9 m-2">
                     <button class="btn btn-primary">Submit</button>
                 </div>
@@ -74,75 +63,31 @@
                         </tr>
                       </thead>
                       <tbody>
-                      <?php
-                          $totalfees = 0;
-                        if(!empty($feesstructure)){ ?>
-                        @foreach ($feesstructure as $feesdata)
-                        <?php $notificationData1 = json_decode($feesdata->json_str, true);
-                        $totalfees = $feesdata->total_above_fees;
-                        
-                        
-                        ?>
-                        @endforeach
-                     
-                      <?php } else {
-                      } ?>
-                        <?php $notchartgenerate=0;  $class=""; $count="";$totaldue=""; $totalduafees="";?>
-                        <?php if(!empty($feesstructure)){ ?>
-                          @foreach ($duachart as $each_data)
-                            <?php
-                                  $nd = json_decode($each_data->json_str, true);
-                                  $totalstuddent = count($duachart);
-                                  // foreach($nd as $nd2){
-                                  //     if($nd2['admission_type'] == "RTE"){
-                                          //$notchartgenerate= ($notchartgenerate + 1);
-                                      //}
-                                    //}
-                                  $finalfeesstudent = $totalstuddent - $notchartgenerate;
-                                  $totalduafees= ((!empty($totalfees) ?  $totalfees : 0) * $finalfeesstudent);
-                                  $class =$each_data->class_name;
-                                  $count= count($duachart);
-                                  $totaldue = $totalduafees;                                                                                                    
-                                  $studentid[]=$each_data->id;
-                                  $studentid1=json_encode($studentid);
-                                                              ?>
-                        @endforeach
-                        <?php } else {
-                        } ?>
-                        @if(!empty($duachart) && !empty($each_data))
-                        <tr>
-                            <td>1</td>
-                            <td>{{$class}} </td>
-                            <td>{{ $sectionname }}</td>
-                            <td><?php if($duachart_data) {
-                                echo count($duachart_data);
-                              } else {
-                                echo 0;
-                            } ?></td>
-                            <td><?php if($duachart_data) {
-                                echo $count - count($duachart_data);
-                              } else {
-                                echo 0;
-                            } ?></td>
-                            <td>{{ $count }} </td>
-                            <td><?php if((!empty($totaldue))) { echo number_format($totaldue, 2);} else { echo 'Create Structure'; }?></td>
-                            <td>
-                              <form method="post" action="{{url('save_student_duechart')}}">
-                                @csrf
-                                <input type="hidden" name="studentname" value="<?php if(!(empty($each_data))){ ?>{{$each_data->id}}<?php }?>">
-                                <input type="hidden" name="classname" value="{{$class}}">
-                                <input type="hidden" name="sectionname" value="{{$sectionname}}">
-                                <input type="hidden" name="amount" value="<?php echo (!empty($totalfees)) ? $totalfees : ''; ?>">
-                                <input type="hidden" name="session_name" value="<?php if(!(empty($each_data))){ ?>{{$each_data->session_name}}<?php }?>">
-                                <input type="hidden" name="studentid" value="<?php if(!(empty($studentid1))){ echo $studentid1;}?>">
-                                <button class="btn btn-primary">Generate Chart</button>
-                                <?php // echo (!empty($totaldue)) ? '<button class="btn btn-primary">Generate Chart</button>' : '<button class="btn btn-primary" disabled="true">Generate Chart</button>'; 
-                                ?>
-                              </form>
-                            </td>
-                        </tr>
+                      <!-- Old duachart-based code removed. All display is now handled by the sections-based logic below. -->
+                        @if(!empty($sections))
+                          @php $sno = 1; @endphp
+                          @foreach($sections as $section => $students)
+                            <tr>
+                              <td>{{ $sno++ }}</td>
+                              <td>{{ $classname }}</td>
+                              <td>{{ $section }}</td>
+                              <td>{{ count($students) }}</td>
+                              <td>-</td>
+                              <td>{{ count($students) }}</td>
+                              <td>-</td>
+                              <td>
+                                <form method="post" action="{{url('save_student_duechart')}}">
+                                  @csrf
+                                  <input type="hidden" name="studentid" value='@json(array_map(fn($stu) => $stu->id, $students))'>
+                                  <input type="hidden" name="classname" value="{{ $classname }}">
+                                  <!-- Section is not submitted, only class and studentid are sent -->
+                                  <button class="btn btn-primary">Generate Chart</button>
+                                </form>
+                              </td>
+                            </tr>
+                          @endforeach
                         @else
-                        <tr><td colspan="9" class="text-center">No Data Found</td></tr>
+                          <tr><td colspan="9" class="text-center">No Data Found</td></tr>
                         @endif
                       </tbody>
                       <tfoot>

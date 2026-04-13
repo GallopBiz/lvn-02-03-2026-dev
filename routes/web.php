@@ -1321,3 +1321,8 @@ Route::post('/staff-logout', [StaffAreaLoginController::class, 'logout'])->name(
 // Staff dashboard route
 use App\Http\Controllers\Staff\StaffDashboardController;
 Route::get('/staff/dashboard', [StaffDashboardController::class, 'index'])->middleware('auth:staff')->name('staff.dashboard');
+
+Route::group(['middleware' => ['auth:staff']], function () {
+    Route::get('compoffrequests-staff', [App\Http\Controllers\EmployeeCompOffController::class, 'staffIndex'])->name('compoffrequests.staff');
+    Route::post('save-compoffrequests-staff', [App\Http\Controllers\EmployeeCompOffController::class, 'staffStore'])->name('save-compoffrequests.staff');
+});

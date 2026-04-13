@@ -1,9 +1,8 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\HrmsCompOffRequest;
-use App\Models\HrmsEmployee;
+use App\Models\HrmsEmployee; 
 use App\Models\HrmsLeaveType;
 use App\Models\HrmsEmployeeLeaveBalance;
 use Illuminate\Http\Request;
@@ -109,4 +108,41 @@ class EmployeeCompOffController extends Controller
 		$stream = HrmsCompOffRequest::with(['employee', 'leaveType'])->orderBy('start_date', 'desc')->get();
 		return view('backend.HRMS.employee_comp_off_approve', compact('stream'));
 	}
+
+    // Staff: Show only logged-in staff's comp off requests
+    public function staffIndex(Request $request)
+    {
+        $user = auth()->guard('staff')->user();
+        $employeeId = $user->employee_id;
+        $employees = HrmsEmployee::where('id', $employeeId)->get();
+        $leaveTypes = HrmsLeaveType::all();
+        $stream_master = null;
+        $stream = HrmsCompOffRequest::where('employee_id', $employeeId)
+            ->orderByDesc('id')
+            ->paginate(20);
+        return view('backend.HRMS.compoffrequests_staff', compact('stream', 'employees', 'leaveTypes', 'stream_master'));
+    }
+
+    // Staff: Store comp off request
+    public function staffStore(Request $request)
+    {
+        $user = auth()->guard('staff')->user();
+        $employeeId = $user->employee_id;
+        $request->validate([
+            'start_date'    => 'required|date',
+            'leave_type_id' => 'required|integer|exists:hrms_leave_types,id',
+            'reason'        => 'nullable|string|max:255',
+        ]);
+
+        HrmsCompOffRequest::create([
+            'employee_id'   => $employeeId,
+            'leave_type_id' => $request->input('leave_type_id'),
+            'start_date'    => $request->input('start_date'),
+            'reason'        => $request->input('reason'),
+            'status'        => 'Pending',
+            'approved_by'   => null,
+        ]);
+
+        return redirect()->route('compoffrequests.staff')->with('success', 'Comp Off request has been created successfully.');
+    }
 }

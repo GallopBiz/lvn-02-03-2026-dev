@@ -191,10 +191,13 @@ class EmployeeLeavesController extends Controller
                     ->where('leave_type_id', $leaveTypeId)
                     ->first();
 
-                if ($leaveBalance && $leaveBalance->balance > 0) {
-                    $leaveBalance->balance -= ($mainRequest->is_half_day ? 0.5 : 1);
-                    $leaveBalance->save();
-                }
+                    // Leave deduction at approval commented out to prevent double deduction
+                    /*
+                    if ($leaveBalance && $leaveBalance->balance > 0) {
+                        $leaveBalance->balance -= ($mainRequest->is_half_day ? 0.5 : 1);
+                        $leaveBalance->save();
+                    }
+                    */
             }
         }
 

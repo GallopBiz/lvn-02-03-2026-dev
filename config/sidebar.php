@@ -279,6 +279,7 @@ return [
                 'children' => [
                     [ 'title' => 'Comp Off Requests', 'route' => 'compoff', 'roles' => ['Admin'] ],
                     [ 'title' => 'Admin Comp Off Requests', 'route' => 'employee-compoff-requests', 'roles' => ['Admin'] ],
+                    [ 'title' => 'My Comp Off Requests', 'route' => 'compoffrequests-staff', 'roles' => ['Academic Staff (Teacher)', 'Staff'] ],
                 ],
             ],
             [
