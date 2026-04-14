@@ -13,6 +13,7 @@ use App\Models\StaffUser;
 use Illuminate\Support\Facades\Gate;
 
 class UserController extends Controller
+
 {
     /**
      * Display a listing of the resource.
@@ -249,26 +250,26 @@ class UserController extends Controller
             'student_name' => 'required',
             // 'email' => 'required|email|unique:users,email,'.$id,
             'password' => 'same:confirm-password',
-            'roles' => 'required'
+            'role' => 'required'
         ]);
-    
+
         $input = $request->all();
-        if(!empty($input['password'])){ 
+        if (!empty($input['password'])) {
             $input['password'] = Hash::make($input['password']);
-        }else{
-            $input = Arr::except($input,array('password'));    
+        } else {
+            $input = Arr::except($input, ['password']);
         }
-    
 
-
-        $user = StaffUser::find($id);
+        $user = Staff::find($id);
         $user->update($input);
-        DB::table('model_has_roles')->where('model_id',$id)->delete();
-    
-        $user->assignRole($request->input('roles'));
-    
-        return redirect()->route('users.index') 
-                        ->with('success','User updated successfully');
+        // If using spatie/laravel-permission, update roles
+        if (method_exists($user, 'assignRole')) {
+            DB::table('model_has_roles')->where('model_id', $id)->delete();
+            $user->assignRole($request->input('role'));
+        }
+
+        return redirect()->route('users.index')
+            ->with('success', 'User updated successfully');
     }
     
     /**

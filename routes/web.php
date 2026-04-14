@@ -1326,3 +1326,10 @@ Route::group(['middleware' => ['auth:staff']], function () {
     Route::get('compoffrequests-staff', [App\Http\Controllers\EmployeeCompOffController::class, 'staffIndex'])->name('compoffrequests.staff');
     Route::post('save-compoffrequests-staff', [App\Http\Controllers\EmployeeCompOffController::class, 'staffStore'])->name('save-compoffrequests.staff');
 });
+// Staff password change routes
+use App\Http\Controllers\Staff\PasswordController as StaffPasswordController;
+
+Route::middleware(['auth:staff'])->group(function () {
+    Route::get('/staff/change-password', [StaffPasswordController::class, 'showChangeForm'])->name('staff.password.change');
+    Route::post('/staff/change-password', [StaffPasswordController::class, 'update'])->name('staff.password.update');
+});
