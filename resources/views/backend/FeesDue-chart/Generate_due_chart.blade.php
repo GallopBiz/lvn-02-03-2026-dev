@@ -65,24 +65,39 @@
                       <tbody>
                       <!-- Old duachart-based code removed. All display is now handled by the sections-based logic below. -->
                         @if(!empty($sections))
-                          @php $sno = 1; @endphp
-                          @foreach($sections as $section => $students)
+                          @php
+                            $sno = 1;
+                            $totalGenerated = 0;
+                            $totalNotGenerated = 0;
+                            $totalStudents = 0;
+                            $grandTotalDue = 0;
+                          @endphp
+                          @foreach($sections as $section => $sectionData)
+                            @php
+                              $totalGenerated += $sectionData['generated_count'];
+                              $totalNotGenerated += $sectionData['not_generated_count'];
+                              $totalStudents += $sectionData['total_student'];
+                              $grandTotalDue += $sectionData['total_due'];
+                            @endphp
                             <tr>
                               <td>{{ $sno++ }}</td>
                               <td>{{ $classname }}</td>
                               <td>{{ $section }}</td>
-                              <td>{{ count($students) }}</td>
-                              <td>-</td>
-                              <td>{{ count($students) }}</td>
-                              <td>-</td>
+                              <td>{{ $sectionData['generated_count'] }}</td>
+                              <td>{{ $sectionData['not_generated_count'] }}</td>
+                              <td>{{ $sectionData['total_student'] }}</td>
+                              <td>{{ number_format($sectionData['total_due'], 2) }}</td>
                               <td>
-                                <form method="post" action="{{url('save_student_duechart')}}">
-                                  @csrf
-                                  <input type="hidden" name="studentid" value='@json(array_map(fn($stu) => $stu->id, $students))'>
-                                  <input type="hidden" name="classname" value="{{ $classname }}">
-                                  <!-- Section is not submitted, only class and studentid are sent -->
-                                  <button class="btn btn-primary">Generate Chart</button>
-                                </form>
+                                @if(!empty($sectionData['pending_student_ids']))
+                                  <form method="post" action="{{url('save_student_duechart')}}">
+                                    @csrf
+                                    <input type="hidden" name="studentid" value='@json($sectionData['pending_student_ids'])'>
+                                    <input type="hidden" name="classname" value="{{ $classname }}">
+                                    <button class="btn btn-primary">Generate Chart</button>
+                                  </form>
+                                @else
+                                  <button class="btn btn-secondary" type="button" disabled>Generated</button>
+                                @endif
                               </td>
                             </tr>
                           @endforeach
@@ -91,16 +106,27 @@
                         @endif
                       </tbody>
                       <tfoot>
-                        <tr>
-                          <th>SNO</th>
-                          <th>Class Name</th>
-                          <th>Section Name</th>
-                          <th>Chart Generate</th>
-                          <th>Chart not generate</th>
-                          <th>Total Student</th>
-                          <th>Total Due</th>
-                          <th>Action</th>
-                        </tr>
+                        @if(!empty($sections))
+                          <tr>
+                            <th colspan="3" class="text-end">Total</th>
+                            <th>{{ $totalGenerated }}</th>
+                            <th>{{ $totalNotGenerated }}</th>
+                            <th>{{ $totalStudents }}</th>
+                            <th>{{ number_format($grandTotalDue, 2) }}</th>
+                            <th></th>
+                          </tr>
+                        @else
+                          <tr>
+                            <th>SNO</th>
+                            <th>Class Name</th>
+                            <th>Section Name</th>
+                            <th>Chart Generate</th>
+                            <th>Chart not generate</th>
+                            <th>Total Student</th>
+                            <th>Total Due</th>
+                            <th>Action</th>
+                          </tr>
+                        @endif
                       </tfoot>
                     </table>
                   </div>

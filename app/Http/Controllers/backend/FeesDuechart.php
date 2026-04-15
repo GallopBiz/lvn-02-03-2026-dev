@@ -66,16 +66,39 @@ class FeesDuechart extends Controller
         $students = DB::connection('dynamic')->table('student_registration')
             ->where('class_name', $classname)
             ->get();
+        $generatedCharts = DB::connection('dynamic')->table('generate_duechartstatus')
+            ->where('class_name', $classname)
+            ->get()
+            ->keyBy('student_id');
+
         // Group students by section (from json_str->section_name)
         $sections = [];
         foreach ($students as $student) {
             $json = json_decode($student->json_str, true);
             $section = isset($json['section_name']) ? $json['section_name'] : 'N/A';
             if (!isset($sections[$section])) {
-                $sections[$section] = [];
+                $sections[$section] = [
+                    'students' => [],
+                    'generated_count' => 0,
+                    'not_generated_count' => 0,
+                    'total_student' => 0,
+                    'total_due' => 0,
+                    'pending_student_ids' => [],
+                ];
             }
-            $sections[$section][] = $student;
+
+            $sections[$section]['students'][] = $student;
+            $sections[$section]['total_student']++;
+
+            if ($generatedCharts->has($student->id)) {
+                $sections[$section]['generated_count']++;
+                $sections[$section]['total_due'] += (float) ($generatedCharts[$student->id]->amount ?? 0);
+            } else {
+                $sections[$section]['not_generated_count']++;
+                $sections[$section]['pending_student_ids'][] = $student->id;
+            }
         }
+
         $data['sections'] = $sections;
         $data['feesstructure'] = DB::connection('dynamic')->table('course_fees_structure_master')->where('class_name',$classname)->get();
         $data['duachart_data'] = DB::connection('dynamic')->table('generate_duechartstatus')->where('class_name', '=', $classname)->get();
@@ -372,7 +395,9 @@ class FeesDuechart extends Controller
         }
         // echo '<pre>';print_r($insertArrnext);die();
         // return redirect('generate-due-chart-list')->with('success', 'Fees Due Chart Generate successfully')->with('data', $insertArrnext);
-        return redirect()->to('generate-due-chart-list/'.$request->classname)->with('success','Fees Due Chart Generate successfully')->with('data', $insertArrnext);
+        return redirect()->route('generate-due-chart-list', ['id' => $request->classname])
+            ->with('success', 'Fees Due Chart Generate successfully')
+            ->with('data', $insertArrnext);
     }
 
     // public function generate_due_chart_list($id,$session){
@@ -395,7 +420,7 @@ class FeesDuechart extends Controller
     // }
 
 
-    public function generate_due_chart_list($id, Request $request) {
+    public function generate_due_chart_list($id, Request $request, $session_send = null) {
         $searchTerm = $request->input('search_term');
         $query = DB::connection('dynamic')->table('generate_duechartstatus')
             ->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')

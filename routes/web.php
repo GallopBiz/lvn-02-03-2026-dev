@@ -951,7 +951,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     Route::get('generate-due-chart', [FeesDuechart::class, 'generate_due_chart'])->name('generate-due-chart');
     Route::post('classsection-view/{id}', [FeesDuechart::class, 'class_student']);
-    Route::get('generate-due-chart-list/{id}/{session_send}',[FeesDuechart::class, 'generate_due_chart_list'])->name('generate-due-chart-list');
+    Route::get('generate-due-chart-list/{id}/{session_send?}',[FeesDuechart::class, 'generate_due_chart_list'])->name('generate-due-chart-list');
     Route::get('generate-due-chart-status', [FeesDuechart::class, 'generate_due_chart_status'])->name('generate-due-chart-status');
     Route::post('save-due-chart', [FeesDuechart::class, 'save_due_chart'])->name('save-due-chart');
     // Route::get('save-due-chart', [FeesDuechart::class, 'save_due_chart'])->name('save-due-chart');

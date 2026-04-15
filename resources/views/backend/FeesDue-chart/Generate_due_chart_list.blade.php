@@ -34,7 +34,6 @@
             @csrf
             <?php
             echo "<input type='hidden' name='classname' value='" . $info['id'] . "'>";
-            echo "<input type='hidden' name='secationname1' value='" . $info['session'] . "'>";
             ?>
             <input type="submit" id="backbtn" class="previous btn btn-primary col-1 mb-2 mt-2 d-none" value="Back">
         </form>
