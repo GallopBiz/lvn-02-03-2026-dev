@@ -330,7 +330,7 @@ return [
             [ 'title' => 'Users', 'route' => 'users', 'roles' => ['Admin'] ],
             [ 'title' => 'Roles', 'route' => 'roles', 'roles' => ['Admin'] ],
             [ 'title' => 'Permission', 'route' => 'permission', 'roles' => ['Admin'] ],
-            [ 'title' => 'Scholars Profile', 'route' => 'scholars_profile', 'roles' => ['Student'] ],
+            [ 'title' => 'My profile', 'route' => 'staff/change-password', 'roles' => ['Admin'] ],
         ],
     ],
 ];

@@ -34,7 +34,7 @@
                         </div>
                         <div class="form-group mb-2">
                             <label>Role</label>
-                            <input class="form-control" value="{{ auth('staff')->user()->getRoleNames()->first() ?? '' }}" type="text" readonly>
+                            <input class="form-control" value="{{ auth('staff')->user()->getRoleNames()->first() ?? auth('staff')->user()->role ?? '' }}" type="text" readonly>
                         </div>
                     </div>
                     <!-- Current password field removed as requested -->

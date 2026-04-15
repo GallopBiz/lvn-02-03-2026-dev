@@ -80,9 +80,3 @@
         }, 1000);
     });
 </script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" />
-<style type="text/css"></style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.full.min.js"></script>
-<script type="text/javascript">
-    $.noConflict();
-</script>

@@ -75,13 +75,27 @@
          <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
          <script>
             $(document).ready(function() {
-               if ($('.select2').length) {
-                  $('.select2').select2({
+               $('select.select2, select.deductions').each(function() {
+                  var select = $(this);
+                  var isMultiple = select.prop('multiple');
+                  var placeholder = select.data('placeholder') || select.attr('placeholder') || '';
+
+                  if (!placeholder) {
+                     var emptyOption = select.find('option[value=""], option[disabled]').first();
+                     placeholder = emptyOption.length ? emptyOption.text().trim() : (isMultiple ? 'Select options' : 'Select option');
+                  }
+
+                  if (select.data('select2')) {
+                     select.select2('destroy');
+                  }
+
+                  select.select2({
                      width: '100%',
-                     placeholder: 'Select employee',
-                     allowClear: true
+                     placeholder: placeholder,
+                     allowClear: !isMultiple,
+                     closeOnSelect: !isMultiple
                   });
-               }
+               });
             });
          </script>
       @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
@@ -136,10 +150,6 @@
       <script src="{{url('assets/backend')}}/js/scripts/toastr.script.min.js"></script>
 
 
-<!-- Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-        <!-- Select2 JS -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
     $(document).ready(function() {
         $('#classes').select2({
