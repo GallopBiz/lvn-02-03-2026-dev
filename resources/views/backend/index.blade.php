@@ -5,8 +5,7 @@
     <div class="main-content">
 		<div class="breadcrumb">
 			@role('Student')
-			<h1 class="me-2">Student Panel</h1>
-			@endrole
+			<h1 class="me-2">Student Panel</h1>			@endrole
 			
 			@role('Admin')
 			<h1 class="me-2">Admin Panel</h1>

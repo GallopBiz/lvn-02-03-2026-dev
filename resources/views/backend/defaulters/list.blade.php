@@ -12,6 +12,7 @@
 						<input type="hidden" name="transport_filter" value="{{ request('transport_filter') }}">
 						<input type="hidden" name="advance_filter" value="{{ request('advance_filter') }}">
 						<input type="hidden" name="class_filter" value="{{ request('class_filter') }}">
+                        <input type="hidden" name="batch_filter" value="{{ request('batch_filter') }}">
 						<button type="submit" class="btn btn-success btn-sm">Export CSV</button>
 					</form>
 
@@ -43,9 +44,20 @@
 								@endforeach
 							</select>
 						</div>
+                        <div class="col-md-3">
+                            <select name="batch_filter" class="form-control">
+                                <option value="">-- All Batches --</option>
+                                @foreach($allBatches as $batch)
+                                    <option value="{{ $batch }}" {{ request('batch_filter') == $batch ? 'selected' : '' }}>
+                                        {{ $batch }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                        <div class="col-md-2">
-                            <button class="btn btn-primary">Filter</button>
+                        <div class="col-md-3 d-flex gap-2">
+                            <button class="btn btn-primary" type="submit">Filter</button>
+                            <a href="{{ route('defaulters.index') }}" class="btn btn-outline-secondary">Reset</a>
                         </div>
                     </div>
                 </form>
@@ -56,7 +68,7 @@
                             @forelse ($defaulters as $studentId => $data)
                                 <div class="card mb-4 p-3 border rounded">
                                     <h5>
-                                        Name: {{ $data['info']['name'] }} | Class: {{ $data['info']['classname'] }} | Scholar No: {{ $data['info']['scholar_no'] }}
+                                        Name: {{ $data['info']['name'] }} | Class: {{ $data['info']['classname'] }} | Batch: {{ $data['info']['batch'] ?? 'N/A' }} | Scholar No: {{ $data['info']['scholar_no'] }}
                                     </h5>
 
                                     <table class="table table-bordered mt-2">

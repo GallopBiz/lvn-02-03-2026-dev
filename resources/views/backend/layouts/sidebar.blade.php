@@ -16,11 +16,23 @@ $staffUser = Auth::guard('staff')->user();
 			// use App\Models\RoleMenu; // Already imported at the top
 			// Use correct user object for staff or default
 			$user = Auth::guard('staff')->check() ? Auth::guard('staff')->user() : auth()->user();
-			$isAdmin = $user && $user->hasRole('Admin');
+			function getRoleNameForUser($user) {
+				if (!$user) return null;
+
+				if (method_exists($user, 'getRoleNames')) {
+					$roleName = $user->getRoleNames()->first();
+					if (!empty($roleName)) {
+						return $roleName;
+					}
+				}
+
+				return $user->role ?? null;
+			}
+
+			$isAdmin = $user && ((method_exists($user, 'hasRole') && $user->hasRole('Admin')) || getRoleNameForUser($user) === 'Admin');
 			function getAllowedMenuForUser($user) {
 				if (!$user) return [];
-				// For staff users, get role name from users table, then get role ID
-				$roleName = $user->role ?? null;
+				$roleName = getRoleNameForUser($user);
 				if (!$roleName) return [];
 				$roleId = \DB::table('roles')->where('name', $roleName)->value('id');
 				if (!$roleId) return [];
