@@ -4,6 +4,8 @@ namespace App\Http\Controllers\backend;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use App\Models\Student_registration;
 use App\Models\Classname;
 use App\Models\NextYearStudent;
@@ -12,17 +14,21 @@ use App\Models\Inquiry_registration;
 
 class StudentTransferController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $classes = Classname::all(); // Fetch all classes
+        $this->applySessionDatabaseBindings($request);
+
+		$classes = Classname::on('dynamic')->get(); // Fetch all classes from selected session DB
         return view('backend.student_transfer.index', compact('classes'));
     }
 
     public function fetchStudents(Request $request)
     {
+		$this->applySessionDatabaseBindings($request);
+
 		$transferredScholarNos = NextYearStudent::pluck('scholar_no')->toArray();
 
-        $students = Student_registration::where('class_name', $request->class_id)
+        $students = Student_registration::on('dynamic')->where('class_name', $request->class_id)
 		->whereNotIn('scholar_no', $transferredScholarNos)
 		->get();
 			//echo $students->toSql();die;
@@ -38,18 +44,29 @@ class StudentTransferController extends Controller
 
    public function promote(Request $request)
 {
+    $this->applySessionDatabaseBindings($request);
+
     $selectedStudents = $request->selected_students;
 
     if ($selectedStudents) {
-        $currentSession = Student_registration::first()->session_name;
+        $currentSession = $this->resolveSelectedSessionYear($request);
+        if (empty($currentSession)) {
+			$registration = Student_registration::on('dynamic')->first();
+            $currentSession = $registration->session_name ?? null;
+        }
+
+        if (empty($currentSession) || !preg_match('/^\d{4}_\d{4}$/', $currentSession)) {
+            return redirect()->back()->with('error', 'Invalid session year selected.');
+        }
+
         [$startYear, $endYear] = explode('_', $currentSession);
         $nextSession = ($startYear + 1) . '_' . ($endYear + 1);
 
-        $students = Student_registration::whereIn('id', $selectedStudents)->get();
+        $students = Student_registration::on('dynamic')->whereIn('id', $selectedStudents)->get();
 
         // Step 1: Fetch inquiry data for all selected students
         $formNumbers = $students->pluck('form_number')->toArray();
-        $inquiryRecords = Inquiry_registration::all(); // Consider filtering if performance is a concern
+        $inquiryRecords = Inquiry_registration::on('dynamic')->get(); // Consider filtering if performance is a concern
 
         $inquiryMap = [];
 
@@ -77,7 +94,7 @@ class StudentTransferController extends Controller
             $student->json_str = json_encode($data);
             $student->save();
 
-            NextYearStudent::create([
+			NextYearStudent::create([
                 'id'              => $student->id,
                 'application_for' => $student->application_for,
                 'form_number'     => $formNumber,
@@ -85,7 +102,7 @@ class StudentTransferController extends Controller
                 'date_of_birth'   => $student->date_of_birth,
                 'class_name'      => $newClassName,
                 'student_name'    => $student->student_name,
-                'session_name'    => $nextSession,
+				'session_name'    => $nextSession,
                 'json_str'        => $student->json_str,
                 'staff_name'      => $student->staff_name,
                 'phone_number'    => $student->phone_number,
@@ -129,6 +146,40 @@ class StudentTransferController extends Controller
 
 		return $currentClass; // Default: No change if class doesn't match
 	}
+
+    private function applySessionDatabaseBindings(Request $request): void
+    {
+        $selectedYear = $this->resolveSelectedSessionYear($request);
+        if (!$selectedYear || !preg_match('/^\d{4}_\d{4}$/', $selectedYear)) {
+            return;
+        }
+
+        [$startYear, $endYear] = explode('_', $selectedYear);
+        $nextSession = ($startYear + 1) . '_' . ($endYear + 1);
+
+        Config::set('database.connections.dynamic.database', $selectedYear);
+        Config::set('database.default', 'dynamic');
+        DB::purge('dynamic');
+        DB::reconnect('dynamic');
+        DB::setDefaultConnection('dynamic');
+
+        Config::set('database.connections.next_session_db.database', $nextSession);
+        DB::purge('next_session_db');
+        DB::reconnect('next_session_db');
+    }
+
+    private function resolveSelectedSessionYear(Request $request): ?string
+    {
+        $selectedYear = $request->session()->get('selectedYear');
+        if (empty($selectedYear)) {
+            $selectedYear = $request->cookie('selectedYear');
+        }
+        if (empty($selectedYear)) {
+            $selectedYear = $request->input('year');
+        }
+
+        return is_string($selectedYear) ? $selectedYear : null;
+    }
 
 
 

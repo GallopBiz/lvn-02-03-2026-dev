@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Staff;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class StaffLoginController extends Controller
@@ -16,6 +18,15 @@ class StaffLoginController extends Controller
 
     public function login(Request $request)
     {
+        $request->validate([
+            'username' => ['required', 'string'],
+            'password' => ['required', 'string'],
+            'year' => ['required', 'regex:/^\d{4}_\d{4}$/'],
+        ]);
+
+        $selectedYear = $request->input('year');
+        $this->switchDynamicDatabase($selectedYear);
+
         $credentials = $request->only('username', 'password');
         Log::info('Staff login attempt', ['credentials' => $credentials]);
         if (Auth::guard('staff')->attempt($credentials)) {
@@ -23,7 +34,6 @@ class StaffLoginController extends Controller
             $request->session()->regenerate();
 
             // Store selected session in session and cookie
-            $selectedYear = $request->input('year');
             if ($selectedYear) {
                 $request->session()->put('selectedYear', $selectedYear);
                 setcookie('selectedYear', $selectedYear, time() + (86400 * 30), "/"); // 30 days
@@ -46,5 +56,14 @@ class StaffLoginController extends Controller
         // Clear selectedYear cookie
         setcookie('selectedYear', '', time() - 3600, '/');
         return redirect('/staff-login');
+    }
+
+    private function switchDynamicDatabase(string $databaseName): void
+    {
+        Config::set('database.connections.dynamic.database', $databaseName);
+        Config::set('database.default', 'dynamic');
+        DB::purge('dynamic');
+        DB::reconnect('dynamic');
+        DB::setDefaultConnection('dynamic');
     }
 }
