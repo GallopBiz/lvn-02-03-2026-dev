@@ -129,7 +129,7 @@ use App\Http\Controllers\EmployeeCompOffController;
 use App\Http\Controllers\EmployeeSecurityDepositController;
 use App\Http\Controllers\backend\SmlBusGpsController;
 use App\Http\Controllers\Staff\StaffLoginController as StaffAreaLoginController;
-
+use App\Http\Controllers\Academic\ExamController;
 
 
 
@@ -1333,3 +1333,14 @@ Route::middleware(['auth:staff'])->group(function () {
     Route::get('/staff/change-password', [StaffPasswordController::class, 'showChangeForm'])->name('staff.password.change');
     Route::post('/staff/change-password', [StaffPasswordController::class, 'update'])->name('staff.password.update');
 });
+
+Route::get('/academic/exams/create', [ExamController::class, 'create'])->name('academic.exams.create');
+Route::get('/academic/exams/store', function () {
+    return redirect()->route('academic.exams.create');
+});
+Route::post('/academic/exams/store', [ExamController::class, 'store'])->name('academic.exams.store');
+Route::post('/academic/exams/{id}/duplicate', [ExamController::class, 'duplicate'])->name('academic.exams.duplicate');
+Route::post('/academic/exams/copy-from-session', [ExamController::class, 'copyFromSession'])->name('academic.exams.copyFromSession');
+Route::get('/academic/exams/{id}/edit', [ExamController::class, 'edit'])->name('academic.exams.edit');
+Route::put('/academic/exams/{id}', [ExamController::class, 'update'])->name('academic.exams.update');
+Route::delete('/academic/exams/{id}', [ExamController::class, 'destroy'])->name('academic.exams.destroy');
