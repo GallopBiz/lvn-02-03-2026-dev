@@ -192,7 +192,7 @@
 </head>
 <body>
 @php
-    $examHeading = !empty($exam) ? trim(($exam->exam_name ?? '') . ' ' . ($exam->exam_type ?? '')) : 'I TERM (HALF YEARLY)';
+    $examHeading = !empty($exam) ? trim($exam->exam_type ?? $exam->exam_name ?? '') : 'I TERM (HALF YEARLY)';
     $isSingle = isset($students) && $students->count() === 1;
     $perPage = $isSingle ? 1 : 4;
 @endphp

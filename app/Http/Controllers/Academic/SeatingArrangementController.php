@@ -56,35 +56,49 @@ class SeatingArrangementController extends Controller
         $rollMap = collect();
         $roomMap = collect();
         $hasGeneratedRolls = false;
-        $exams = DB::connection('dynamic')->table('academic_exam')
-            ->when(!empty($sessionName), fn ($query) => $query->where('session_year', $sessionName))
-            ->select('id', 'exam_name', 'exam_type')
-            ->orderBy('exam_name')
-            ->orderBy('exam_type')
-            ->get();
+        $exams = collect();
+        if (!empty($className)) {
+            $examsQuery = DB::connection('dynamic')->table('academic_exam as ae')
+                ->join('classes as c', 'c.id', '=', 'ae.class_id')
+                ->where('c.class_name', $className)
+                ->when(!empty($sessionName), fn ($query) => $query->where('ae.session_year', $sessionName))
+                ->select('ae.id', 'ae.exam_name', 'ae.exam_type')
+                ->orderBy('ae.exam_name')
+                ->orderBy('ae.exam_type');
 
-        if (empty($selectedExamId) && $exams->isNotEmpty()) {
-            $selectedExamId = $exams->first()->id;
+            if (Schema::connection('dynamic')->hasColumn('academic_exam', 'deleted_at')) {
+                $examsQuery->whereNull('ae.deleted_at');
+            }
+
+            $exams = $examsQuery->get();
+        }
+
+        if (!empty($selectedExamId) && !$exams->contains('id', (int) $selectedExamId)) {
+            $selectedExamId = null;
         }
 
         if (!empty($className) && !empty($sectionName) && !empty($sessionName)) {
             $students = $this->getClassSectionStudents($className, $sectionName, $sessionName);
 
-            $rollMap = StudentRollNo::query()
-                ->where('class_id', $className)
-                ->where('section_id', $sectionName)
-                ->where('session_id', $sessionName)
-                ->pluck('roll_no', 'student_id');
-
-            if ($this->hasRoomNoColumn()) {
-                $roomMap = StudentRollNo::query()
+            if (!empty($selectedExamId)) {
+                $rollMap = StudentRollNo::query()
                     ->where('class_id', $className)
                     ->where('section_id', $sectionName)
                     ->where('session_id', $sessionName)
-                    ->pluck('room_no', 'student_id');
-            }
+                    ->where('exam_id', $selectedExamId)
+                    ->pluck('roll_no', 'student_id');
 
-            $hasGeneratedRolls = $rollMap->isNotEmpty();
+                if ($this->hasRoomNoColumn()) {
+                    $roomMap = StudentRollNo::query()
+                        ->where('class_id', $className)
+                        ->where('section_id', $sectionName)
+                        ->where('session_id', $sessionName)
+                        ->where('exam_id', $selectedExamId)
+                        ->pluck('room_no', 'student_id');
+                }
+
+                $hasGeneratedRolls = $rollMap->isNotEmpty();
+            }
 
             if ($hasGeneratedRolls) {
                 $students = $students->sortBy(function ($student) use ($rollMap) {
@@ -119,13 +133,17 @@ class SeatingArrangementController extends Controller
         $sessionName = $this->resolveActiveSessionName();
         $examId = $request->query('exam_id');
 
+        if (empty($examId)) {
+            return $this->redirectToTools($className, $sectionName, $sessionName, $examId, 'error', 'Please select an exam first.');
+        }
+
         $students = $this->getClassSectionStudents($className, $sectionName, $sessionName);
 
         if ($students->isEmpty()) {
             return $this->redirectToTools($className, $sectionName, $sessionName, $examId, 'error', 'No students found for selected class/section/session.');
         }
 
-        $this->assignRollNumbers($students, $className, $sectionName, $sessionName);
+        $this->assignRollNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
 
         return $this->redirectToTools($className, $sectionName, $sessionName, $examId, 'success', 'Roll numbers generated successfully.');
     }
@@ -135,6 +153,10 @@ class SeatingArrangementController extends Controller
     {
         $sessionName = $this->resolveActiveSessionName();
         $examId = $request->query('exam_id');
+
+        if (empty($examId)) {
+            return redirect()->route('academic.roll-no-tools')->with('error', 'Please select an exam first.');
+        }
 
         $student = DB::connection('dynamic')->table('student_registration as sr')
             ->join('classes as c', 'c.id', '=', 'sr.class_id')
@@ -174,6 +196,7 @@ class SeatingArrangementController extends Controller
                 'class_id' => $className,
                 'section_id' => $sectionName,
                 'session_id' => $sessionName,
+                'exam_id' => (int) $examId,
             ],
             ['roll_no' => $rollNo]
         );
@@ -189,6 +212,10 @@ class SeatingArrangementController extends Controller
         $examId = $request->input('exam_id');
         $studentIds = array_values(array_filter((array) $request->input('student_ids', [])));
 
+        if (empty($examId)) {
+            return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Please select an exam first.');
+        }
+
         if (empty($className) || empty($sectionName) || empty($studentIds)) {
             return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Please select at least one student.');
         }
@@ -201,7 +228,7 @@ class SeatingArrangementController extends Controller
 
         // Keep sequence correct globally for class/section by regenerating on full class set.
         $allClassStudents = $this->getClassSectionStudents($className, $sectionName, $sessionName);
-        $this->assignRollNumbers($allClassStudents, $className, $sectionName, $sessionName);
+        $this->assignRollNumbers($allClassStudents, $className, $sectionName, $sessionName, (int) $examId);
 
         return $this->redirectToTools($className, $sectionName, $sessionName, $examId, 'success', 'Roll numbers generated for selected students.');
     }
@@ -212,6 +239,10 @@ class SeatingArrangementController extends Controller
         $className = $request->input('class_name');
         $sectionName = $request->input('section_name');
         $examId = $request->input('exam_id');
+
+        if (empty($examId)) {
+            return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Please select an exam first.');
+        }
 
         if (!$this->hasRoomNoColumn()) {
             return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Room number column is missing. Please run migrations first.');
@@ -232,6 +263,7 @@ class SeatingArrangementController extends Controller
                 'class_id' => $validated['class_name'],
                 'section_id' => $validated['section_name'],
                 'session_id' => $sessionName,
+                'exam_id' => (int) $examId,
             ]);
 
             if (!$record->exists && empty($record->roll_no)) {
@@ -249,35 +281,8 @@ class SeatingArrangementController extends Controller
     public function generateRollNumbersBulk($sessionName)
     {
         $sessionName = $this->resolveActiveSessionName();
-
-        $combinations = DB::connection('dynamic')->table('student_registration')
-            ->where('session_name', $sessionName)
-            ->whereNotNull('class_name')
-            ->whereNotNull('section_name')
-            ->select('class_name', 'section_name')
-            ->distinct()
-            ->get();
-
-        if ($combinations->isEmpty()) {
-            return redirect()->route('academic.roll-no-tools', ['session_name' => $sessionName])
-                ->with('error', 'No class/section combinations found for selected session.');
-        }
-
-        foreach ($combinations as $combination) {
-            $students = DB::connection('dynamic')->table('student_registration')
-                ->where('session_name', $sessionName)
-                ->where('class_name', $combination->class_name)
-                ->where('section_name', $combination->section_name)
-                ->orderBy('student_name')
-                ->get();
-
-            if ($students->isNotEmpty()) {
-                $this->assignRollNumbers($students, $combination->class_name, $combination->section_name, $sessionName);
-            }
-        }
-
         return redirect()->route('academic.roll-no-tools', ['session_name' => $sessionName])
-            ->with('success', 'Roll numbers generated for all classes/sections.');
+            ->with('error', 'Please select class, section, and exam before generating roll numbers.');
     }
 
     // Print admit cards (two per A4 page)
@@ -286,6 +291,10 @@ class SeatingArrangementController extends Controller
         $sessionName = $this->resolveActiveSessionName();
         $examId = $request->query('exam_id');
         $exam = null;
+
+        if (empty($examId)) {
+            return $this->redirectToTools($className, $sectionName, $sessionName, $examId, 'error', 'Please select an exam first.');
+        }
 
         if (!empty($examId)) {
             $exam = DB::connection('dynamic')->table('academic_exam')
@@ -301,7 +310,7 @@ class SeatingArrangementController extends Controller
             ->orderBy('student_name')
             ->get();
 
-        $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName);
+        $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
 
         return view('backend.AcademicsModules.admit_card_print', compact('students', 'className', 'sectionName', 'sessionName', 'exam'));
     }
@@ -311,6 +320,10 @@ class SeatingArrangementController extends Controller
         $sessionName = $this->resolveActiveSessionName();
         $examId = $request->query('exam_id');
         $exam = null;
+
+        if (empty($examId)) {
+            return redirect()->route('academic.roll-no-tools')->with('error', 'Please select an exam first.');
+        }
 
         if (!empty($examId)) {
             $exam = DB::connection('dynamic')->table('academic_exam')
@@ -331,7 +344,7 @@ class SeatingArrangementController extends Controller
         }
 
         $students = collect([$student]);
-        $this->applyRollAndRoomNumbers($students, $student->class_name, $student->section_name, $sessionName);
+        $this->applyRollAndRoomNumbers($students, $student->class_name, $student->section_name, $sessionName, (int) $examId);
 
         $data = [
             'students' => $students,
@@ -352,6 +365,10 @@ class SeatingArrangementController extends Controller
         $examId = $request->input('exam_id');
         $studentIds = array_values(array_filter((array) $request->input('student_ids', [])));
 
+        if (empty($examId)) {
+            return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Please select an exam first.');
+        }
+
         if (empty($className) || empty($sectionName) || empty($studentIds)) {
             return $this->redirectToTools((string) $className, (string) $sectionName, $sessionName, $examId, 'error', 'Please select at least one student.');
         }
@@ -366,14 +383,15 @@ class SeatingArrangementController extends Controller
 
         $students = $this->getClassSectionStudents($className, $sectionName, $sessionName, $studentIds);
 
-        $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName);
+        $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
 
         return view('backend.AcademicsModules.admit_card_print', compact('students', 'className', 'sectionName', 'sessionName', 'exam'));
     }
 
-    public function downloadRollNumbers($className, $sectionName, $sessionName): StreamedResponse
+    public function downloadRollNumbers(Request $request, $className, $sectionName, $sessionName): StreamedResponse
     {
         $sessionName = $this->resolveActiveSessionName();
+        $examId = $request->query('exam_id');
 
         $students = DB::connection('dynamic')->table('student_registration')
             ->where('class_name', $className)
@@ -386,6 +404,7 @@ class SeatingArrangementController extends Controller
             ->where('class_id', $className)
             ->where('section_id', $sectionName)
             ->where('session_id', $sessionName)
+            ->where('exam_id', $examId)
             ->pluck('roll_no', 'student_id');
 
         $filename = 'roll_numbers_' . $className . '_' . $sectionName . '_' . str_replace(['/', '\\', ' '], '-', $sessionName) . '.csv';
@@ -428,6 +447,7 @@ class SeatingArrangementController extends Controller
             ->where('class_id', $className)
             ->where('section_id', $sectionName)
             ->where('session_id', $sessionName)
+            ->where('exam_id', $examId)
             ->pluck('roll_no', 'student_id');
 
         // sort by roll number (sequence) if present
@@ -449,7 +469,7 @@ class SeatingArrangementController extends Controller
         return $pdf->stream('roll_numbers_' . $className . '_' . $sectionName . '.pdf');
     }
 
-    private function assignRollNumbers(Collection $students, string $className, string $sectionName, string $sessionName): void
+    private function assignRollNumbers(Collection $students, string $className, string $sectionName, string $sessionName, int $examId): void
     {
         $classCode = $this->resolveClassCode($className);
         $sectionCode = $this->resolveSectionDigit($sectionName);
@@ -464,6 +484,7 @@ class SeatingArrangementController extends Controller
                     'class_id' => $className,
                     'section_id' => $sectionName,
                     'session_id' => $sessionName,
+                    'exam_id' => $examId,
                 ],
                 ['roll_no' => $rollNo]
             );
@@ -472,12 +493,13 @@ class SeatingArrangementController extends Controller
         }
     }
 
-    private function applyRollAndRoomNumbers(Collection $students, string $className, string $sectionName, string $sessionName): void
+    private function applyRollAndRoomNumbers(Collection $students, string $className, string $sectionName, string $sessionName, int $examId): void
     {
         $query = StudentRollNo::query()
             ->where('class_id', $className)
             ->where('section_id', $sectionName)
-            ->where('session_id', $sessionName);
+            ->where('session_id', $sessionName)
+            ->where('exam_id', $examId);
 
         $records = $query->get()->keyBy('student_id');
 

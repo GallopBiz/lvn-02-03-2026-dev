@@ -170,7 +170,7 @@
 
 @php
     $examHeading = !empty($exam)
-        ? trim(($exam->exam_name ?? '') . ' ' . ($exam->exam_type ?? ''))
+        ? trim($exam->exam_type ?? $exam->exam_name ?? '')
         : 'I TERM (HALF YEARLY) EXAMINATION';
     $sessionDisplay = str_replace('_', '-', $sessionName ?? '');
     $cardsPerPage = 4;

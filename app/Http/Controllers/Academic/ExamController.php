@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class ExamController extends Controller
 {
@@ -29,9 +30,14 @@ class ExamController extends Controller
             return redirect()->back()->withInput()->with('error', 'No academic session is selected. Choose a session year from the header, then try again.');
         }
 
+        $examTypes = $this->activeExamTypes();
+        if ($examTypes->isEmpty()) {
+            return redirect()->back()->withInput()->with('error', 'Please create at least one exam type first.');
+        }
+
         $validated = $request->validate([
             'exam_name' => 'required|string|max:100',
-            'exam_type' => 'required|string|in:PT-1,PT-2,Term-1,Term-4',
+            'exam_type' => ['required', 'string', Rule::in($examTypes->all())],
             'max_marks_theory' => 'nullable|integer',
             'max_marks_practical' => 'nullable|integer',
             'fail_percent' => 'nullable|numeric',
@@ -54,7 +60,7 @@ class ExamController extends Controller
 
     public function create(Request $request)
     {
-        $examTypes = ['PT-1', 'PT-2', 'Term-1', 'Term-4'];
+        $examTypes = $this->activeExamTypes();
         $currentSessionYear = $this->resolveDynamicSessionYear($request);
         // Get unique classes by class_name, optionally filter by session_year if available in your classes table
         $classes = \App\Models\Classes::query()
@@ -169,7 +175,7 @@ class ExamController extends Controller
             ->get()
             ->unique('class_name')
             ->values();
-        $examTypes = ['PT-1', 'PT-2', 'Term-1', 'Term-4'];
+        $examTypes = $this->activeExamTypes();
 
         return view(
             'backend.AcademicsModules.exam_edit',
@@ -185,9 +191,14 @@ class ExamController extends Controller
             return redirect()->back()->withInput()->with('error', 'No academic session is selected. Choose a session year from the header, then try again.');
         }
 
+        $examTypes = $this->activeExamTypes();
+        if ($examTypes->isEmpty()) {
+            return redirect()->back()->withInput()->with('error', 'Please create at least one exam type first.');
+        }
+
         $validated = $request->validate([
             'exam_name' => 'required|string|max:100',
-            'exam_type' => 'required|string|in:PT-1,PT-2,Term-1,Term-4',
+            'exam_type' => ['required', 'string', Rule::in($examTypes->all())],
             'max_marks_theory' => 'nullable|integer',
             'max_marks_practical' => 'nullable|integer',
             'fail_percent' => 'nullable|numeric',
@@ -404,6 +415,16 @@ class ExamController extends Controller
             }
         }
         return (int) ($firstId ?? 0);
+    }
+
+    private function activeExamTypes()
+    {
+        return ExamType::query()
+            ->where('is_delete', 0)
+            ->orderBy('examtype')
+            ->pluck('examtype')
+            ->filter()
+            ->values();
     }
 
     private function buildExamGroupQuery(Exam $exam): Builder

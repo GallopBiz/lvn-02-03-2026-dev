@@ -31,8 +31,8 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label>Exam</label>
-                <select name="exam_id" class="form-control">
+                <label>Exam <span class="text-danger">*</span></label>
+                <select name="exam_id" class="form-control" required>
                     <option value="">Select Exam</option>
                     @foreach($exams as $exam)
                         <option value="{{ $exam->id }}" {{ (string) $selectedExamId === (string) $exam->id ? 'selected' : '' }}>
@@ -64,7 +64,7 @@
                     Print Admit Cards (Selected)
                 </button>
                 @if($hasGeneratedRolls)
-                    <a href="{{ route('academic.download-rolls', ['class' => $className, 'section' => $sectionName, 'session' => $sessionName]) }}" class="btn btn-success">
+                    <a href="{{ route('academic.download-rolls', ['class' => $className, 'section' => $sectionName, 'session' => $sessionName, 'exam_id' => $selectedExamId]) }}" class="btn btn-success">
                         Download
                     </a>
                 @endif
@@ -86,6 +86,10 @@
             <input type="hidden" name="exam_id" value="{{ $selectedExamId }}">
             <div id="selectedStudentsPrintContainer"></div>
         </form>
+
+        @if(empty($selectedExamId))
+            <div class="alert alert-warning">Please select an exam before generating roll numbers, assigning room numbers, or printing admit cards.</div>
+        @endif
 
         <form method="POST" action="{{ route('academic.room-numbers.save') }}">
             @csrf

@@ -24,7 +24,7 @@
                 @endif
                 <div class="form-group mt-2">
                     <label>Exam Type <span class="text-danger">*</span></label><br>
-                    @foreach($examTypes as $type)
+                    @forelse($examTypes as $type)
                         <label class="me-3">
                             <input
                                 type="radio"
@@ -35,7 +35,11 @@
                             >
                             {{ $type }}
                         </label>
-                    @endforeach
+                    @empty
+                        <div class="alert alert-warning mb-0">
+                            No exam types found. Please create one from Exam Type first.
+                        </div>
+                    @endforelse
                 </div>
                 <div class="form-group mt-2">
                     <label>Max Marks (Theory)</label>

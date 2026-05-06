@@ -82,10 +82,22 @@
                 @endif
                 <div class="form-group mt-2">
                     <label>Exam Type <span class="text-danger">*</span></label><br>
-                    <label class="me-3"><input type="radio" name="exam_type" value="PT-1" required> PT-1</label>
-                    <label class="me-3"><input type="radio" name="exam_type" value="PT-2" required> PT-2</label>
-                    <label class="me-3"><input type="radio" name="exam_type" value="Term-1" required> Term-1</label>
-                    <label class="me-3"><input type="radio" name="exam_type" value="Term-4" required> Term-4</label>
+                    @forelse($examTypes as $type)
+                        <label class="me-3">
+                            <input
+                                type="radio"
+                                name="exam_type"
+                                value="{{ $type }}"
+                                {{ old('exam_type') === $type ? 'checked' : '' }}
+                                required
+                            >
+                            {{ $type }}
+                        </label>
+                    @empty
+                        <div class="alert alert-warning mb-0">
+                            No exam types found. Please create one from Exam Type first.
+                        </div>
+                    @endforelse
                 </div>
                 <div class="form-group mt-2">
                     <label>Max Marks (Theory)</label>
