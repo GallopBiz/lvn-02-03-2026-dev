@@ -200,7 +200,7 @@
                 aria-labelledby="userDropdown"
               >
                 <div class="dropdown-header">
-                  <i class="i-Lock-User me-1"></i> {{Auth::user()->student_name}}
+                  <i class="i-Lock-User me-1"></i> {{ optional(Auth::user())->student_name ?? optional(Auth::user())->name ?? 'User' }}
                 </div>
                 <!-- <a class="dropdown-item" href="signin.html">Sign out</a> -->
 

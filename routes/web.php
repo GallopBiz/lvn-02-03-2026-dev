@@ -130,9 +130,8 @@ use App\Http\Controllers\EmployeeSecurityDepositController;
 use App\Http\Controllers\backend\SmlBusGpsController;
 use App\Http\Controllers\Staff\StaffLoginController as StaffAreaLoginController;
 use App\Http\Controllers\Academic\ExamController;
-
-
-
+use App\Http\Controllers\Academic\SeatingArrangementController;
+// Remove any duplicate use statement for SeatingArrangementController below this line
 
 // use App\Http\Controllers\FormController;
 /*
@@ -1344,3 +1343,17 @@ Route::post('/academic/exams/copy-from-session', [ExamController::class, 'copyFr
 Route::get('/academic/exams/{id}/edit', [ExamController::class, 'edit'])->name('academic.exams.edit');
 Route::put('/academic/exams/{id}', [ExamController::class, 'update'])->name('academic.exams.update');
 Route::delete('/academic/exams/{id}', [ExamController::class, 'destroy'])->name('academic.exams.destroy');
+
+Route::get('academic/generate-rolls/{class}/{section}/{session}', [SeatingArrangementController::class, 'generateRollNumbers'])->name('academic.generate-rolls');
+Route::post('academic/generate-rolls-selected', [SeatingArrangementController::class, 'generateRollNumbersForSelected'])->name('academic.generate-rolls.selected');
+Route::post('academic/room-numbers', [SeatingArrangementController::class, 'saveRoomNumbers'])->name('academic.room-numbers.save');
+Route::get('academic/print-admit-cards/{class}/{section}/{session}', [SeatingArrangementController::class, 'printAdmitCards'])->name('academic.print-admit-cards');
+Route::get('academic/print-admit-card-student/{student}/{session}', [SeatingArrangementController::class, 'printAdmitCardForStudent'])->name('academic.print-admit-card.student');
+Route::post('academic/print-admit-cards-selected', [SeatingArrangementController::class, 'printAdmitCardsForSelected'])->name('academic.print-admit-cards.selected');
+Route::get('academic/generate-rolls-bulk/{session}', [SeatingArrangementController::class, 'generateRollNumbersBulk'])->name('academic.generate-rolls.bulk');
+Route::get('academic/generate-roll-student/{student}/{session}', [SeatingArrangementController::class, 'generateRollNumberForStudent'])->name('academic.generate-roll.student');
+
+// Roll Number & Admit Card Tools UI
+Route::get('academic/roll-no-tools', [SeatingArrangementController::class, 'index'])->name('academic.roll-no-tools');
+Route::get('academic/download-rolls/{class}/{section}/{session}', [SeatingArrangementController::class, 'downloadRollNumbers'])->name('academic.download-rolls');
+Route::get('academic/print-rolls/{class}/{section}/{session}', [SeatingArrangementController::class, 'printRollNumbersPdf'])->name('academic.print-rolls');

@@ -64,7 +64,9 @@ $staffUser = Auth::guard('staff')->user();
 				$menu = config('sidebar'); // Admin sees all menu items
 			} else {
 				$allowedMenu = getAllowedMenuForUser($user);
-				$menu = filterMenuByAllowed(config('sidebar'), $allowedMenu);
+				$menu = !empty($allowedMenu)
+					? filterMenuByAllowed(config('sidebar'), $allowedMenu)
+					: config('sidebar'); // Fallback: show full menu if role mapping is missing
 			}
 			@endphp
 
