@@ -9,6 +9,7 @@ class ExamSubjectMark extends Model
 {
     use HasFactory;
 
+    protected $connection = 'dynamic';
     protected $table = 'academic_exam_subject_marks';
 
     protected $fillable = [

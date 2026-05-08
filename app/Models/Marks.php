@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Marks extends Model
 {
     use HasFactory;
+    protected $connection = 'dynamic';
     protected $table="previosly_saved_marks_entry";
     protected $primarykey="id";
 
@@ -36,7 +37,7 @@ class Marks extends Model
     }
     public function Exammaster()
     {
-        return $this->belongsTo(Exammaster::class, 'exam_id');
+        return $this->belongsTo(\App\Models\Academic\Exam::class, 'exam_id');
     }
 
 }

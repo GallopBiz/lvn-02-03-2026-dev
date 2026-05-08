@@ -9,6 +9,7 @@ class SubjectCombination extends Model
 {
     use HasFactory;
 
+    protected $connection = 'dynamic';
     protected $table="subject_combinations";
     protected $primarykey="id";
     // protected $fillable = ['nature_of_work_name', 'nature_of_work_remarks'];

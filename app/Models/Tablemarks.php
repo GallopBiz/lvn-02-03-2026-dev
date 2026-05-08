@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class Tablemarks extends Model
 {
     use HasFactory;
-    protected $table="marks";
+    protected $connection = 'dynamic';
+    protected $table="academic_students_marks";
     protected $primarykey="id";
 
     protected $fillable = [
@@ -17,6 +18,7 @@ class Tablemarks extends Model
         'is_absent_pr',
         'student_name',
         'enrollment',
+        'roll_no',
         'scholar_no',
         'mark_theory',
         'mark_practical',
@@ -24,6 +26,7 @@ class Tablemarks extends Model
         'grade',
         'result',
         'overall_grade',
+        'internal_assessment_marks',
     
     ];
 

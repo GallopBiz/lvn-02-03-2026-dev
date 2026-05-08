@@ -14,6 +14,7 @@ use App\Models\HrmsDepartment;
 use App\Models\TeacherSubject;
 use App\Http\Controllers\Controller;
 use App\Models\Student_registration;
+use Illuminate\Support\Facades\Auth;
 
 class TeacherSubjectController extends Controller
 {
@@ -26,7 +27,7 @@ class TeacherSubjectController extends Controller
         $teachersubjects = TeacherSubject::where('is_delete', 0)->get();
         //$teachersession = Student_registration::all();
         //$pre_studentsessions = $studentsession;
-        //$datas = DB::table('classes')->select('class_name')->distinct()->get();
+        //$datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $streamlist = Stream::where('is_delete', 0)->get();
         $deparments = HrmsDepartment::all();
@@ -133,7 +134,7 @@ class TeacherSubjectController extends Controller
         //$teacher_subject = $teacher_subject[0];
 
         //$studentclasses = Student_registration::select('class_name')->distinct()->get();
-        //$classlist = DB::table('classes')->select('class_name')->distinct()->get();
+        //$classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         $class_id = $teacher_subject->class_id;
         $stream_id = $teacher_subject->stream_id;
@@ -161,7 +162,7 @@ class TeacherSubjectController extends Controller
 
         $studentsession = Student_registration::select('session_name')->distinct()->get();
 
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
+        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
 
         return view('backend.AcademicsModules.teachersubject',compact('classlist','sessions','teachersession', 'studentsession', 'pre_studentsessions')); */
 
@@ -182,7 +183,9 @@ class TeacherSubjectController extends Controller
     //     return $data;
     // }
     public function getteachersdata(Request $request){
-        $teacher = $request->teacher;
+        $teacher = Auth::guard('staff')->check() && !Auth::guard('web')->check()
+            ? Auth::guard('staff')->user()->employee_id
+            : $request->teacher;
 
         $classes = TeacherSubject::with('Class')->where("teacher_id", $teacher)->groupBy('class_id')->where('is_delete','=',0)->get();
         $subjects = TeacherSubject::with('Subject')->where("teacher_id", $teacher)->groupBy('subject_id')->where('is_delete','=',0)->get();
@@ -191,7 +194,9 @@ class TeacherSubjectController extends Controller
     }
 
     public function getteachersandsubject(Request $request){
-        $teacher = $request->teacher;
+        $teacher = Auth::guard('staff')->check() && !Auth::guard('web')->check()
+            ? Auth::guard('staff')->user()->employee_id
+            : $request->teacher;
         $class_name = $request->class_name;
 
         // $classes = DB::table('teacher_subjects')->where("teacher_name", $teacher)->distinct()->pluck('class_name');

@@ -47,7 +47,8 @@
       || Request::segment(1)=='admin-pre-enquiryform'|| Request::segment(1)=='fees-master-student'|| Request::segment(1)=='permission'||
       Request::segment(1)=='duestuamount'|| Request::segment(1)=='filter-duestuamount' || Request::segment(1)=='enquiry-data'||
       Request::segment(1)=='filter-enquiry-list' || Request::segment(1)=='gread' ||
-      Request::segment(1)=='show_report_markss' || Request::segment(1)=='show_report_marks' || Request::segment(1)=='exammaster')
+      Request::segment(1)=='show_report_markss' || Request::segment(1)=='show_report_marks' || Request::segment(1)=='exammaster'
+      || Request::segment(1)=='internal-assessment-master')
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/datatables.min.css"/>
    @endif
    <body class="text-start">

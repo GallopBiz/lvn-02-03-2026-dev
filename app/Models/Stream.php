@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Stream extends Model
 {
     use HasFactory;
+    protected $connection = 'dynamic';
     protected $table="streams";
     protected $primarykey="id";
 

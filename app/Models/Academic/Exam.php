@@ -6,6 +6,7 @@ use App\Models\Classes;
 
 class Exam extends Model
 {
+    protected $connection = 'dynamic';
     protected $table = 'academic_exam';
     protected $fillable = [
         'exam_group_id',

@@ -71,6 +71,7 @@
                                   <div class="ul-widget-app__browser-list">
                                     <a href="{{ 'AssignSubject' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Assign Subject</span></div></a>
                                     <a href="{{ 'exammaster' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Exam</span></div></a>
+                                    <a href="{{ 'internal-assessment-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Internal Assessment (IA)</span></div></a>
                                     <a href="{{ 'calssese-assigne-to-teacher' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Calssese Assigne To Teacher</span></div></a>
                                     <a href="{{ 'subjectmaster' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Subject</span></div></a>
                                     <a href="{{ 'greadingmaster' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Greading</span></div></a>

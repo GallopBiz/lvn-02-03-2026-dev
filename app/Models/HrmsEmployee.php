@@ -10,6 +10,7 @@ class HrmsEmployee extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $connection = 'dynamic';
     protected $table = "hrms_employees";
 
     protected $fillable = [

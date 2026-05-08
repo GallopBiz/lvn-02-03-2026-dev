@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 class HrmsBiometricDetail extends Model
 {
     use HasFactory,SoftDeletes;
+    protected $connection = 'dynamic';
     protected $table="hrms_employee_biometric_details";    
 
     protected $fillable = [

@@ -89,6 +89,7 @@ use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\Fees_Onlyparents_Controller;
 use App\Http\Controllers\MarksheetController;
 use App\Http\Controllers\MarksController;
+use App\Http\Controllers\InternalAssessmentMasterController;
 use App\Http\Controllers\EmployeesController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\PositionController;
@@ -198,6 +199,21 @@ Route::group(['namespace' => 'App\Http\Controllers'], function()
 });
 
 Auth::routes();Route::get('/home', [HomeController::class, 'index'])->name('home');
+
+Route::middleware(['auth:web,staff'])->group(function () {
+    Route::get('marks',[MarksController::class, 'index'])->name('marks');
+    Route::get('show_report_marks', [MarksController::class, 'showmarks']);
+    Route::post('show_report_markss', [MarksController::class, 'show_report_markss']);
+    Route::post('save-marks',[MarksController::class, 'create']);
+    Route::post('class-studentdata',[MarksController::class, 'classstudentdata']);
+    Route::post('check-marks-entry-status',[MarksController::class, 'checkMarksEntryStatus']);
+    Route::post('grade_percentage', [MarksController::class, 'grade_percentage']);
+    Route::get('view-marks/{id}', [MarksController::class, 'view']);
+    Route::post('store-marks', [MarksController::class, 'store']);
+    Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
+    Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata']);
+    Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject']);
+});
 
 Route::group(['middleware' => ['auth']], function() {
     Route::resource('roles', RoleController::class);
@@ -394,6 +410,12 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('view-greadingmaster/{id}', [GreadingMasterController::class, 'view']);
     Route::post('store-greadingmaster', [GreadingMasterController::class, 'store']);
     Route::get('delete-greadingmaster/{id}', [GreadingMasterController::class, 'grade_master_delete']);
+    Route::get('internal-assessment-master',[InternalAssessmentMasterController::class, 'index'])->name('internal-assessment-master');
+    Route::post('save-internal-assessment-master',[InternalAssessmentMasterController::class, 'create']);
+    Route::get('view-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'view']);
+    Route::post('store-internal-assessment-master', [InternalAssessmentMasterController::class, 'store']);
+    Route::get('toggle-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'toggleStatus']);
+    Route::get('delete-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'delete']);
     // Route::get('greadingmaster',[GradesController::class, 'index'])->name('greadingmaster');
 
 
@@ -457,6 +479,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('show_report_markss', [MarksController::class, 'show_report_markss']);
     Route::post('save-marks',[MarksController::class, 'create']);
     Route::post('class-studentdata',[MarksController::class, 'classstudentdata']);
+    Route::post('check-marks-entry-status',[MarksController::class, 'checkMarksEntryStatus']);
     Route::post('grade_percentage', [MarksController::class, 'grade_percentage']);
     Route::get('view-marks/{id}', [MarksController::class, 'view']);
 

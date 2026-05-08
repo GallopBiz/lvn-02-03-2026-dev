@@ -9,6 +9,7 @@ class TeacherSubject extends Model
 {
     use HasFactory;
 
+    protected $connection = 'dynamic';
     protected $table="teacher_subjects";
     protected $primarykey="id";
 

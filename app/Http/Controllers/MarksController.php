@@ -6,36 +6,75 @@ use App\Models\Marks;
 use App\Models\Subject;
 use App\Models\Teachers;
 use App\Models\Classname;
-use App\Models\Exammaster;
 use App\Models\Tablemarks;
 use App\Models\CommanModel;
 use Illuminate\Http\Request;
 use App\Models\TeacherSubject;
+use App\Models\ExamSubjectMark;
+use App\Models\InternalAssessmentMaster;
 use App\Models\SubjectCombination;
 use App\Http\Controllers\Controller;
 use App\Models\SubjectAssignStudent;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 
 class MarksController extends Controller
 {
+    private ?array $marksColumns = null;
+
     // public function index(){T
     //     return view('backend.AcademicsModules.stream');
     // }
 
     public function index(){
-        $stream = Marks::where('is_delete','=',0)->get();//Marks::where('is_delete',0)->get();
+        $staffEmployeeId = $this->staffEmployeeId();
+
+        $stream = $this->accessibleMarksQuery()->get();//Marks::where('is_delete',0)->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
-        $examslist = DB::table('exammasters')->where('is_delete','=',0)->get();//Exammaster::select('exam_name')->distinct()->get();
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
-        $subjectlist = Subject::select('subject_name')->distinct()->get();
-        $teacherlist = TeacherSubject::where('is_delete', 0) ->groupBy('teacher_id')->get();
-        return view('backend.AcademicsModules.marks', compact('classlist','stream','teacherlist','examslist','subjectlist'));
+        $examslist = $this->accessibleAcademicExams();
+        if ($this->isStaffMarksUser()) {
+            $classlist = $this->accessibleTeacherSubjects()
+                ->with('Class')
+                ->groupBy('class_id')
+                ->get()
+                ->pluck('Class')
+                ->filter()
+                ->values();
+            $subjectlist = $this->accessibleTeacherSubjects()
+                ->with('Subject')
+                ->groupBy('subject_id')
+                ->get()
+                ->pluck('Subject')
+                ->filter()
+                ->values();
+        } else {
+            $classlist = Classname::select('id', 'class_name')->where('is_delete', 0)->get();
+            $subjectlist = Subject::select('id', 'subject_name')->where('is_delete', 0)->get();
+        }
+        $teacherlist = $this->accessibleTeacherSubjects()->with('Teacher.biometricDetails')->groupBy('teacher_id')->get();
+        $isStaffMarksUser = $this->isStaffMarksUser();
+        $internalAssessments = $this->activeInternalAssessments();
+        return view('backend.AcademicsModules.marks', compact('classlist','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments'));
     }
 
 
     public function create(Request $request){
-        //dd($request);
+        $validator = $this->validateMarksRequest($request);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
+        }
+
+        $teacherId = $this->resolveTeacherId($request);
+        if (!$this->canAccessAssignment($teacherId, $request->class_name, $request->section_name, $request->subject_name)) {
+            return response()->json(['status' => 'error', 'message' => 'You are not allowed to enter marks for this class/subject.'], 403);
+        }
+        if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
+            return response()->json(['status' => 'error', 'message' => $message], 422);
+        }
+
         $data = [
-            "teacher_id" => $request->teacher_name,
+            "teacher_id" => $teacherId,
             "class_id" => $request->class_name,
             "section_name" => $request->section_name,
             "exam_id" => $request->exam_name,
@@ -43,24 +82,26 @@ class MarksController extends Controller
             "Stream_id" => $request->stream_id ?? null,
 
         ];
-        $mark = Marks::create($data);
+
+        $matchingEntries = $this->sameMarksEntryQuery($teacherId, $request->class_name, $request->section_name, $request->exam_name, $request->subject_name)
+            ->orderBy('id')
+            ->get();
+        $mark = $matchingEntries->first();
+        if ($mark) {
+            $mark->update($data);
+            $duplicateIds = $matchingEntries->skip(1)->pluck('id');
+            if ($duplicateIds->isNotEmpty()) {
+                Marks::whereIn('id', $duplicateIds)->update(['is_delete' => 1]);
+            }
+        } else {
+            $mark = Marks::create($data);
+        }
         $id = $mark->id;
 
         $marksdata = $request->students;
 
-
-        foreach ($marksdata as $mdata) {
-
-            $newmdata = [
-                "marks_id" => $id,
-                "is_absent" => $mdata['is_absent'],
-                "is_absent_pr" => $mdata['is_absent_pr'],
-                "student_id" => $mdata['student_id'],
-                "subject_marks" => $mdata['marks']
-            ];
-            DB::table("marks")->insert($newmdata);
-        }
-        $response = ["status" => "success"];
+        $this->saveStudentMarks($id, $marksdata);
+        $response = ["status" => "success", "marks_id" => $id, "mode" => $mark->wasRecentlyCreated ? "created" : "updated"];
         return response()->json($response);
 
 
@@ -74,25 +115,78 @@ class MarksController extends Controller
         $subjectId = $request->subject_id;
         $classId = $request->class;
 
-        $combinations = SubjectCombination::where('class_id', $classId)
-            ->whereHas('subjects', function ($query) use ($subjectId) {
-                $query->where('subject_id', $subjectId);
+        if (!$this->canAccessAssignment($this->resolveTeacherId($request), $classId, $section_name, $subjectId)) {
+            return response()->json(['students' => [], 'message' => 'You are not allowed to access this class/subject.'], 403);
+        }
+
+        $className = Classname::where('id', $classId)->value('class_name');
+        if (!$className) {
+            return ['students' => []];
+        }
+
+        $classLevel = $this->classLevel($className);
+        $eligibleStudentIds = collect();
+        $shouldApplyCombinationFilter = false;
+
+        if ($classLevel >= 9) {
+            $eligibleStudentIds = $this->studentIdsForSubjectCombination($className, $section_name, $subjectId);
+            $hasSubjectAssignments = $eligibleStudentIds->isNotEmpty();
+
+            if ($classLevel >= 11) {
+                if (!$hasSubjectAssignments) {
+                    return ['students' => []];
+                }
+                $shouldApplyCombinationFilter = true;
+            } else {
+                $shouldApplyCombinationFilter = $hasSubjectAssignments;
+            }
+        }
+
+        $studentsQuery = DB::connection('dynamic')->table('student_registration')
+            ->where(function ($query) use ($classId, $className) {
+                $query->where('class_id', $classId)
+                    ->orWhere('class_name', $className);
             })
-            ->first();
-        $studentsIds = SubjectAssignStudent::where('assign_this_combtoall',$combinations->id)->pluck('students_details');
-        $data['students'] = DB::table('student_registration')
-            ->whereIn('id', $studentsIds)
-            //->where('class_id', $classId)
-            ->whereJsonContains('json_str->section_name', $section_name)
-            ->get();
-        //dd($data);
+            ->where(function ($query) use ($section_name) {
+                $query->where('section_name', $section_name)
+                    ->orWhereJsonContains('json_str->section_name', $section_name);
+            });
+
+        if ($shouldApplyCombinationFilter) {
+            $studentsQuery->whereIn('id', $eligibleStudentIds);
+        }
+
+        $students = $studentsQuery->orderBy('student_name')->get();
+        $rollMap = $this->studentRollMap($className, $section_name, $request->exam_id ?? $request->exam_name);
+        $data['students'] = $students->map(function ($student) use ($rollMap) {
+            $student->roll_no = $rollMap->get($student->id, '');
+            return $student;
+        });
+
         return $data;
+    }
+
+    public function checkMarksEntryStatus(Request $request)
+    {
+        $teacherId = $this->resolveTeacherId($request);
+        if (!$this->canAccessAssignment($teacherId, $request->class_name, $request->section_name, $request->subject_name)) {
+            return response()->json(['exists' => false, 'message' => 'You are not allowed to access this class/subject.'], 403);
+        }
+
+        $entry = $this->sameMarksEntryQuery($teacherId, $request->class_name, $request->section_name, $request->exam_name, $request->subject_name)->first();
+
+        return response()->json([
+            'exists' => (bool) $entry,
+            'marks_id' => $entry->id ?? null,
+            'edit_url' => $entry ? url('view-marks/' . $entry->id) : null,
+            'message' => $entry ? 'Marks entry is already completed for the selected class, section, exam and subject.' : null,
+        ]);
     }
 
     public function grade_percentage(Request $request) {
         $percentage = $request->post('percentage');
 
-        $arr = DB::table('grademaster')->where('is_delete','=',0)->get();
+        $arr = DB::connection('dynamic')->table('grademaster')->where('is_delete','=',0)->get();
         $data = "";
 
         foreach ($arr as $range) {
@@ -111,29 +205,61 @@ class MarksController extends Controller
 
 
     public function view($id){
-        $stream_master = Marks::where('id', $id)->where('is_delete',0)->first();//Marks::where('is_delete',0)->get();
-        $stream = Marks::where('is_delete',0)->get();
-        $teacherlist = TeacherSubject::where('is_delete', 0)->groupBy('teacher_id')->get();
-        $examslist = Exammaster::select('exam_name', 'id')->distinct()->get();
+        $stream_master = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();//Marks::where('is_delete',0)->get();
+        $staffEmployeeId = $this->staffEmployeeId();
+        $stream = $this->accessibleMarksQuery()->get();
+        $teacherlist = $this->accessibleTeacherSubjects()->with('Teacher.biometricDetails')->groupBy('teacher_id')->get();
+        $examslist = $this->accessibleAcademicExams();
         //$classlist = DB::table('classes')->select('class_name')->distinct()->get();
         $classlist = Classname::select('class_name','id')->where('id',$stream_master->class_id)->first();
-        $subjectlist = Subject::select('subject_name')->distinct()->get();
-        $marksData = DB::table('marks')
-            ->join('student_registration', 'marks.student_id', '=', 'student_registration.id')
-            ->where('marks.marks_id', $stream_master->id)
-            ->select('marks.*', 'student_registration.*') // Add fields as needed
+        $subjectlist = $this->accessibleTeacherSubjects()
+            ->with('Subject')
+            ->groupBy('subject_id')
+            ->get()
+            ->pluck('Subject')
+            ->filter()
+            ->values();
+        $studentMarksTable = $this->studentMarksTable();
+        $marksData = DB::connection('dynamic')->table($studentMarksTable)
+            ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
+            ->where($studentMarksTable . '.marks_id', $stream_master->id)
+            ->select($studentMarksTable . '.*', 'student_registration.*') // Add fields as needed
             ->get();
+        $rollMap = $this->studentRollMap($classlist->class_name ?? '', $stream_master->section_name ?? '', $stream_master->exam_id ?? null);
+        $marksData = $marksData->map(function ($marks) use ($rollMap) {
+            $marks->roll_no = $rollMap->get($marks->student_id, '');
+            return $marks;
+        });
             //dd($marksData);
         // return $stream_master;
         //dd($classlist);
-        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist'));
+        $isStaffMarksUser = $this->isStaffMarksUser();
+        $internalAssessments = $this->activeInternalAssessments();
+        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments'));
     }
 
     public function store(Request $request){
-        //dd($request);
+        $validator = $this->validateMarksRequest($request, true);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
+        }
+
         $marksId = $request->marks_id;
+        $existingEntry = $this->accessibleMarksQuery()->where('id', $marksId)->first();
+        if (!$existingEntry) {
+            return response()->json(['status' => 'error', 'message' => 'Marks entry not found or access denied.'], 403);
+        }
+
+        $teacherId = $this->resolveTeacherId($request);
+        if (!$this->canAccessAssignment($teacherId, $request->class_name, $request->section_name, $request->subject_name)) {
+            return response()->json(['status' => 'error', 'message' => 'You are not allowed to update marks for this class/subject.'], 403);
+        }
+        if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
+            return response()->json(['status' => 'error', 'message' => $message], 422);
+        }
+
         $mainData = [
-            "teacher_id" => $request->teacher_name,
+            "teacher_id" => $teacherId,
             "class_id" => $request->class_name,
             "section_name" => $request->section_name,
             "exam_id" => $request->exam_name,
@@ -143,34 +269,7 @@ class MarksController extends Controller
     
         Marks::where('id', $marksId)->update($mainData);
     
-        // 2. Handle student marks
-        $marksdata = $request->students;
-    
-        foreach ($marksdata as $mdata) {
-            $studentMark = [
-                "marks_id" => $marksId,
-                "student_id" => $mdata['student_id'],
-                "is_absent" => $mdata['is_absent'],
-                "is_absent_pr" => $mdata['is_absent_pr'],
-                "subject_marks" => $mdata['marks'],
-            ];
-    
-            // 3. Check if the mark exists for this student
-            $existing = DB::table("marks")
-                ->where("marks_id", $marksId)
-                ->where("student_id", $mdata['student_id'])
-                ->first();
-    
-            if ($existing) {
-                // Update existing
-                DB::table("marks")
-                    ->where("id", $existing->id)
-                    ->update($studentMark);
-            } else {
-                // Insert new
-                DB::table("marks")->insert($studentMark);
-            }
-        }
+        $this->saveStudentMarks($marksId, $request->students);
     
         return response()->json(["status" => "success"]);
     }
@@ -182,23 +281,37 @@ class MarksController extends Controller
         $a = explode('-',$id);
         $b = $a[1];
         $c = $a[0];
-        $delete_resp = CommanModel::soft_delete($c,['id'=>$b]);
-        if($delete_resp=='TRUE'){
-            return redirect()->back()->with('success', 'Record successfully removed');
-        }elseif($delete_resp=='FALSE'){
-            return redirect()->back()->with('error', 'Record not removed');
+        $entry = $this->accessibleMarksQuery()->where('id', $b)->first();
+        if (!$entry) {
+            abort(403, 'You are not allowed to delete this marks entry.');
         }
+        if ($c !== 'previosly_saved_marks_entry') {
+            abort(400, 'Invalid marks table.');
+        }
+
+        $updated = DB::connection('dynamic')->table($c)->where('id', $b)->update(['is_delete' => 1]);
+        if($updated){
+            return redirect()->route('marks')->with('success', 'Record successfully removed');
+        }
+
+        return redirect()->route('marks')->with('error', 'Record not removed');
     }
 
     public function delete($id){
-        $stream = Marks::findOrFail($id);
+        $stream = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();
         $stream->delete();
         return redirect()->route('marks')->with('success','Deleted successfully.');
     }
 
     public function showmarks(){
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
-        $examslist = DB::table('exammasters')->select('exam_name')->where('is_delete','=',0)->get();//Exammaster::select('exam_name')->distinct()->get();
+        if ($this->isStaffMarksUser()) {
+            $classIds = $this->accessibleClassIds();
+            $classlist = Classname::select('id','class_name')->whereIn('id', $classIds)->get();
+            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
+        } else {
+            $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
+        }
         return view('backend.AcademicsModules.showmarks',compact('classlist','examslist'));
     }
 
@@ -210,17 +323,20 @@ class MarksController extends Controller
         $exam_title = $request->post('exam_title');
         $best_of_two = $request->post('best_of_two');
         $pdf_check = $request->post('pdf_check');
+        if ($this->isStaffMarksUser() && !$this->canAccessClassSectionByName($class_name, $section_name)) {
+            abort(403, 'You are not allowed to view marks for this class/section.');
+        }
         if (!empty($pdf_check)){
             echo "yes";
         } else {
             echo "no";
         }
         die();
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
-        $examslist = DB::table('exammasters')->select('exam_name')->where('is_delete','=',0)->get();
+        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+        $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         $studentmarkss = DB::connection('dynamic')
                 ->table('previosly_saved_marks_entry')
-                ->join('marks', 'previosly_saved_marks_entry.id', '=', 'marks.marks_id')
+                ->join($this->studentMarksTable(), 'previosly_saved_marks_entry.id', '=', $this->studentMarksTable() . '.marks_id')
                 ->where('previosly_saved_marks_entry.class_name', '=', $class_name)
                 ->where('section_name', '=', $section_name)
                 ->Where('exam_name', '=', $term_name)
@@ -260,7 +376,7 @@ class MarksController extends Controller
     }
 
     public function check_grade($number){
-        $arr = DB::table('grademaster')->where('is_delete','=','0')->get();
+        $arr = DB::connection('dynamic')->table('grademaster')->where('is_delete','=','0')->get();
         $data = "";
 
         foreach ($arr as $range) {
@@ -274,5 +390,381 @@ class MarksController extends Controller
             }
         }
         return $data;
+    }
+
+    private function isStaffMarksUser(): bool
+    {
+        return Auth::guard('staff')->check() && !Auth::guard('web')->check();
+    }
+
+    private function staffEmployeeId(): ?int
+    {
+        if (!$this->isStaffMarksUser()) {
+            return null;
+        }
+
+        return (int) Auth::guard('staff')->user()->employee_id;
+    }
+
+    private function accessibleTeacherSubjects()
+    {
+        $query = TeacherSubject::where('is_delete', 0);
+
+        if ($this->isStaffMarksUser()) {
+            $query->where('teacher_id', $this->staffEmployeeId());
+        }
+
+        return $query;
+    }
+
+    private function accessibleMarksQuery()
+    {
+        $query = Marks::where('is_delete', 0);
+
+        if ($this->isStaffMarksUser()) {
+            $query->where('teacher_id', $this->staffEmployeeId());
+        }
+
+        return $query;
+    }
+
+    private function sameMarksEntryQuery($teacherId, $classId, $sectionName, $examId, $subjectId)
+    {
+        return $this->accessibleMarksQuery()
+            ->where('teacher_id', $teacherId)
+            ->where('class_id', $classId)
+            ->where('section_name', $sectionName)
+            ->where('exam_id', $examId)
+            ->where('subject_id', $subjectId);
+    }
+
+    private function resolveTeacherId(Request $request): ?int
+    {
+        return $this->isStaffMarksUser()
+            ? $this->staffEmployeeId()
+            : (int) $request->teacher_name;
+    }
+
+    private function canAccessAssignment(?int $teacherId, $classId, $sectionName, $subjectId): bool
+    {
+        if (!$this->isStaffMarksUser()) {
+            return true;
+        }
+
+        if (!$teacherId || !$classId || !$sectionName || !$subjectId) {
+            return false;
+        }
+
+        return TeacherSubject::where('is_delete', 0)
+            ->where('teacher_id', $teacherId)
+            ->where('class_id', $classId)
+            ->where('section_name', $sectionName)
+            ->where('subject_id', $subjectId)
+            ->exists();
+    }
+
+    private function validateMarksRequest(Request $request, bool $isUpdate = false)
+    {
+        $rules = [
+            'teacher_name' => $this->isStaffMarksUser() ? 'nullable' : 'required|integer',
+            'class_name' => 'required|integer',
+            'section_name' => 'required|string',
+            'exam_name' => 'required|integer',
+            'subject_name' => 'required|integer',
+            'max_marks_theory' => 'nullable|numeric|min:0',
+            'max_marks_practical' => 'nullable|numeric|min:0',
+            'max_marks' => 'nullable|numeric|min:0',
+            'students' => 'required|array',
+            'students.*.student_id' => 'required|integer',
+            'students.*.roll_no' => 'nullable|string|max:50',
+            'students.*.scholar_no' => 'nullable|string|max:50',
+            'students.*.marks' => 'nullable|numeric|min:0',
+            'students.*.mark_theory' => 'nullable|numeric|min:0',
+            'students.*.mark_practical' => 'nullable|numeric|min:0',
+            'students.*.total_marks' => 'nullable|numeric|min:0',
+            'students.*.grade' => 'nullable|string|max:20',
+            'students.*.result' => 'nullable|string|in:D,S',
+            'students.*.internal_assessments' => 'nullable|array',
+            'students.*.internal_assessments.*' => 'nullable|numeric|min:0',
+            'students.*.internal_assessment_marks' => 'nullable|string',
+        ];
+
+        if ($isUpdate) {
+            $rules['marks_id'] = 'required|integer';
+        }
+
+        return Validator::make($request->all(), $rules);
+    }
+
+    private function validateStudentMarksAgainstExamConfig(Request $request): ?string
+    {
+        $maxTheory = $request->filled('max_marks_theory') ? (float) $request->max_marks_theory : null;
+        $maxPractical = $request->filled('max_marks_practical') ? (float) $request->max_marks_practical : null;
+
+        if ($maxTheory !== null || $maxPractical !== null) {
+            foreach ($request->students as $student) {
+                $theoryMarks = (float) ($student['mark_theory'] ?? 0);
+                $practicalMarks = (float) ($student['mark_practical'] ?? 0);
+
+                if ($maxTheory !== null && $maxTheory > 0 && $theoryMarks > $maxTheory) {
+                    return 'Theory marks cannot be greater than configured max theory marks (' . $maxTheory . ').';
+                }
+
+                if ($maxPractical !== null && $maxPractical > 0 && $practicalMarks > $maxPractical) {
+                    return 'Practical marks cannot be greater than configured max practical marks (' . $maxPractical . ').';
+                }
+            }
+
+            return null;
+        }
+
+        if ($request->filled('max_marks')) {
+            $maxMarks = (float) $request->max_marks;
+        } else {
+            $maxMarks = null;
+        }
+
+        if ($maxMarks !== null && $maxMarks <= 0) {
+            return null;
+        }
+
+        $subjectMark = ExamSubjectMark::where('exam_id', $request->exam_name)
+            ->where('subject_id', $request->subject_name)
+            ->first();
+
+        if ($maxMarks === null && !$subjectMark) {
+            $examMax = DB::connection('dynamic')->table('academic_exam')->where('id', $request->exam_name)->first();
+            $maxMarks = (int) (($examMax->max_marks_theory ?? 0) + ($examMax->max_marks_practical ?? 0));
+            if ($maxMarks <= 0) {
+                return null;
+            }
+        } elseif ($maxMarks === null) {
+            $maxMarks = (int) $subjectMark->max_marks;
+        }
+
+        foreach ($request->students as $student) {
+            $marks = (float) ($student['mark_theory'] ?? 0) + (float) ($student['mark_practical'] ?? 0);
+            if ($marks <= 0) {
+                $marks = $student['marks'] ?? 0;
+            }
+            if ($marks > $maxMarks) {
+                return 'Theory + Practical marks cannot be greater than configured max marks (' . $maxMarks . ').';
+            }
+        }
+
+        return null;
+    }
+
+    private function accessibleAcademicExams()
+    {
+        if (!Schema::connection('dynamic')->hasTable('academic_exam')) {
+            return collect();
+        }
+
+        $query = DB::connection('dynamic')->table('academic_exam as ae')
+            ->leftJoin('classes as c', 'c.id', '=', 'ae.class_id')
+            ->leftJoin('class_name as cn', 'cn.class_name', '=', 'c.class_name')
+            ->select(
+                'ae.*',
+                'c.class_name as class_name_text',
+                'cn.id as marks_class_id'
+            );
+
+        if (Schema::connection('dynamic')->hasColumn('academic_exam', 'deleted_at')) {
+            $query->whereNull('ae.deleted_at');
+        }
+
+        if ($this->isStaffMarksUser()) {
+            $query->whereIn('cn.id', $this->accessibleClassIds());
+        }
+
+        return $query
+            ->orderBy('ae.id', 'desc')
+            ->get();
+    }
+
+    private function accessibleClassIds()
+    {
+        return $this->accessibleTeacherSubjects()
+            ->select('class_id')
+            ->distinct()
+            ->pluck('class_id')
+            ->filter()
+            ->values();
+    }
+
+    private function canAccessClassSectionByName(?string $className, ?string $sectionName): bool
+    {
+        $classId = Classname::where('class_name', $className)->value('id');
+
+        if (!$classId || !$sectionName) {
+            return false;
+        }
+
+        return TeacherSubject::where('is_delete', 0)
+            ->where('teacher_id', $this->staffEmployeeId())
+            ->where('class_id', $classId)
+            ->where('section_name', $sectionName)
+            ->exists();
+    }
+
+    private function classLevel(?string $className): int
+    {
+        $normalized = strtolower(trim((string) $className));
+
+        if (preg_match('/\d+/', $normalized, $matches)) {
+            return (int) $matches[0];
+        }
+
+        return match ($normalized) {
+            'nursery', 'pre nursery', 'pre-nursery', 'kg1', 'kg 1', 'lkg' => -2,
+            'kg2', 'kg 2', 'ukg' => -1,
+            default => 0,
+        };
+    }
+
+    private function studentIdsForSubjectCombination(string $className, string $sectionName, $subjectId)
+    {
+        return DB::connection('dynamic')->table('subject_assign_student as sas')
+            ->join('combination_subject as cs', 'cs.subject_combination_id', '=', 'sas.assign_this_combtoall')
+            ->where('sas.is_delete', 0)
+            ->where('cs.subject_id', $subjectId)
+            ->where('sas.class_name', $className)
+            ->where(function ($query) use ($sectionName) {
+                $query->where('sas.section_name', $sectionName)
+                    ->orWhereNull('sas.section_name')
+                    ->orWhere('sas.section_name', '');
+            })
+            ->whereNotNull('sas.students_details')
+            ->pluck('sas.students_details')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function studentRollMap(string $className, string $sectionName, $examId)
+    {
+        if (!Schema::connection('dynamic')->hasTable('academic_student_roll_no')) {
+            return collect();
+        }
+
+        return DB::connection('dynamic')->table('academic_student_roll_no')
+            ->where('class_id', $className)
+            ->where('section_id', $sectionName)
+            ->where('session_id', $this->activeSessionName())
+            ->when($examId, fn ($query) => $query->where('exam_id', $examId))
+            ->pluck('roll_no', 'student_id');
+    }
+
+    private function activeSessionName(): string
+    {
+        return request()->session()->get('selectedYear')
+            ?? request()->cookie('selectedYear')
+            ?? config('database.connections.dynamic.database');
+    }
+
+    private function filterMarksColumns(array $payload): array
+    {
+        if ($this->marksColumns === null) {
+            $this->marksColumns = Schema::connection('dynamic')->getColumnListing($this->studentMarksTable());
+        }
+
+        $filtered = [];
+        foreach ($payload as $column => $value) {
+            if (in_array($column, $this->marksColumns, true)) {
+                $filtered[$column] = $value;
+            }
+        }
+
+        return $filtered;
+    }
+
+    private function saveStudentMarks(int $marksId, ?array $marksdata): void
+    {
+        if (empty($marksdata)) {
+            return;
+        }
+
+        $studentMarksTable = $this->studentMarksTable();
+        $existingRows = DB::connection('dynamic')->table($studentMarksTable)
+            ->where('marks_id', $marksId)
+            ->whereIn('student_id', collect($marksdata)->pluck('student_id')->filter()->values())
+            ->pluck('id', 'student_id');
+
+        $insertRows = [];
+        DB::connection('dynamic')->transaction(function () use ($marksId, $marksdata, $existingRows, $studentMarksTable, &$insertRows) {
+            foreach ($marksdata as $mdata) {
+                $internalAssessmentMarks = $this->normalizeInternalAssessmentMarks($mdata);
+                $studentMark = $this->filterMarksColumns([
+                    "marks_id" => $marksId,
+                    "student_id" => $mdata['student_id'],
+                    "roll_no" => $mdata['roll_no'] ?? null,
+                    "scholar_no" => $mdata['scholar_no'] ?? null,
+                    "is_absent" => $mdata['is_absent'] ?? 0,
+                    "is_absent_pr" => $mdata['is_absent_pr'] ?? 0,
+                    "subject_marks" => $mdata['total_marks'] ?? $mdata['marks'] ?? 0,
+                    "mark_theory" => $mdata['mark_theory'] ?? 0,
+                    "mark_practical" => $mdata['mark_practical'] ?? 0,
+                    "total_marks" => $mdata['total_marks'] ?? 0,
+                    "grade" => $mdata['grade'] ?? null,
+                    "result" => $mdata['result'] ?? null,
+                    "overall_grade" => $mdata['grade'] ?? null,
+                    "internal_assessment_marks" => $internalAssessmentMarks,
+                ]);
+
+                $existingId = $existingRows->get($mdata['student_id']);
+                if ($existingId) {
+                    DB::connection('dynamic')->table($studentMarksTable)->where('id', $existingId)->update($studentMark);
+                } else {
+                    $insertRows[] = $studentMark;
+                }
+            }
+
+            if (!empty($insertRows)) {
+                DB::connection('dynamic')->table($studentMarksTable)->insert($insertRows);
+            }
+        });
+    }
+
+    private function normalizeInternalAssessmentMarks(array $mdata): ?string
+    {
+        $marks = $mdata['internal_assessments'] ?? null;
+
+        if (empty($marks) && !empty($mdata['internal_assessment_marks'])) {
+            $decoded = json_decode($mdata['internal_assessment_marks'], true);
+            $marks = is_array($decoded) ? $decoded : null;
+        }
+
+        if (empty($marks) || !is_array($marks)) {
+            return null;
+        }
+
+        $normalized = [];
+        foreach ($marks as $code => $value) {
+            $normalized[$code] = $value === '' ? null : $value;
+        }
+
+        return json_encode($normalized);
+    }
+
+    private function studentMarksTable(): string
+    {
+        return Schema::connection('dynamic')->hasTable('academic_students_marks')
+            ? 'academic_students_marks'
+            : 'marks';
+    }
+
+    private function activeInternalAssessments()
+    {
+        if (!Schema::connection('dynamic')->hasTable('academic_internal_assessment_master')) {
+            return collect();
+        }
+
+        return InternalAssessmentMaster::where('is_delete', 0)
+            ->where('is_active', 1)
+            ->orderBy('display_order')
+            ->orderBy('assessment_name')
+            ->get();
     }
 }
