@@ -4,6 +4,7 @@
     $iaEnabled = !empty($stream_master) && !empty($marksData) && $marksData->contains(function ($marks) {
         return !empty($marks->internal_assessment_marks);
     });
+    $marksUrlPrefix = !empty($isStaffMarksUser) ? 'staff/' : '';
 @endphp
 <style>
     .uperletter {
@@ -23,7 +24,17 @@
     <div class="breadcrumb d-flex justify-content-between align-items-center">
         <h1 class="me-2">Marks Entry :-</h1>
         @if(!empty($stream_master))
-            <a href="{{ route('marks') }}" class="btn btn-secondary">Back</a>
+            <div>
+                @if(!empty($isStaffMarksUser) && empty($stream_master->is_locked))
+                    <form action="{{ route('staff.lock-marks-entry', $stream_master->id) }}" method="POST" style="display:inline;">
+                        @csrf
+                        <button type="submit" class="btn btn-dark" onclick="return confirm('Lock this marks entry? After locking, you must contact admin to make changes.');">Lock Entry</button>
+                    </form>
+                @elseif(!empty($isStaffMarksUser) && !empty($stream_master->is_locked))
+                    <button type="button" class="btn btn-secondary" disabled>Entry Locked</button>
+                @endif
+                <a href="{{ !empty($isStaffMarksUser) ? route('staff.marks') : route('marks') }}" class="btn btn-secondary">Back</a>
+            </div>
         @endif
     </div>
 
@@ -166,9 +177,24 @@
                                                     <td>{{$streams->section_name}}</td>
                                                     <td class="uperletter">{{$streams->Subject->subject_name}}</td>
                                                     <td class="d-flex">
-                                                        <a class="btn btn-primary m-1" href="{{ url('view-marks') .'/'.$streams->id}}">Edit</a>
+                                                        <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') .'/'.$streams->id}}">Edit</a>
                                                         <?php $a = "previosly_saved_marks_entry"."-".$streams->id ; ?>
-                                                        <a class="btn btn-raised ripple btn-danger m-1" href="{{url('delete-marks').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
+                                                        @if(!empty($isStaffMarksUser) && (empty($streams->is_locked) && empty($streams->Exammaster->is_locked)))
+                                                            <form action="{{ route('staff.lock-marks-entry', $streams->id) }}" method="POST" style="display:inline;">
+                                                                @csrf
+                                                                <button type="submit" class="btn btn-dark m-1" onclick="return confirm('Lock this marks entry? After locking, you must contact admin to make changes.');">Lock</button>
+                                                            </form>
+                                                        @endif
+                                                        @if(!empty($isStaffMarksUser) && (!empty($streams->is_locked) || !empty($streams->Exammaster->is_locked)))
+                                                            <button type="button" class="btn btn-secondary m-1" disabled>Locked</button>
+                                                        @elseif(empty($isStaffMarksUser) && !empty($streams->is_locked))
+                                                            <form action="{{ url('unlock-marks-entry/' . $streams->id) }}" method="POST" style="display:inline;">
+                                                                @csrf
+                                                                <button type="submit" class="btn btn-warning m-1" onclick="return confirm('Unlock this marks entry for staff editing?');">Unlock</button>
+                                                            </form>
+                                                        @else
+                                                            <a class="btn btn-raised ripple btn-danger m-1" href="{{url($marksUrlPrefix . 'delete-marks').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
+                                                        @endif
                                                     </td>
                                                 </tr>
                                             @endforeach
@@ -389,6 +415,8 @@
 <script>
     const allExams = @json($examslist);
     const activeInternalAssessments = @json($internalAssessments ?? []);
+    const isStaffMarksUser = @json(!empty($isStaffMarksUser));
+    const isCurrentMarksEntryLocked = @json(!empty($stream_master->is_locked));
 
     function resetExamMaxMarks() {
         $('#max_marks_theory').val('');
@@ -417,6 +445,8 @@
         } else {
             $('.total_marks').removeAttr('data-max');
         }
+
+        applyExamLockState(exam);
     }
 
     function refreshTotalMaxMarks() {
@@ -454,6 +484,34 @@
         $('#marks_entry_status').addClass('d-none').removeClass('alert-warning alert-info').addClass('alert-info').html('');
         $('#show_students_btn').prop('disabled', false);
         $('#marks_submit_btn').prop('disabled', false);
+        applyMarksEntryLockState();
+    }
+
+    function applyMarksEntryLockState() {
+        if (!isStaffMarksUser || !isCurrentMarksEntryLocked) {
+            return;
+        }
+
+        $('#marks_entry_status')
+            .removeClass('d-none alert-info')
+            .addClass('alert-warning')
+            .html('This marks entry is locked. Please contact admin to unlock it before editing or deleting marks.');
+        $('#show_students_btn').prop('disabled', true);
+        $('#marks_submit_btn').prop('disabled', true);
+        $('#studentdatatable').find('input, select, button').prop('disabled', true);
+    }
+
+    function applyExamLockState(exam) {
+        if (!isStaffMarksUser || !exam || Number(exam.is_locked || 0) !== 1) {
+            return;
+        }
+
+        $('#marks_entry_status')
+            .removeClass('d-none alert-info')
+            .addClass('alert-warning')
+            .html('This exam is locked. Please contact admin to unlock it before editing or deleting marks.');
+        $('#show_students_btn').prop('disabled', true);
+        $('#marks_submit_btn').prop('disabled', true);
     }
 
     function isInternalAssessmentEnabled() {
@@ -509,7 +567,7 @@
                 data: {
                     teacher: teacher
                 },
-                url: "{{ url('getteachersdata') }}",
+                url: "{{ url($marksUrlPrefix . 'getteachersdata') }}",
                 headers: {
                     'X-CSRF-TOKEN': token
                 },
@@ -542,6 +600,48 @@
                 }
             });
         });
+        function loadTeacherClassAssignments(classId) {
+            const teacher = $("#teacher_name").val();
+            let token = document.getElementsByName("_token")[0].value;
+
+            $('#subject_name').html('<option value=""> -- Select All -- </option>');
+            $('#section_name').html('<option value=""> -- Select All -- </option>');
+
+            if (!teacher || !classId) {
+                return;
+            }
+
+            $.ajax({
+                data: {
+                    teacher: teacher,
+                    class_name: classId
+                },
+                url: "{{ url($marksUrlPrefix . 'getteachersandsubject') }}",
+                headers: {
+                    'X-CSRF-TOKEN': token
+                },
+                method: "POST",
+                dataType: 'json',
+                success: function(data) {
+                    for (var i = 0; i < data['sections'].length; i++) {
+                        var sectionName = data['sections'][i];
+                        $('#section_name').append('<option value="' + sectionName + '">' + sectionName + '</option>');
+                    }
+
+                    for (var i = 0; i < data['subjects'].length; i++) {
+                        if (!data['subjects'][i].subject) {
+                            continue;
+                        }
+                        var subjectName = data['subjects'][i].subject.subject_name;
+                        var subjectId = data['subjects'][i].subject_id;
+                        $('#subject_name').append('<option value="' + subjectId + '">' + subjectName + '</option>');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error(error);
+                }
+            });
+        }
         @if(!empty($isStaffMarksUser) && !empty($staffEmployeeId) && empty($stream_master))
             document.getElementById("teacher_name").dispatchEvent(new Event("change"));
         @endif
@@ -569,13 +669,25 @@
                     exam_name: examName,
                     subject_name: subjectName
                 },
-                url: "{{ url('check-marks-entry-status') }}",
+                url: "{{ url($marksUrlPrefix . 'check-marks-entry-status') }}",
                 headers: {
                     'X-CSRF-TOKEN': token
                 },
                 method: "POST",
                 dataType: 'json',
                 success: function(data) {
+                    if (data.is_locked) {
+                        $('#marks_entry_status')
+                            .removeClass('d-none alert-info')
+                            .addClass('alert-warning')
+                            .html(data.message);
+                        $('#show_students_btn').prop('disabled', true);
+                        $('#marks_submit_btn').prop('disabled', true);
+                        $("#studentdatatable").html('<tr><td colspan="12" class="text-center">Exam is locked. Contact admin to unlock.</td></tr>');
+                        toastr.warning(data.message, "Exam Locked");
+                        return;
+                    }
+
                     if (data.exists) {
                         $('#marks_entry_status')
                             .removeClass('d-none alert-info')
@@ -606,7 +718,7 @@
                         subject_id:subject_id,
                         exam_name: exam_id
                     },
-                    url: "{{url('class-studentdata')}}",
+                    url: "{{url($marksUrlPrefix . 'class-studentdata')}}",
                     headers: {
                         'X-CSRF-TOKEN': token
                     },
@@ -667,6 +779,7 @@
                 examDropdown.innerHTML = '<option value="">-- Please select --</option>';
                 resetExamMaxMarks();
                 resetMarksEntryStatus();
+                loadTeacherClassAssignments(classId);
                 $("#studentdatatable").html('<tr><td colspan="12" class="text-center">No Data Found</td></tr>');
 
                 if (!classId) return;
@@ -708,6 +821,7 @@
         $('#teacher_name, #section_name, #subject_name').on('change', checkMarksEntryStatus);
         $('#internal_assessment_toggle').on('change', toggleInternalAssessmentColumns);
         toggleInternalAssessmentColumns();
+        applyMarksEntryLockState();
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })
@@ -782,7 +896,7 @@
         };
         $.ajax({
             data: postData
-            , url: "{{url('save-marks')}}"
+            , url: "{{url($marksUrlPrefix . 'save-marks')}}"
             , headers: {
                 'X-CSRF-TOKEN': token
             }
@@ -861,7 +975,7 @@
         };
         $.ajax({
             data: postData
-            , url: "{{url('store-marks')}}"
+            , url: "{{url($marksUrlPrefix . 'store-marks')}}"
             , headers: {
                 'X-CSRF-TOKEN': token
             }

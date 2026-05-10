@@ -108,6 +108,7 @@ class ExamController extends Controller
                     'exam_type' => $first->exam_type,
                     'session_year' => $first->session_year,
                     'class_names' => $classNames !== '' ? $classNames : '-',
+                    'is_locked' => (bool) $group->contains(fn ($exam) => (int) ($exam->is_locked ?? 0) === 1),
                 ];
             })
             ->values();
@@ -162,6 +163,12 @@ class ExamController extends Controller
     public function edit(Request $request, $id)
     {
         $exam = Exam::findOrFail($id);
+        if ($this->isExamGroupLocked($exam)) {
+            return redirect()
+                ->route('academic.exams.create')
+                ->with('error', 'This exam is locked. Unlock it before editing.');
+        }
+
         $currentSessionYear = $this->resolveDynamicSessionYear($request) ?? $exam->session_year;
         $groupRows = $this->buildExamGroupQuery($exam)->with('classInfo')->get();
         $selectedClassIds = $groupRows->pluck('class_id')->filter()->unique()->values()->all();
@@ -186,6 +193,12 @@ class ExamController extends Controller
     public function update(Request $request, $id)
     {
         $seedExam = Exam::findOrFail($id);
+        if ($this->isExamGroupLocked($seedExam)) {
+            return redirect()
+                ->route('academic.exams.create')
+                ->with('error', 'This exam is locked. Unlock it before editing.');
+        }
+
         $sessionYear = $this->resolveDynamicSessionYear($request) ?? $seedExam->session_year;
         if (empty($sessionYear)) {
             return redirect()->back()->withInput()->with('error', 'No academic session is selected. Choose a session year from the header, then try again.');
@@ -214,7 +227,8 @@ class ExamController extends Controller
                 $sessionYear,
                 $request->has('is_ser') ? 1 : 0,
                 $seedExam->created_by,
-                $seedExam->exam_group_id // keep same group id when updating
+                $seedExam->exam_group_id, // keep same group id when updating
+                (int) ($seedExam->is_locked ?? 0)
             );
         });
 
@@ -224,6 +238,11 @@ class ExamController extends Controller
     public function destroy($id)
     {
         $exam = Exam::findOrFail($id);
+        if ($this->isExamGroupLocked($exam)) {
+            return redirect()
+                ->route('academic.exams.create')
+                ->with('error', 'This exam is locked. Unlock it before deleting.');
+        }
 
         $groupIds = $this->buildExamGroupQuery($exam)->pluck('id')->all();
         if ($this->examGroupHasMarks($groupIds)) {
@@ -242,6 +261,29 @@ class ExamController extends Controller
         return redirect()
             ->route('academic.exams.create')
             ->with('success', $deletedCount > 0 ? 'Exam deleted successfully!' : 'No exam records deleted.');
+    }
+
+    public function toggleLock($id)
+    {
+        if (!Schema::hasColumn('academic_exam', 'is_locked')) {
+            return redirect()
+                ->route('academic.exams.create')
+                ->with('error', 'Exam lock column is missing. Please run migrations first.');
+        }
+
+        $exam = Exam::findOrFail($id);
+        $shouldLock = !$this->buildExamGroupQuery($exam)
+            ->where('is_locked', 1)
+            ->exists();
+
+        $updatedCount = $this->buildExamGroupQuery($exam)
+            ->update(['is_locked' => $shouldLock ? 1 : 0]);
+
+        return redirect()
+            ->route('academic.exams.create')
+            ->with('success', $updatedCount > 0
+                ? ($shouldLock ? 'Exam locked successfully. Staff cannot edit or delete marks now.' : 'Exam unlocked successfully. Staff can edit marks again.')
+                : 'No exam records updated.');
     }
 
     public function duplicate(Request $request, $id)
@@ -393,12 +435,12 @@ class ExamController extends Controller
         return redirect()->back()->with('success', $msg);
     }
 
-    private function createExamRows(array $validated, string $sessionYear, int $isSer, ?int $createdBy, ?string $examGroupId = null): int
+    private function createExamRows(array $validated, string $sessionYear, int $isSer, ?int $createdBy, ?string $examGroupId = null, int $isLocked = 0): int
     {
         $examGroupId = $examGroupId ?: (string) Str::uuid();
         $firstId = null;
         foreach ($validated['class_ids'] as $classId) {
-            $created = Exam::create([
+            $payload = [
                 'exam_group_id' => $examGroupId,
                 'exam_name' => $validated['exam_name'],
                 'exam_type' => $validated['exam_type'],
@@ -409,7 +451,11 @@ class ExamController extends Controller
                 'class_id' => $classId,
                 'session_year' => $sessionYear,
                 'created_by' => $createdBy,
-            ]);
+            ];
+            if (Schema::hasColumn('academic_exam', 'is_locked')) {
+                $payload['is_locked'] = $isLocked;
+            }
+            $created = Exam::create($payload);
             if ($firstId === null) {
                 $firstId = $created->id;
             }
@@ -458,6 +504,17 @@ class ExamController extends Controller
         }
 
         return $query;
+    }
+
+    private function isExamGroupLocked(Exam $exam): bool
+    {
+        if (!Schema::hasColumn('academic_exam', 'is_locked')) {
+            return false;
+        }
+
+        return $this->buildExamGroupQuery($exam)
+            ->where('is_locked', 1)
+            ->exists();
     }
 
     private function examGroupHasMarks(array $examIds): bool

@@ -19,7 +19,15 @@ class Marks extends Model
         'Stream_id',
         'section_name',
         'subject_id',
+        'is_locked',
+        'locked_at',
+        'locked_by',
 
+    ];
+
+    protected $casts = [
+        'is_locked' => 'boolean',
+        'locked_at' => 'datetime',
     ];
 
     public function Class()

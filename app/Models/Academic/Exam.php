@@ -17,9 +17,14 @@ class Exam extends Model
         'max_marks_practical',
         'fail_percent',
         'is_ser',
+        'is_locked',
         'class_id',
         'session_year',
         'created_by',
+    ];
+
+    protected $casts = [
+        'is_locked' => 'boolean',
     ];
 
     public function classInfo()

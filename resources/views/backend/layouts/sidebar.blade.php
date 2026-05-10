@@ -60,20 +60,44 @@ $staffUser = Auth::guard('staff')->user();
 				}
 				return $filtered;
 			}
+			function filterMenuByRoleName($menu, $roleName) {
+				$filtered = [];
+				foreach ($menu as $item) {
+					$roles = $item['roles'] ?? [];
+					$roleAllowed = empty($roles) || in_array($roleName, $roles);
+					$children = !empty($item['children']) ? filterMenuByRoleName($item['children'], $roleName) : [];
+
+					if ($roleAllowed || $children) {
+						$filteredItem = $item;
+						if (!empty($item['children'])) {
+							$filteredItem['children'] = $children;
+						}
+						$filtered[] = $filteredItem;
+					}
+				}
+				return $filtered;
+			}
+			function menuItemUrl($item) {
+				$route = Auth::guard('staff')->check() && isset($item['staff_route'])
+					? $item['staff_route']
+					: ($item['route'] ?? '#');
+
+				return $route === '#' ? '#' : url($route);
+			}
 			if ($isAdmin) {
 				$menu = config('sidebar'); // Admin sees all menu items
 			} else {
 				$allowedMenu = getAllowedMenuForUser($user);
 				$menu = !empty($allowedMenu)
 					? filterMenuByAllowed(config('sidebar'), $allowedMenu)
-					: config('sidebar'); // Fallback: show full menu if role mapping is missing
+					: filterMenuByRoleName(config('sidebar'), getRoleNameForUser($user)); // Fallback to role defaults if menu mapping is missing
 			}
 			@endphp
 
 
 			@foreach ($menu as $item)
 				<li class="nav-item" data-item="{{ strtolower($item['title']) }}">
-					<a class="nav-item-hold" href="{{ isset($item['route']) ? url($item['route']) : '#' }}">
+					<a class="nav-item-hold" href="{{ menuItemUrl($item) }}">
 						<i class="nav-icon {{ $item['icon'] ?? '' }}"></i>
 						<span class="nav-text">
 							{{ $item['title'] }}
@@ -122,7 +146,7 @@ $staffUser = Auth::guard('staff')->user();
 								   <ul class="submenu">
 									   @foreach($child['children'] as $sub)
 										   <li>
-											   <a href="{{ isset($sub['route']) ? url($sub['route']) : '#' }}">
+											   <a href="{{ menuItemUrl($sub) }}">
 												   {{ $sub['title'] }}
 											   </a>
 										   </li>
@@ -131,7 +155,7 @@ $staffUser = Auth::guard('staff')->user();
 							   </li>
 						   @else
 							   <li class="nav-item">
-								   <a href="{{ isset($child['route']) ? url($child['route']) : '#' }}">
+								   <a href="{{ menuItemUrl($child) }}">
 									   <i class="nav-icon {{ $child['icon'] ?? '' }}"></i>
 									   <span class="item-name">{{ $child['title'] }}</span>
 								   </a>

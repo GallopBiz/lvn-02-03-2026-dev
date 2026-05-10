@@ -69,6 +69,9 @@ class MarksController extends Controller
         if (!$this->canAccessAssignment($teacherId, $request->class_name, $request->section_name, $request->subject_name)) {
             return response()->json(['status' => 'error', 'message' => 'You are not allowed to enter marks for this class/subject.'], 403);
         }
+        if ($this->isStaffExamLocked($request->exam_name)) {
+            return response()->json(['status' => 'error', 'message' => $this->lockedExamMessage()], 403);
+        }
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
         }
@@ -117,6 +120,9 @@ class MarksController extends Controller
 
         if (!$this->canAccessAssignment($this->resolveTeacherId($request), $classId, $section_name, $subjectId)) {
             return response()->json(['students' => [], 'message' => 'You are not allowed to access this class/subject.'], 403);
+        }
+        if ($this->isStaffExamLocked($request->exam_id ?? $request->exam_name)) {
+            return response()->json(['students' => [], 'message' => $this->lockedExamMessage()], 403);
         }
 
         $className = Classname::where('id', $classId)->value('class_name');
@@ -174,12 +180,14 @@ class MarksController extends Controller
         }
 
         $entry = $this->sameMarksEntryQuery($teacherId, $request->class_name, $request->section_name, $request->exam_name, $request->subject_name)->first();
+        $isLocked = $this->isStaffExamLocked($request->exam_name);
 
         return response()->json([
             'exists' => (bool) $entry,
+            'is_locked' => $isLocked,
             'marks_id' => $entry->id ?? null,
-            'edit_url' => $entry ? url('view-marks/' . $entry->id) : null,
-            'message' => $entry ? 'Marks entry is already completed for the selected class, section, exam and subject.' : null,
+            'edit_url' => $entry ? url($this->marksRoutePrefix() . 'view-marks/' . $entry->id) : null,
+            'message' => $isLocked ? $this->lockedExamMessage() : ($entry ? 'Marks entry is already completed for the selected class, section, exam and subject.' : null),
         ]);
     }
 
@@ -249,10 +257,16 @@ class MarksController extends Controller
         if (!$existingEntry) {
             return response()->json(['status' => 'error', 'message' => 'Marks entry not found or access denied.'], 403);
         }
+        if ($this->isStaffMarksUser() && $this->isMarksEntryLocked($existingEntry)) {
+            return response()->json(['status' => 'error', 'message' => $this->lockedMarksEntryMessage()], 403);
+        }
 
         $teacherId = $this->resolveTeacherId($request);
         if (!$this->canAccessAssignment($teacherId, $request->class_name, $request->section_name, $request->subject_name)) {
             return response()->json(['status' => 'error', 'message' => 'You are not allowed to update marks for this class/subject.'], 403);
+        }
+        if ($this->isStaffExamLocked($request->exam_name)) {
+            return response()->json(['status' => 'error', 'message' => $this->lockedExamMessage()], 403);
         }
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
@@ -285,22 +299,64 @@ class MarksController extends Controller
         if (!$entry) {
             abort(403, 'You are not allowed to delete this marks entry.');
         }
+        if ($this->isStaffMarksUser() && $this->isMarksEntryLocked($entry)) {
+            return redirect()->route('staff.marks')->with('error', $this->lockedMarksEntryMessage());
+        }
+        if ($this->isStaffExamLocked($entry->exam_id)) {
+            return redirect()->route('staff.marks')->with('error', $this->lockedExamMessage());
+        }
         if ($c !== 'previosly_saved_marks_entry') {
             abort(400, 'Invalid marks table.');
         }
 
         $updated = DB::connection('dynamic')->table($c)->where('id', $b)->update(['is_delete' => 1]);
         if($updated){
-            return redirect()->route('marks')->with('success', 'Record successfully removed');
+            return redirect()->route($this->isStaffMarksUser() ? 'staff.marks' : 'marks')->with('success', 'Record successfully removed');
         }
 
-        return redirect()->route('marks')->with('error', 'Record not removed');
+        return redirect()->route($this->isStaffMarksUser() ? 'staff.marks' : 'marks')->with('error', 'Record not removed');
     }
 
     public function delete($id){
         $stream = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();
         $stream->delete();
         return redirect()->route('marks')->with('success','Deleted successfully.');
+    }
+
+    public function lockEntry($id)
+    {
+        if (!$this->isStaffMarksUser()) {
+            abort(403, 'Only staff can lock marks entries.');
+        }
+
+        $entry = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();
+        if ($this->isStaffExamLocked($entry->exam_id)) {
+            return redirect()->route('staff.marks')->with('error', $this->lockedExamMessage());
+        }
+
+        $entry->update([
+            'is_locked' => 1,
+            'locked_at' => now(),
+            'locked_by' => Auth::guard('staff')->id(),
+        ]);
+
+        return redirect()->route('staff.marks')->with('success', 'Marks entry locked successfully. Contact admin if changes are needed.');
+    }
+
+    public function unlockEntry($id)
+    {
+        if ($this->isStaffMarksUser()) {
+            abort(403, 'Only admin can unlock marks entries.');
+        }
+
+        $entry = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();
+        $entry->update([
+            'is_locked' => 0,
+            'locked_at' => null,
+            'locked_by' => null,
+        ]);
+
+        return redirect()->route('marks')->with('success', 'Marks entry unlocked successfully.');
     }
 
     public function showmarks(){
@@ -395,6 +451,42 @@ class MarksController extends Controller
     private function isStaffMarksUser(): bool
     {
         return Auth::guard('staff')->check() && !Auth::guard('web')->check();
+    }
+
+    private function marksRoutePrefix(): string
+    {
+        return $this->isStaffMarksUser() ? 'staff/' : '';
+    }
+
+    private function isStaffExamLocked($examId): bool
+    {
+        if (!$this->isStaffMarksUser() || empty($examId)) {
+            return false;
+        }
+
+        if (!Schema::connection('dynamic')->hasTable('academic_exam') || !Schema::connection('dynamic')->hasColumn('academic_exam', 'is_locked')) {
+            return false;
+        }
+
+        return DB::connection('dynamic')->table('academic_exam')
+            ->where('id', $examId)
+            ->where('is_locked', 1)
+            ->exists();
+    }
+
+    private function lockedExamMessage(): string
+    {
+        return 'This exam is locked. Please contact admin to unlock it before editing or deleting marks.';
+    }
+
+    private function isMarksEntryLocked($entry): bool
+    {
+        return (bool) ($entry->is_locked ?? false);
+    }
+
+    private function lockedMarksEntryMessage(): string
+    {
+        return 'This marks entry is locked. Please contact admin to unlock it before editing or deleting marks.';
     }
 
     private function staffEmployeeId(): ?int

@@ -200,7 +200,7 @@ return [
                     [ 'title' => 'Exam Setup', 'route' => 'academic/exams/create', 'roles' => ['Admin'] ],
                     [ 'title' => 'Internal Assessment (IA)', 'route' => 'internal-assessment-master', 'roles' => ['Admin'] ],
                     [ 'title' => 'Roll No & Admit Card', 'route' => 'academic/roll-no-tools', 'roles' => ['Admin'] ],
-                    [ 'title' => 'Enter Marks', 'route' => 'marks', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Enter Marks', 'route' => 'marks', 'staff_route' => 'staff/marks', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Report Marks', 'route' => 'show_report_marks', 'roles' => ['Admin'] ],
                     [ 'title' => 'Marksheet', 'route' => 'marksheet', 'roles' => ['Admin'] ],
                     [ 'title' => 'Grading Master', 'route' => 'greadingmaster', 'roles' => ['Admin'] ],

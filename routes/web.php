@@ -211,8 +211,25 @@ Route::middleware(['auth:web,staff'])->group(function () {
     Route::get('view-marks/{id}', [MarksController::class, 'view']);
     Route::post('store-marks', [MarksController::class, 'store']);
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
+    Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata']);
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject']);
+});
+
+Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(function () {
+    Route::get('marks', [MarksController::class, 'index'])->name('marks');
+    Route::get('show_report_marks', [MarksController::class, 'showmarks'])->name('show_report_marks');
+    Route::post('show_report_markss', [MarksController::class, 'show_report_markss'])->name('show_report_markss');
+    Route::post('save-marks', [MarksController::class, 'create'])->name('save-marks');
+    Route::post('class-studentdata', [MarksController::class, 'classstudentdata'])->name('class-studentdata');
+    Route::post('check-marks-entry-status', [MarksController::class, 'checkMarksEntryStatus'])->name('check-marks-entry-status');
+    Route::post('grade_percentage', [MarksController::class, 'grade_percentage'])->name('grade_percentage');
+    Route::get('view-marks/{id}', [MarksController::class, 'view'])->name('view-marks');
+    Route::post('store-marks', [MarksController::class, 'store'])->name('store-marks');
+    Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete'])->name('delete-marks');
+    Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
+    Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata'])->name('getteachersdata');
+    Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject'])->name('getteachersandsubject');
 });
 
 Route::group(['middleware' => ['auth']], function() {
@@ -487,6 +504,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     Route::post('store-marks', [MarksController::class, 'store']);
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
+    Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry.admin');
 
 
 
@@ -1363,6 +1381,7 @@ Route::get('/academic/exams/store', function () {
 Route::post('/academic/exams/store', [ExamController::class, 'store'])->name('academic.exams.store');
 Route::post('/academic/exams/{id}/duplicate', [ExamController::class, 'duplicate'])->name('academic.exams.duplicate');
 Route::post('/academic/exams/copy-from-session', [ExamController::class, 'copyFromSession'])->name('academic.exams.copyFromSession');
+Route::post('/academic/exams/{id}/toggle-lock', [ExamController::class, 'toggleLock'])->name('academic.exams.toggleLock');
 Route::get('/academic/exams/{id}/edit', [ExamController::class, 'edit'])->name('academic.exams.edit');
 Route::put('/academic/exams/{id}', [ExamController::class, 'update'])->name('academic.exams.update');
 Route::delete('/academic/exams/{id}', [ExamController::class, 'destroy'])->name('academic.exams.destroy');

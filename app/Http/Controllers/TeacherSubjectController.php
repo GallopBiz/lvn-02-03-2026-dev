@@ -199,10 +199,22 @@ class TeacherSubjectController extends Controller
             : $request->teacher;
         $class_name = $request->class_name;
 
-        // $classes = DB::table('teacher_subjects')->where("teacher_name", $teacher)->distinct()->pluck('class_name');
-        $subjects =TeacherSubject::with('Subject')->where("teacher_id", $teacher)->where("class_id", $class_name)->groupBy('subject_id')->get();
+        $assignments = TeacherSubject::where('teacher_id', $teacher)
+            ->where('class_id', $class_name)
+            ->where('is_delete', 0);
 
-        return [ 'subjects' => $subjects];
+        $subjects = (clone $assignments)
+            ->with('Subject')
+            ->groupBy('subject_id')
+            ->get();
+
+        $sections = (clone $assignments)
+            ->distinct()
+            ->pluck('section_name')
+            ->filter()
+            ->values();
+
+        return ['subjects' => $subjects, 'sections' => $sections];
     }
 
     public function store(Request $request){

@@ -142,6 +142,7 @@
                 <th>Exam Type</th>
                 <th>Classes</th>
                 <th>Session Year</th>
+                <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -154,8 +155,27 @@
                     <td>{{ $exam->class_names }}</td>
                     <td>{{ $exam->session_year ?? '-' }}</td>
                     <td>
+                        @if(!empty($exam->is_locked))
+                            <span class="badge bg-danger">Locked</span>
+                        @else
+                            <span class="badge bg-success">Unlocked</span>
+                        @endif
+                    </td>
+                    <td>
+                        @if(Route::has('academic.exams.toggleLock'))
+                            <form action="{{ route('academic.exams.toggleLock', $exam->id) }}" method="POST" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-sm {{ !empty($exam->is_locked) ? 'btn-warning' : 'btn-dark' }}" onclick="return confirm('{{ !empty($exam->is_locked) ? 'Unlock this exam for staff marks editing?' : 'Lock this exam for staff marks editing?' }}');">
+                                    {{ !empty($exam->is_locked) ? 'Unlock' : 'Lock' }}
+                                </button>
+                            </form>
+                        @endif
                         @if(Route::has('academic.exams.edit'))
-                            <a href="{{ route('academic.exams.edit', $exam->id) }}" class="btn btn-sm btn-info">Edit</a>
+                            @if(!empty($exam->is_locked))
+                                <button type="button" class="btn btn-sm btn-info" disabled>Edit</button>
+                            @else
+                                <a href="{{ route('academic.exams.edit', $exam->id) }}" class="btn btn-sm btn-info">Edit</a>
+                            @endif
                         @endif
                         @if(Route::has('academic.exams.duplicate'))
                             <form action="{{ route('academic.exams.duplicate', $exam->id) }}" method="POST" style="display:inline;">
@@ -164,11 +184,15 @@
                             </form>
                         @endif
                         @if(Route::has('academic.exams.destroy'))
-                            <form action="{{ route('academic.exams.destroy', $exam->id) }}" method="POST" style="display:inline;">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this exam?');">Delete</button>
-                            </form>
+                            @if(!empty($exam->is_locked))
+                                <button type="button" class="btn btn-sm btn-danger" disabled>Delete</button>
+                            @else
+                                <form action="{{ route('academic.exams.destroy', $exam->id) }}" method="POST" style="display:inline;">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this exam?');">Delete</button>
+                                </form>
+                            @endif
                         @endif
                     </td>
                 </tr>
