@@ -203,6 +203,7 @@ return [
                     [ 'title' => 'Enter Marks', 'route' => 'marks', 'staff_route' => 'staff/marks', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Report Marks', 'route' => 'show_report_marks', 'roles' => ['Admin'] ],
                     [ 'title' => 'Marksheet', 'route' => 'marksheet', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Consolidated Marksheet', 'route' => 'academic/consolidated-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Grading Master', 'route' => 'greadingmaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Grades', 'route' => 'gread', 'roles' => ['Admin'] ],
                     [ 'title' => 'Remark Master', 'route' => 'remarkmaster', 'roles' => ['Admin'] ],
