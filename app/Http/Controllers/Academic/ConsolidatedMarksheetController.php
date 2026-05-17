@@ -23,11 +23,7 @@ class ConsolidatedMarksheetController extends Controller
         $exams = Exam::with('classInfo')->latest('id')->get();
         $reports = $request->hasAny(['class_name', 'section_name', 'class_id', 'exam_id'])
             ? $this->buildReports($request)
-            : $this->dummyReports($request);
-
-        if ($reports->isEmpty()) {
-            $reports = $this->dummyReports($request);
-        }
+            : collect();
 
         return view('backend.AcademicsModules.consolidated_marksheet', compact('classes', 'sections', 'sectionsByClass', 'exams', 'reports'));
     }
@@ -35,9 +31,6 @@ class ConsolidatedMarksheetController extends Controller
     public function print(Request $request)
     {
         $reports = $this->buildReports($request);
-        if ($reports->isEmpty()) {
-            $reports = $this->dummyReports($request);
-        }
 
         $selectedExam = $request->integer('exam_id') ? Exam::query()->find($request->integer('exam_id')) : null;
 
@@ -70,24 +63,35 @@ class ConsolidatedMarksheetController extends Controller
         $marks = $this->marksForStudents($students->pluck('id')->all(), (int) $class->id, $examIds);
         $subjectsByStudent = $this->assignedSubjectsForStudents($students, $class, $marks);
 
-        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap) {
+        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $selectedExam) {
             $subjects = $subjectsByStudent->get((int) $student->id, collect());
             $subjectRows = [];
             $studentTotal = 0.0;
             $studentMax = 0.0;
+            $hasFailingSubject = false;
 
             foreach ($subjects as $subject) {
                 $term1 = $this->termValues(
                     $this->findMark($marks, $student->id, $subject->id, $examMap['term_1']?->id ?? null),
                     $this->findMark($marks, $student->id, $subject->id, $examMap['pt_1']?->id ?? null),
-                    $examMap['pt_1'] ?? null
+                    $examMap['term_1'] ?? null,
+                    $examMap['pt_1'] ?? null,
+                    $class->class_name ?? null,
+                    $subject->subject_type ?? null
                 );
                 $term2 = $this->termValues(
                     $this->findMark($marks, $student->id, $subject->id, $examMap['term_2']?->id ?? null),
                     $this->findMark($marks, $student->id, $subject->id, $examMap['pt_2']?->id ?? null),
-                    $examMap['pt_2'] ?? null
+                    $examMap['term_2'] ?? null,
+                    $examMap['pt_2'] ?? null,
+                    $class->class_name ?? null,
+                    $subject->subject_type ?? null
                 );
 
+                $subjectFailed = $term1['result'] === 'Fail'
+                    || $term2['result'] === 'Fail'
+                    || $this->isBelowFailPercent($term1['total'] + $term2['total'], 200, $selectedExam);
+                $hasFailingSubject = $hasFailingSubject || $subjectFailed;
                 $studentTotal += $term1['total'] + $term2['total'];
                 $studentMax += 200;
 
@@ -95,20 +99,24 @@ class ConsolidatedMarksheetController extends Controller
                     'subject' => $subject->subject_name,
                     'term_1' => $term1,
                     'term_2' => $term2,
+                    'result' => $subjectFailed ? 'Fail' : 'Pass',
                 ];
             }
 
-            $percentage = $studentMax > 0 ? round(($studentTotal / $studentMax) * 100, 2) : null;
+            $percentage = $studentMax > 0 ? $this->roundPercentage(($studentTotal / $studentMax) * 100) : null;
+            $failed = $percentage === null
+                ? false
+                : ($hasFailingSubject || $this->isBelowFailPercent($studentTotal, $studentMax, $selectedExam));
 
             return [
                 'student' => $student,
                 'attendance' => '',
                 'subjects' => $subjectRows,
                 'grand_total' => $studentTotal,
-                'grade' => $percentage === null ? '' : $this->gradeFor($percentage),
+                'grade' => $percentage === null ? '' : $this->gradeFor($percentage, $class->class_name ?? null, null),
                 'percentage' => $percentage,
                 'division' => $this->divisionFor($percentage),
-                'result' => $percentage === null ? '' : ($percentage >= 33 ? 'Pass' : 'Fail'),
+                'result' => $percentage === null ? '' : ($failed ? 'Fail' : 'Pass'),
             ];
         })->values()->all();
 
@@ -193,13 +201,13 @@ class ConsolidatedMarksheetController extends Controller
 
     private function assignedSubjectsForStudents($students, $class, $marks)
     {
-        $classSubjects = $this->classSubjects($class);
         $markedSubjectsByStudent = $marks
             ->groupBy(fn ($mark) => (int) $mark->student_id)
             ->map(fn ($items) => $items
                 ->map(fn ($mark) => (object) [
                     'id' => (int) $mark->subject_id,
                     'subject_name' => $mark->subject_name ?: 'Subject',
+                    'subject_type' => $mark->subject_type,
                 ])
                 ->unique('id')
                 ->values());
@@ -207,9 +215,9 @@ class ConsolidatedMarksheetController extends Controller
         $assignments = $this->subjectAssignmentsForClass($class);
         $subjectsByCombination = $this->subjectsByCombination($assignments->pluck('assign_this_combtoall')->filter()->unique()->all());
 
-        return $students->mapWithKeys(function ($student) use ($assignments, $subjectsByCombination, $classSubjects, $markedSubjectsByStudent) {
+        return $students->mapWithKeys(function ($student) use ($assignments, $subjectsByCombination, $markedSubjectsByStudent) {
             $studentAssignments = $assignments->filter(function ($assignment) use ($student) {
-                return empty($assignment->students_details) || (int) $assignment->students_details === (int) $student->id;
+                return $this->assignmentAppliesToStudent($assignment->students_details ?? null, (int) $student->id);
             });
 
             $assignedSubjects = $studentAssignments
@@ -217,15 +225,35 @@ class ConsolidatedMarksheetController extends Controller
                 ->unique('id')
                 ->values();
 
-            $subjects = $assignedSubjects->isNotEmpty() ? $assignedSubjects : $classSubjects;
-            $subjects = $subjects
-                ->merge($markedSubjectsByStudent->get((int) $student->id, collect()))
-                ->unique('id')
-                ->sortBy('subject_name')
-                ->values();
+            $subjects = $assignedSubjects->isNotEmpty()
+                ? $assignedSubjects
+                : $markedSubjectsByStudent->get((int) $student->id, collect());
+
+            $subjects = $subjects->unique('id')->sortBy('subject_name')->values();
 
             return [(int) $student->id => $subjects];
         });
+    }
+
+    private function assignmentAppliesToStudent($studentsDetails, int $studentId): bool
+    {
+        if ($studentsDetails === null || $studentsDetails === '') {
+            return true;
+        }
+
+        if (is_array($studentsDetails)) {
+            return collect($studentsDetails)->contains(fn ($id) => (int) $id === $studentId);
+        }
+
+        $details = trim((string) $studentsDetails);
+        $decoded = json_decode($details, true);
+        if (is_array($decoded)) {
+            return collect($decoded)->flatten()->contains(fn ($id) => (int) $id === $studentId);
+        }
+
+        return collect(preg_split('/\s*,\s*/', $details))
+            ->filter()
+            ->contains(fn ($id) => (int) $id === $studentId);
     }
 
     private function subjectAssignmentsForClass($class)
@@ -269,13 +297,14 @@ class ConsolidatedMarksheetController extends Controller
             })
             ->orderBy('cs.subject_order')
             ->orderBy('s.subject_name')
-            ->select('cs.subject_combination_id', 's.id', 's.subject_name')
+            ->select('cs.subject_combination_id', 's.id', 's.subject_name', 's.subject_type')
             ->get()
             ->groupBy(fn ($row) => (int) $row->subject_combination_id)
             ->map(fn ($items) => $items
                 ->map(fn ($row) => (object) [
                     'id' => (int) $row->id,
                     'subject_name' => $row->subject_name ?: 'Subject',
+                    'subject_type' => $row->subject_type,
                 ])
                 ->unique('id')
                 ->values());
@@ -300,11 +329,12 @@ class ConsolidatedMarksheetController extends Controller
                 });
             })
             ->orderBy('s.subject_name')
-            ->select('s.id', 's.subject_name')
+            ->select('s.id', 's.subject_name', 's.subject_type')
             ->get()
             ->map(fn ($row) => (object) [
                 'id' => (int) $row->id,
                 'subject_name' => $row->subject_name ?: 'Subject',
+                'subject_type' => $row->subject_type,
             ])
             ->unique('id')
             ->values();
@@ -361,29 +391,49 @@ class ConsolidatedMarksheetController extends Controller
 
     private function examMapForClass(int $classId, ?Exam $selectedExam, Request $request): array
     {
-        $sessionYear = $selectedExam?->session_year ?: $this->resolveDynamicSessionYear($request);
-        $exams = Exam::query()
-            ->where('class_id', $classId)
-            ->when($sessionYear, fn ($query) => $query->where('session_year', $sessionYear))
-            ->whereIn('exam_type', ['PT 1', 'PT-1', 'PT 2', 'PT-2', 'Term 1', 'Term-1', 'Term 2', 'Term-2'])
-            ->get()
-            ->keyBy(fn ($exam) => $this->normalizeExamType($exam->exam_type));
+        $classIds = $this->marksClassIdsFor($classId);
+        $query = Exam::query()->whereIn('class_id', $classIds);
 
-        if ($selectedExam && (int) $selectedExam->class_id === $classId) {
-            $exams[$this->normalizeExamType($selectedExam->exam_type)] = $selectedExam;
+        if (Schema::connection('dynamic')->hasColumn('academic_exam', 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+
+        $exams = $query->get();
+        if ($selectedExam && in_array((int) $selectedExam->class_id, $classIds, true)) {
+            $exams->push($selectedExam);
         }
 
         return [
-            'pt_1' => $exams->get('pt1'),
-            'term_1' => $exams->get('term1'),
-            'pt_2' => $exams->get('pt2'),
-            'term_2' => $exams->get('term2'),
+            'pt_1' => $this->examByAliases($exams, ['pt1', 'pti', 'periodictest1', 'periodictesti']),
+            'term_1' => $this->examByAliases($exams, ['term1', 'termi', 'halfyearly', 'halfyearlyexam', 'halfyearlyexamination']),
+            'pt_2' => $this->examByAliases($exams, ['pt2', 'ptii', 'periodictest2', 'periodictestii']),
+            'term_2' => $this->examByAliases($exams, ['term2', 'termii', 'annual', 'annualexam', 'annualexamination']),
         ];
+    }
+
+    private function examByAliases($exams, array $aliases)
+    {
+        return $exams->first(function ($exam) use ($aliases) {
+            $keys = [
+                $this->normalizeExamType($exam->exam_type ?? ''),
+                $this->normalizeExamType($exam->exam_name ?? ''),
+            ];
+
+            foreach ($keys as $key) {
+                foreach ($aliases as $alias) {
+                    if ($key === $alias || ($key !== '' && str_contains($key, $alias))) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
     }
 
     private function marksForStudents(array $studentIds, int $classId, array $examIds)
     {
-        if (empty($studentIds) || empty($examIds)) {
+        if (empty($studentIds)) {
             return collect();
         }
 
@@ -397,7 +447,7 @@ class ConsolidatedMarksheetController extends Controller
             ->leftJoin('subjectmaster as s', 's.id', '=', 'me.subject_id')
             ->whereIn('sm.student_id', array_map('strval', $studentIds))
             ->whereIn('me.class_id', array_map('strval', $this->marksClassIdsFor($classId)))
-            ->whereIn('me.exam_id', array_map('strval', $examIds));
+            ->when(!empty($examIds), fn ($inner) => $inner->whereIn('me.exam_id', array_map('strval', $examIds)));
 
         if (Schema::connection('dynamic')->hasColumn('academic_students_marks', 'is_delete')) {
             $query->where(function ($inner) {
@@ -412,7 +462,7 @@ class ConsolidatedMarksheetController extends Controller
         }
 
         return $query
-            ->select('sm.*', 'me.exam_id', 'me.subject_id', 'me.class_id', 's.subject_name')
+            ->select('sm.*', 'me.exam_id', 'me.subject_id', 'me.class_id', 's.subject_name', 's.subject_type')
             ->get();
     }
 
@@ -427,7 +477,7 @@ class ConsolidatedMarksheetController extends Controller
             && (int) $mark->exam_id === $examId);
     }
 
-    private function termValues($termMark, $ptMark, $ptExam): array
+    private function termValues($termMark, $ptMark, $termExam, $ptExam, ?string $className = null, ?string $subjectType = null): array
     {
         $theory = $this->numericMark($this->markValue($termMark, 'mark_theory'));
         $pt = $this->convertedPtMark($ptMark, $ptExam);
@@ -436,14 +486,17 @@ class ConsolidatedMarksheetController extends Controller
         $sea = $this->internalAssessmentValue($termMark, ['SE', 'SEA', 'Subject Enrichment']);
         $total = min(100, $pt + $mas + $pf + $sea + $theory);
 
+        $roundedTotal = $this->roundMark($total);
+
         return [
-            'pt' => $pt,
-            'mas' => $mas,
-            'pf' => $pf,
-            'sea' => $sea,
-            'theory' => $theory,
-            'total' => $total,
-            'grade' => $this->gradeFor($total),
+            'pt' => $this->roundMark($pt),
+            'mas' => $this->roundMark($mas),
+            'pf' => $this->roundMark($pf),
+            'sea' => $this->roundMark($sea),
+            'theory' => $this->roundMark($theory),
+            'total' => $roundedTotal,
+            'grade' => $this->gradeFor($roundedTotal, $className, $subjectType),
+            'result' => $this->isBelowFailPercent($total, 100, $termExam) ? 'Fail' : 'Pass',
         ];
     }
 
@@ -453,11 +506,20 @@ class ConsolidatedMarksheetController extends Controller
             return '';
         }
 
-        if ($field === 'mark_theory' && isset($mark->mark_theory) && $mark->mark_theory !== '') {
-            return (string) $mark->mark_theory;
+        $aliases = [
+            'total_marks' => ['total_marks', 'subject_marks'],
+            'mark_theory' => ['mark_theory', 'subject_marks'],
+            'mark_practical' => ['mark_practical'],
+            'grade' => ['grade'],
+        ];
+
+        foreach ($aliases[$field] ?? [$field] as $column) {
+            if (isset($mark->{$column}) && $mark->{$column} !== '') {
+                return (string) $mark->{$column};
+            }
         }
 
-        return isset($mark->{$field}) ? (string) $mark->{$field} : '';
+        return '';
     }
 
     private function convertedPtMark($ptMark, $ptExam): float
@@ -476,7 +538,7 @@ class ConsolidatedMarksheetController extends Controller
             $max = max(1, $obtained);
         }
 
-        return round(min(5, ($obtained / $max) * 5), 2);
+        return $this->roundMark(min(5, ($obtained / $max) * 5));
     }
 
     private function internalAssessmentValue($mark, array $keys): float
@@ -497,7 +559,7 @@ class ConsolidatedMarksheetController extends Controller
         foreach ($decoded as $key => $value) {
             $normalizedKey = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
             if (in_array($normalizedKey, $normalizedKeys, true)) {
-                return min(5, $this->numericMark($value));
+                return $this->roundMark(min(5, $this->numericMark($value)));
             }
         }
 
@@ -509,14 +571,44 @@ class ConsolidatedMarksheetController extends Controller
         return is_numeric($value) ? (float) $value : 0.0;
     }
 
-    private function formatMark($value): string
+    private function roundMark(float $value): float
     {
-        $value = (float) $value;
-        return abs($value - round($value)) < 0.005 ? number_format($value, 0) : number_format($value, 2);
+        return round($value, 0, PHP_ROUND_HALF_UP);
     }
 
-    private function gradeFor(float $marks): string
+    private function roundPercentage(float $value): float
     {
+        return round($value, 2, PHP_ROUND_HALF_UP);
+    }
+
+    private function isBelowFailPercent(float $marks, float $max, $exam = null): bool
+    {
+        if ($max <= 0) {
+            return false;
+        }
+
+        return (($marks / $max) * 100) < $this->failPercentFor($exam);
+    }
+
+    private function failPercentFor($exam = null): float
+    {
+        $failPercent = (float) ($exam->fail_percent ?? 0);
+
+        return $failPercent > 0 ? $failPercent : 33.0;
+    }
+
+    private function formatMark($value): string
+    {
+        return number_format($this->roundMark((float) $value), 2, '.', '');
+    }
+
+    private function gradeFor(float $marks, ?string $className = null, ?string $subjectType = null): string
+    {
+        $dynamicGrade = $this->gradeFromMaster($marks, $className, $subjectType);
+        if ($dynamicGrade !== '') {
+            return $dynamicGrade;
+        }
+
         $scale = [
             ['grade' => 'A1', 'min' => 91],
             ['grade' => 'A2', 'min' => 81],
@@ -535,6 +627,32 @@ class ConsolidatedMarksheetController extends Controller
         }
 
         return '';
+    }
+
+    private function gradeFromMaster(float $marks, ?string $className, ?string $subjectType): string
+    {
+        if (!Schema::connection('dynamic')->hasTable('grademaster')) {
+            return '';
+        }
+
+        $subjectType = trim((string) $subjectType);
+        if ($subjectType === '') {
+            return '';
+        }
+
+        $range = DB::connection('dynamic')->table('grademaster')
+            ->where('is_delete', 0)
+            ->whereRaw('LOWER(TRIM(subject_type)) = ?', [strtolower($subjectType)])
+            ->whereRaw('CAST(min_per AS DECIMAL(10,2)) <= ?', [$marks])
+            ->whereRaw('CAST(max_per AS DECIMAL(10,2)) >= ?', [$marks])
+            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
+            ->get()
+            ->first(function ($item) use ($className) {
+                $classes = collect(json_decode($item->groups ?? '[]', true) ?: []);
+                return $classes->isEmpty() || $classes->contains($className);
+            });
+
+        return (string) ($range->grade ?? '');
     }
 
     private function divisionFor(?float $percentage): string
@@ -574,7 +692,7 @@ class ConsolidatedMarksheetController extends Controller
 
     private function normalizeExamType(?string $type): string
     {
-        return Str::lower(str_replace([' ', '-'], '', (string) $type));
+        return Str::lower(preg_replace('/[^a-z0-9]+/i', '', (string) $type));
     }
 
     private function resolveDynamicSessionYear(Request $request): ?string

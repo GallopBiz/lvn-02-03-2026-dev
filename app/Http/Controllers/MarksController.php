@@ -50,12 +50,13 @@ class MarksController extends Controller
                 ->values();
         } else {
             $classlist = Classname::select('id', 'class_name')->where('is_delete', 0)->get();
-            $subjectlist = Subject::select('id', 'subject_name')->where('is_delete', 0)->get();
+            $subjectlist = Subject::select('id', 'subject_name', 'subject_type')->where('is_delete', 0)->get();
         }
         $teacherlist = $this->accessibleTeacherSubjects()->with('Teacher.biometricDetails')->groupBy('teacher_id')->get();
         $isStaffMarksUser = $this->isStaffMarksUser();
         $internalAssessments = $this->activeInternalAssessments();
-        return view('backend.AcademicsModules.marks', compact('classlist','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments'));
+        $gradeRanges = $this->activeGradeRanges();
+        return view('backend.AcademicsModules.marks', compact('classlist','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments', 'gradeRanges'));
     }
 
 
@@ -75,6 +76,9 @@ class MarksController extends Controller
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
         }
+        $this->applyPtMarksConversionToRequest($request);
+        $this->applyTotalMarksRoundingToRequest($request);
+        $this->applyGradesToRequest($request);
 
         $data = [
             "teacher_id" => $teacherId,
@@ -243,7 +247,8 @@ class MarksController extends Controller
         //dd($classlist);
         $isStaffMarksUser = $this->isStaffMarksUser();
         $internalAssessments = $this->activeInternalAssessments();
-        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments'));
+        $gradeRanges = $this->activeGradeRanges();
+        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments', 'gradeRanges'));
     }
 
     public function store(Request $request){
@@ -271,6 +276,9 @@ class MarksController extends Controller
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
         }
+        $this->applyPtMarksConversionToRequest($request);
+        $this->applyTotalMarksRoundingToRequest($request);
+        $this->applyGradesToRequest($request);
 
         $mainData = [
             "teacher_id" => $teacherId,
@@ -550,7 +558,10 @@ class MarksController extends Controller
         return TeacherSubject::where('is_delete', 0)
             ->where('teacher_id', $teacherId)
             ->where('class_id', $classId)
-            ->where('section_name', $sectionName)
+            ->where(function ($query) use ($sectionName) {
+                $query->where('section_name', $sectionName)
+                    ->orWhere('section_name', 'All');
+            })
             ->where('subject_id', $subjectId)
             ->exists();
     }
@@ -599,11 +610,16 @@ class MarksController extends Controller
                 $practicalMarks = (float) ($student['mark_practical'] ?? 0);
 
                 if ($maxTheory !== null && $maxTheory > 0 && $theoryMarks > $maxTheory) {
-                    return 'Theory marks cannot be greater than configured max theory marks (' . $maxTheory . ').';
+                    return 'Entered marks should not be greater than maximum marks.';
                 }
 
                 if ($maxPractical !== null && $maxPractical > 0 && $practicalMarks > $maxPractical) {
-                    return 'Practical marks cannot be greater than configured max practical marks (' . $maxPractical . ').';
+                    return 'Entered marks should not be greater than maximum marks.';
+                }
+
+                $configuredTotal = (float) ($maxTheory ?? 0) + (float) ($maxPractical ?? 0);
+                if ($configuredTotal > 0 && ($theoryMarks + $practicalMarks) > $configuredTotal) {
+                    return 'Entered marks should not be greater than maximum marks.';
                 }
             }
 
@@ -640,11 +656,96 @@ class MarksController extends Controller
                 $marks = $student['marks'] ?? 0;
             }
             if ($marks > $maxMarks) {
-                return 'Theory + Practical marks cannot be greater than configured max marks (' . $maxMarks . ').';
+                return 'Entered marks should not be greater than maximum marks.';
             }
         }
 
         return null;
+    }
+
+    private function applyPtMarksConversionToRequest(Request $request): void
+    {
+        $exam = DB::connection('dynamic')->table('academic_exam')->where('id', $request->exam_name)->first();
+        if (!$exam || !$this->isPtExamName($exam->exam_name ?? '')) {
+            return;
+        }
+
+        $maxMarks = $request->filled('max_marks')
+            ? (float) $request->max_marks
+            : (float) (($exam->max_marks_theory ?? 0) + ($exam->max_marks_practical ?? 0));
+
+        if ($maxMarks <= 0) {
+            return;
+        }
+
+        $students = collect($request->students ?? [])->map(function ($student) use ($maxMarks) {
+            $obtainedMarks = (float) ($student['mark_theory'] ?? 0) + (float) ($student['mark_practical'] ?? 0);
+            $student['total_marks'] = $this->roundMark(($obtainedMarks / $maxMarks) * 5);
+            return $student;
+        })->all();
+
+        $request->merge(['students' => $students]);
+    }
+
+    private function isPtExamName(?string $examName): bool
+    {
+        return (bool) preg_match('/\bPT\s*[-]?\s*[12]\b/i', (string) $examName);
+    }
+
+    private function roundMark(float $value): float
+    {
+        return round($value, 0, PHP_ROUND_HALF_UP);
+    }
+
+    private function applyTotalMarksRoundingToRequest(Request $request): void
+    {
+        $students = collect($request->students ?? [])->map(function ($student) {
+            if (is_numeric($student['total_marks'] ?? null)) {
+                $student['total_marks'] = $this->roundMark((float) $student['total_marks']);
+            }
+
+            return $student;
+        })->all();
+
+        $request->merge(['students' => $students]);
+    }
+
+    private function applyGradesToRequest(Request $request): void
+    {
+        $className = Classname::where('id', $request->class_name)->value('class_name');
+        $subjectType = Subject::where('id', $request->subject_name)->value('subject_type');
+
+        $students = collect($request->students ?? [])->map(function ($student) use ($className, $subjectType) {
+            $marks = is_numeric($student['total_marks'] ?? null)
+                ? (float) $student['total_marks']
+                : (float) (($student['mark_theory'] ?? 0) + ($student['mark_practical'] ?? 0));
+
+            $student['grade'] = $this->gradeFromMaster($marks, $className, $subjectType);
+            return $student;
+        })->all();
+
+        $request->merge(['students' => $students]);
+    }
+
+    private function gradeFromMaster(float $marks, ?string $className, ?string $subjectType): string
+    {
+        $subjectType = trim((string) $subjectType);
+        if ($subjectType === '') {
+            return '';
+        }
+
+        return $this->activeGradeRanges()
+            ->first(function ($range) use ($marks, $className, $subjectType) {
+                $classes = collect(json_decode($range->groups ?? '[]', true) ?: []);
+                $classMatches = $classes->isEmpty() || $classes->contains($className);
+                $subjectMatches = strcasecmp(trim((string) $range->subject_type), $subjectType) === 0;
+
+                return $classMatches
+                    && $subjectMatches
+                    && $marks >= (float) $range->min_per
+                    && $marks <= (float) $range->max_per;
+            })
+            ->grade ?? '';
     }
 
     private function accessibleAcademicExams()
@@ -696,7 +797,10 @@ class MarksController extends Controller
         return TeacherSubject::where('is_delete', 0)
             ->where('teacher_id', $this->staffEmployeeId())
             ->where('class_id', $classId)
-            ->where('section_name', $sectionName)
+            ->where(function ($query) use ($sectionName) {
+                $query->where('section_name', $sectionName)
+                    ->orWhere('section_name', 'All');
+            })
             ->exists();
     }
 
@@ -857,6 +961,18 @@ class MarksController extends Controller
             ->where('is_active', 1)
             ->orderBy('display_order')
             ->orderBy('assessment_name')
+            ->get();
+    }
+
+    private function activeGradeRanges()
+    {
+        if (!Schema::connection('dynamic')->hasTable('grademaster')) {
+            return collect();
+        }
+
+        return DB::connection('dynamic')->table('grademaster')
+            ->where('is_delete', 0)
+            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
             ->get();
     }
 }

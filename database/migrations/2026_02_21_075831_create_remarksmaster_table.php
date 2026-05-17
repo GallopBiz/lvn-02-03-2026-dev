@@ -13,10 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('remarksmaster', function (Blueprint $table) {
+        Schema::create('academic_remarksmaster', function (Blueprint $table) {
             $table->integer('id', true);
             $table->string('not_show', 20)->nullable();
-            $table->string('remark', 20)->nullable();
+            $table->string('remark', 255)->nullable();
             $table->timestamp('created_date')->useCurrent();
             $table->integer('is_delete')->default(0);
         });
@@ -29,6 +29,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('remarksmaster');
+        Schema::dropIfExists('academic_remarksmaster');
     }
 };

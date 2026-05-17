@@ -9,8 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 class Remark extends Model
 {
     use HasFactory;
-    protected $table="remarksmaster";
-    protected $primarykey="id";
+    protected $table = "academic_remarksmaster";
+    protected $primaryKey = "id";
+    public $timestamps = false;
 
     protected $fillable = [
         'remark',

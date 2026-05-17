@@ -189,7 +189,8 @@ class TeacherSubjectController extends Controller
 
         $classes = TeacherSubject::with('Class')->where("teacher_id", $teacher)->groupBy('class_id')->where('is_delete','=',0)->get();
         $subjects = TeacherSubject::with('Subject')->where("teacher_id", $teacher)->groupBy('subject_id')->where('is_delete','=',0)->get();
-        $sections = TeacherSubject::where("teacher_id", $teacher)->where('is_delete','=',0)->distinct()->pluck('section_name');
+        $sectionValues = TeacherSubject::where("teacher_id", $teacher)->where('is_delete','=',0)->distinct()->pluck('section_name');
+        $sections = $this->expandAllSections($sectionValues);
         return ['classes' => $classes, 'subjects' => $subjects, 'sections' => $sections];
     }
 
@@ -208,13 +209,54 @@ class TeacherSubjectController extends Controller
             ->groupBy('subject_id')
             ->get();
 
-        $sections = (clone $assignments)
+        $sectionAssignments = clone $assignments;
+        if ($request->filled('subject_id')) {
+            $sectionAssignments->where('subject_id', $request->subject_id);
+        }
+
+        $sectionValues = $sectionAssignments
+            ->distinct()
+            ->pluck('section_name')
+            ->filter()
+            ->values();
+        $sections = $this->expandAllSections($sectionValues, $class_name);
+
+        return ['subjects' => $subjects, 'sections' => $sections];
+    }
+
+    private function expandAllSections($sectionValues, $classId = null)
+    {
+        $sections = collect($sectionValues)
+            ->filter(fn ($section) => !empty($section) && $section !== 'All')
+            ->values();
+
+        if (!collect($sectionValues)->contains('All')) {
+            return $sections->unique()->values();
+        }
+
+        $className = $classId ? Classname::where('id', $classId)->value('class_name') : null;
+        $realSectionsQuery = DB::connection('dynamic')->table('classes')
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '');
+
+        if ($className) {
+            $realSectionsQuery->where('class_name', $className);
+        }
+
+        $realSections = $realSectionsQuery
             ->distinct()
             ->pluck('section_name')
             ->filter()
             ->values();
 
-        return ['subjects' => $subjects, 'sections' => $sections];
+        if ($realSections->isEmpty()) {
+            $realSections = collect(['Kautilya', 'Ramanujan', 'Aryabhatta']);
+        }
+
+        return $sections
+            ->merge($realSections)
+            ->unique()
+            ->values();
     }
 
     public function store(Request $request){

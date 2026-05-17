@@ -2,6 +2,7 @@
 
 @section('main-container')
 <div class="main-content pt-4">
+    @php($formatMark = fn ($value) => (string) round((float) $value, 0, PHP_ROUND_HALF_UP))
     <div class="breadcrumb">
         <h2>Consolidated Marksheet</h2>
     </div>
@@ -46,7 +47,7 @@
                 <div class="col-md-3">
                     <button class="btn btn-primary" type="submit">Show Report</button>
                     <a class="btn btn-outline-secondary" href="{{ route('academic.consolidated-marksheets.index') }}">Clear</a>
-                    <a class="btn btn-success" target="_blank" href="{{ route('academic.consolidated-marksheets.print', request()->only('class_name', 'section_name', 'exam_id')) }}">Print</a>
+                    <a class="btn btn-success" href="{{ route('academic.consolidated-marksheets.print', request()->only('class_name', 'section_name', 'exam_id')) }}">Print</a>
                 </div>
             </form>
         </div>
@@ -82,8 +83,8 @@
                                     <td>{{ $studentRow['student']->student_name }}</td>
                                     <td>{{ $studentRow['student']->scholar_no }}</td>
                                     <td>{{ count($studentRow['subjects']) }}</td>
-                                    <td>{{ number_format($studentRow['grand_total'], 2) }}</td>
-                                    <td>{{ $studentRow['percentage'] !== null ? number_format($studentRow['percentage'], 2) : '' }}</td>
+                                    <td>{{ $formatMark($studentRow['grand_total']) }}</td>
+                                    <td>{{ $studentRow['percentage'] !== null ? $formatMark($studentRow['percentage']) : '' }}</td>
                                     <td>{{ $studentRow['division'] }}</td>
                                     <td>{{ $studentRow['result'] }}</td>
                                 </tr>

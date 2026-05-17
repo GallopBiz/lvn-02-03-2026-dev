@@ -4,6 +4,9 @@
     $iaEnabled = !empty($stream_master) && !empty($marksData) && $marksData->contains(function ($marks) {
         return !empty($marks->internal_assessment_marks);
     });
+    $practicalEnabled = !empty($stream_master) && !empty($marksData) && $marksData->contains(function ($marks) {
+        return (float) ($marks->mark_practical ?? 0) > 0 || !empty($marks->is_absent_pr);
+    });
     $marksUrlPrefix = !empty($isStaffMarksUser) ? 'staff/' : '';
 @endphp
 <style>
@@ -15,6 +18,11 @@
         font-size: 13px;
         color: #555;
         margin-left: 10px;
+    }
+
+    .saved-marks-scroll {
+        max-height: 520px;
+        overflow-y: auto;
     }
 
 </style>
@@ -101,10 +109,10 @@
                                 <select required name="subject_name" class="form-control" id="subject_name" @if (!empty($stream_master)) disabled @endif>
                                     <option value="">-- Please select --</option>
                                     @if (!empty($stream_master))
-                                        <option selected value="{{ $stream_master->subject_id }}">{{ $stream_master->Subject->subject_name }}</option>
+                                        <option selected value="{{ $stream_master->subject_id }}" data-subject-type="{{ $stream_master->Subject->subject_type ?? '' }}">{{ $stream_master->Subject->subject_name }}</option>
                                     @else
                                         @foreach ($subjectlist as $subjectlist)
-                                            <option value="{{ $subjectlist->id }}">{{ $subjectlist->subject_name }}</option>
+                                            <option value="{{ $subjectlist->id }}" data-subject-type="{{ $subjectlist->subject_type ?? '' }}">{{ $subjectlist->subject_name }}</option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -144,6 +152,12 @@
                                     Internal Assessment
                                 </label>
                             </div>
+                            <div class="form-group mb-3">
+                                <label>
+                                    <input type="checkbox" id="practical_marks_toggle" {{ $practicalEnabled ? 'checked' : '' }}>
+                                    Practical Marks
+                                </label>
+                            </div>
                             <button type="button" class="btn btn-info" id="show_students_btn">Show Students</button>
                             <div id="marks_entry_status" class="alert alert-info mt-3 d-none"></div>
                         </div>
@@ -154,7 +168,7 @@
                     <div class="card h-100">
                         <div class="card-body">
                             <h4 class="mb-3">Previously Saved Marks Entry :-</h4>
-                            <div class="table-responsive">
+                            <div class="table-responsive saved-marks-scroll">
                                 <table class="display table table-striped table-bordered" id="another_div">
                                     <thead>
                                         <tr>
@@ -230,22 +244,22 @@
                                             <input type="checkbox" id="isAbsentToggle" class="toggle-checkbox" data-column-index="1"> Is Absent Th
                                         </label>
                                     </th>
-                                    <th scope="col">
+                                    <th scope="col" class="practical-column">
                                         <label>
                                             <input type="checkbox" id="isAbsentPrToggle" class="toggle-checkbox" data-column-index="2"> Is Absent Pr
                                         </label>
                                     </th>
+                                    <th scope="col">Scholar no.</th>
                                     <th scope="col">Student Name</th>
                                     <th scope="col">Roll No.</th>
-                                    <th scope="col">Scholar no.</th>
+                                    <th scope="col">Marks (Theory)</th>
+                                    <th scope="col" class="practical-column">Marks (Practical)</th>
                                     @foreach($internalAssessments ?? [] as $assessment)
                                         <th scope="col" class="ia-column d-none" data-ia-code="{{ $assessment->assessment_code }}">{{ $assessment->assessment_code }}</th>
                                     @endforeach
-                                    <th scope="col">Marks (Theory)</th>
-                                    <th scope="col">Marks (Practical)</th>
                                     <th scope="col">Total Marks</th>
                                     <th scope="col">Over All Grade</th>
-                                    <th scope="col">Result</th>
+                                    {{-- <th scope="col">Result</th> --}}
                                     <th scope="col">Action</th>
                                 </tr>
                             </thead>
@@ -267,17 +281,19 @@
                                         <tr class="student-row">
                                             <th scope="row">{{++$i}}</th>
                                             <td><input type="checkbox" class="is_absent" @if($marks->is_absent == '1') @checked(true) @endif></td>
-                                            <td><input type="checkbox" class="is_absent_pr" @if($marks->is_absent_pr == '1') @checked(true) @endif /></td>
+                                            <td class="practical-column"><input type="checkbox" class="is_absent_pr" @if($marks->is_absent_pr == '1') @checked(true) @endif /></td>
+                                            <td>
+                                                {{ $marks->scholar_no }}
+                                                <input type="hidden" class="scholar_no" value="{{ $marks->scholar_no ?? '' }}" />
+                                            </td>
                                             <td>{{ $marks->student_name }}</td>
                                             <td>
                                                 {{ $marks->roll_no ?? '' }}
                                                 <input type="hidden" class="student_id" value="{{ $marks->student_id }}" />
                                                 <input type="hidden" class="roll_no" value="{{ $marks->roll_no ?? '' }}" />
                                             </td>
-                                            <td>
-                                                {{ $marks->scholar_no }}
-                                                <input type="hidden" class="scholar_no" value="{{ $marks->scholar_no ?? '' }}" />
-                                            </td>
+                                            <td><input type="text" class="form-control mark_theory" value="{{ $marks->mark_theory ?? $marks->subject_marks ?? 0 }}" /></td>
+                                            <td class="practical-column"><input type="text" class="form-control mark_practical" value="{{ $marks->mark_practical ?? 0 }}" /></td>
                                             @php
                                                 $rawIaMarks = $marks->internal_assessment_marks ?? null;
                                                 $decodedIaMarks = is_string($rawIaMarks) ? json_decode($rawIaMarks, true) : $rawIaMarks;
@@ -295,17 +311,15 @@
                                                     <input type="text" class="form-control internal_assessment_mark" data-ia-code="{{ $assessment->assessment_code }}" value="{{ $iaMarks[$assessment->assessment_code] ?? ($loop->first ? $singleIaMark : '') }}" />
                                                 </td>
                                             @endforeach
-                                            <td><input type="text" class="form-control mark_theory" value="{{ $marks->mark_theory ?? $marks->subject_marks ?? 0 }}" /></td>
-                                            <td><input type="text" class="form-control mark_practical" value="{{ $marks->mark_practical ?? 0 }}" /></td>
                                             <td><input type="text" class="form-control total_marks" value="{{ $marks->total_marks ?? $marks->subject_marks ?? 0 }}" readonly /></td>
-                                            <td><input type="text" class="form-control grade" value="{{ $marks->grade ?? $marks->overall_grade ?? '' }}" /></td>
-                                            <td>
+                                            <td><input type="text" class="form-control grade" value="{{ $marks->grade ?? $marks->overall_grade ?? '' }}" readonly /></td>
+                                            {{-- <td>
                                                 <select class="form-control result">
                                                     <option value="">--</option>
                                                     <option value="D" {{ (($marks->result ?? '') == 'D') ? 'selected' : '' }}>D</option>
                                                     <option value="S" {{ (($marks->result ?? '') == 'S') ? 'selected' : '' }}>S</option>
                                                 </select>
-                                            </td>
+                                            </td> --}}
                                             <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
                                         </tr>
                                     @endforeach
@@ -417,6 +431,8 @@
     const activeInternalAssessments = @json($internalAssessments ?? []);
     const isStaffMarksUser = @json(!empty($isStaffMarksUser));
     const isCurrentMarksEntryLocked = @json(!empty($stream_master->is_locked));
+    const hasSavedPracticalMarks = @json($practicalEnabled);
+    const gradeRanges = @json($gradeRanges ?? []);
 
     function resetExamMaxMarks() {
         $('#max_marks_theory').val('');
@@ -439,6 +455,8 @@
         $('#max_marks_theory').val(theory || '');
         $('#max_marks_practical').val(practical || '');
         $('#max_marks').val(total || '');
+        $('#practical_marks_toggle').prop('checked', practical > 0 || hasSavedPracticalMarks);
+        togglePracticalColumns();
 
         if (total > 0) {
             $('.total_marks').attr('data-max', total);
@@ -467,17 +485,79 @@
         return isNaN(parsed) ? 0 : parsed;
     }
 
+    function isPracticalEnabled() {
+        return $('#practical_marks_toggle').is(':checked');
+    }
+
+    function selectedExam() {
+        const examId = $('#exam_name').val();
+        return allExams.find(item => String(item.id) === String(examId)) || null;
+    }
+
+    function isPtExam() {
+        const exam = selectedExam();
+        return exam && /\bPT\s*[-]?\s*[12]\b/i.test(String(exam.exam_name || ''));
+    }
+
+    function roundMark(value) {
+        return Math.round(value);
+    }
+
+    function convertPtMarksToFivePoint(obtainedMarks) {
+        const maxMarks = numericValue($('#max_marks').val());
+        if (!isPtExam() || maxMarks <= 0) {
+            return obtainedMarks;
+        }
+
+        return roundMark((obtainedMarks / maxMarks) * 5);
+    }
+
+    function selectedClassName() {
+        return $('#class_name option:selected').text().trim();
+    }
+
+    function selectedSubjectType() {
+        return $('#subject_name option:selected').data('subject-type') || '';
+    }
+
+    function gradeFromMaster(marks) {
+        const className = selectedClassName();
+        const subjectType = String(selectedSubjectType()).trim().toLowerCase();
+        if (!subjectType) {
+            return '';
+        }
+
+        const match = gradeRanges.find((range) => {
+            let classes = [];
+            try {
+                classes = range.groups ? JSON.parse(range.groups) : [];
+            } catch (e) {
+                classes = [];
+            }
+
+            const classMatches = classes.length === 0 || classes.includes(className);
+            const subjectMatches = String(range.subject_type || '').trim().toLowerCase() === subjectType;
+            const from = Number(range.min_per || 0);
+            const to = Number(range.max_per || 0);
+
+            return classMatches && subjectMatches && marks >= from && marks <= to;
+        });
+
+        return match ? (match.grade || '') : '';
+    }
+
     function recalculateStudentTotal(row) {
         const theory = numericValue(row.find('.mark_theory').val());
-        const practical = numericValue(row.find('.mark_practical').val());
+        const practical = isPracticalEnabled() ? numericValue(row.find('.mark_practical').val()) : 0;
         let internalAssessmentTotal = 0;
         if (isInternalAssessmentEnabled()) {
             row.find('.internal_assessment_mark').each(function () {
                 internalAssessmentTotal += numericValue($(this).val());
             });
         }
-        const total = theory + practical + internalAssessmentTotal;
+        const total = roundMark(convertPtMarksToFivePoint(theory + practical) + internalAssessmentTotal);
         row.find('.total_marks').val(total);
+        row.find('.grade').val(gradeFromMaster(total));
     }
 
     function resetMarksEntryStatus() {
@@ -525,6 +605,18 @@
         });
     }
 
+    function togglePracticalColumns() {
+        $('.practical-column').toggleClass('d-none', !isPracticalEnabled());
+        if (!isPracticalEnabled()) {
+            $('.mark_practical').val(0);
+            $('.is_absent_pr').prop('checked', false);
+            $('#isAbsentPrToggle').prop('checked', false);
+        }
+        $('.student-row').each(function () {
+            recalculateStudentTotal($(this));
+        });
+    }
+
     function internalAssessmentCells() {
         return activeInternalAssessments.map((assessment) => `
             <td class="ia-column ${isInternalAssessmentEnabled() ? '' : 'd-none'}">
@@ -552,6 +644,36 @@
             || xhr.responseJSON?.errors?.[Object.keys(xhr.responseJSON?.errors || {})[0]]?.[0]
             || xhr.responseText
             || "Marks could not be saved. Please try again.";
+    }
+
+    function maxMarksAlert() {
+        alert('Entered marks should not be greater than maximum marks.');
+    }
+
+    function validateObtainedMarks() {
+        const maxTheory = numericValue($('#max_marks_theory').val());
+        const maxPractical = numericValue($('#max_marks_practical').val());
+        const maxTotal = numericValue($('#max_marks').val());
+        let isValid = true;
+
+        $('#studentdatatable').find('.student-row').each(function () {
+            const row = $(this);
+            const theory = numericValue(row.find('.mark_theory').val());
+            const practical = isPracticalEnabled() ? numericValue(row.find('.mark_practical').val()) : 0;
+
+            if ((maxTheory > 0 && theory > maxTheory)
+                || (isPracticalEnabled() && maxPractical > 0 && practical > maxPractical)
+                || (maxTotal > 0 && theory + practical > maxTotal)) {
+                isValid = false;
+                return false;
+            }
+        });
+
+        if (!isValid) {
+            maxMarksAlert();
+        }
+
+        return isValid;
     }
 </script>
 <script>
@@ -587,20 +709,17 @@
                     for (var i = 0; i < data['subjects'].length; i++) {
                         var subjectName = data['subjects'][i].subject.subject_name;
                         var subject_id = data['subjects'][i].subject_id;
-                        $('#subject_name').append('<option value="' + subject_id + '">' + subjectName + '</option>');
+                        var subjectType = data['subjects'][i].subject.subject_type || '';
+                        $('#subject_name').append('<option value="' + subject_id + '" data-subject-type="' + subjectType + '">' + subjectName + '</option>');
                     }
                     $('#section_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['sections'].length; i++) {
-                        var subjectName = data['sections'][i];
-                        $('#section_name').append('<option value="' + subjectName + '">' + subjectName + '</option>');
-                    }
                 },
                 error: function(xhr, status, error) {
                     console.error(error);
                 }
             });
         });
-        function loadTeacherClassAssignments(classId) {
+        function loadTeacherClassAssignments(classId, subjectId = '') {
             const teacher = $("#teacher_name").val();
             let token = document.getElementsByName("_token")[0].value;
 
@@ -614,7 +733,8 @@
             $.ajax({
                 data: {
                     teacher: teacher,
-                    class_name: classId
+                    class_name: classId,
+                    subject_id: subjectId
                 },
                 url: "{{ url($marksUrlPrefix . 'getteachersandsubject') }}",
                 headers: {
@@ -634,7 +754,9 @@
                         }
                         var subjectName = data['subjects'][i].subject.subject_name;
                         var subjectId = data['subjects'][i].subject_id;
-                        $('#subject_name').append('<option value="' + subjectId + '">' + subjectName + '</option>');
+                        var subjectType = data['subjects'][i].subject.subject_type || '';
+                        var selected = subjectId == $("#subject_name").data('selected-subject') ? ' selected' : '';
+                        $('#subject_name').append('<option value="' + subjectId + '" data-subject-type="' + subjectType + '"' + selected + '>' + subjectName + '</option>');
                     }
                 },
                 error: function(xhr, status, error) {
@@ -731,29 +853,22 @@
                             <tr class="student-row">
                                 <td>${index + 1}</td>
                                 <td><input type="checkbox" class="is_absent" /></td>
-                                <td><input type="checkbox" class="is_absent_pr" /></td>
+                                <td class="practical-column"><input type="checkbox" class="is_absent_pr" /></td>
+                                <td>
+                                    ${item.scholar_no || ''}
+                                    <input type="hidden" class="scholar_no" value="${item.scholar_no || ''}" />
+                                </td>
                                 <td>${item.student_name}</td>
                                 <td>
                                     ${item.roll_no || ''}
                                     <input type="hidden" class="student_id" value="${item.id}" />
                                     <input type="hidden" class="roll_no" value="${item.roll_no || ''}" />
                                 </td>
-                                <td>
-                                    ${item.scholar_no || ''}
-                                    <input type="hidden" class="scholar_no" value="${item.scholar_no || ''}" />
-                                </td>
-                                ${internalAssessmentCells()}
                                 <td><input type="text" class="form-control mark_theory" value="0" /></td>
-                                <td><input type="text" class="form-control mark_practical" value="0" /></td>
+                                <td class="practical-column"><input type="text" class="form-control mark_practical" value="0" /></td>
+                                ${internalAssessmentCells()}
                                 <td><input type="text" class="form-control total_marks" value="0" readonly /></td>
-                                <td><input type="text" class="form-control grade" value="" /></td>
-                                <td>
-                                    <select class="form-control result">
-                                        <option value="">--</option>
-                                        <option value="D">D</option>
-                                        <option value="S">S</option>
-                                    </select>
-                                </td>
+                                <td><input type="text" class="form-control grade" value="" readonly /></td>
                                 <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
                             </tr>`;
                         })
@@ -761,6 +876,7 @@
                         $("#studentdatatable").html(rows)
                         setExamMaxMarks($("#exam_name").val());
                         toggleInternalAssessmentColumns();
+                        togglePracticalColumns();
 
                     }
                     , error: function(xhr, status, error) {
@@ -779,7 +895,11 @@
                 examDropdown.innerHTML = '<option value="">-- Please select --</option>';
                 resetExamMaxMarks();
                 resetMarksEntryStatus();
+                $("#subject_name").removeData('selected-subject');
                 loadTeacherClassAssignments(classId);
+                $('.student-row').each(function () {
+                    recalculateStudentTotal($(this));
+                });
                 $("#studentdatatable").html('<tr><td colspan="12" class="text-center">No Data Found</td></tr>');
 
                 if (!classId) return;
@@ -818,14 +938,31 @@
                 $('.total_marks').removeAttr('data-max');
             }
         });
-        $('#teacher_name, #section_name, #subject_name').on('change', checkMarksEntryStatus);
+        $('#subject_name').on('change', function() {
+            const classId = $("#class_name").val();
+            const subjectId = $(this).val();
+            $("#subject_name").data('selected-subject', subjectId);
+            if (classId) {
+                loadTeacherClassAssignments(classId, subjectId);
+            }
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
+            checkMarksEntryStatus();
+        });
+        $('#teacher_name, #section_name').on('change', checkMarksEntryStatus);
         $('#internal_assessment_toggle').on('change', toggleInternalAssessmentColumns);
+        $('#practical_marks_toggle').on('change', togglePracticalColumns);
         toggleInternalAssessmentColumns();
+        togglePracticalColumns();
         applyMarksEntryLockState();
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })
         $(document).on('input', '.mark_theory, .mark_practical, .internal_assessment_mark', function() {
+            if (!validateObtainedMarks()) {
+                $(this).val('');
+            }
             recalculateStudentTotal($(this).closest('tr'));
         });
         function setMarksSaving(isSaving) {
@@ -850,6 +987,9 @@
         })
     function handleSubmitData(event) {
         event.preventDefault();
+        if (!validateObtainedMarks()) {
+            return;
+        }
         let token = document.getElementsByName("_token")[0].value;
         let data = [];
         let bodydata = document.getElementById("studentdatatable").children;
@@ -860,13 +1000,13 @@
             const rollNo = row.find('.roll_no').val();
             const scholarNo = row.find('.scholar_no').val();
             const markTheory = row.find('.mark_theory').val();
-            const markPractical = row.find('.mark_practical').val();
+            const markPractical = isPracticalEnabled() ? row.find('.mark_practical').val() : 0;
             const totalMarks = row.find('.total_marks').val();
             const grade = row.find('.grade').val();
-            const result = row.find('.result').val();
+            const result = '';
             const internalAssessments = collectInternalAssessmentMarks(row);
             const isAbsent = row.find('.is_absent').is(':checked') ? 1 : 0;
-            const isAbsentPr = row.find('.is_absent_pr').is(':checked') ? 1 : 0;
+            const isAbsentPr = isPracticalEnabled() && row.find('.is_absent_pr').is(':checked') ? 1 : 0;
 
             studentData.push({
                 student_id: studentId,
@@ -928,6 +1068,9 @@
 
     function handleUpdateData(event) {
         event.preventDefault();
+        if (!validateObtainedMarks()) {
+            return;
+        }
         let token = document.getElementsByName("_token")[0].value;
         let data = [];
         let bodydata = document.getElementById("studentdatatable").children;
@@ -938,13 +1081,13 @@
             const rollNo = row.find('.roll_no').val();
             const scholarNo = row.find('.scholar_no').val();
             const markTheory = row.find('.mark_theory').val();
-            const markPractical = row.find('.mark_practical').val();
+            const markPractical = isPracticalEnabled() ? row.find('.mark_practical').val() : 0;
             const totalMarks = row.find('.total_marks').val();
             const grade = row.find('.grade').val();
-            const result = row.find('.result').val();
+            const result = '';
             const internalAssessments = collectInternalAssessmentMarks(row);
             const isAbsent = row.find('.is_absent').is(':checked') ? 1 : 0;
-            const isAbsentPr = row.find('.is_absent_pr').is(':checked') ? 1 : 0;
+            const isAbsentPr = isPracticalEnabled() && row.find('.is_absent_pr').is(':checked') ? 1 : 0;
 
             studentData.push({
                 student_id: studentId,

@@ -1,224 +1,146 @@
 @extends('backend.layouts.main')
 @section('main-container')
+@php
+    $editingGrade = !empty($stream_master) ? $stream_master->first() : null;
+    $selectedClasses = collect(json_decode($editingGrade->groups ?? '[]', true) ?: []);
+@endphp
+
 <style>
     .uperletter {
         text-transform: capitalize;
     }
 
+    .class-list-panel {
+        max-height: 355px;
+        overflow-y: auto;
+    }
+
+    .grade-range-table input {
+        min-width: 110px;
+    }
 </style>
-
-
-
-
-
-@php
-$i = 0;
-@endphp
 
 <div class="main-content">
     <div class="breadcrumb">
-        <div class="breadcrumb">
         <h1 class="me-2">Grading Master</h1>
     </div>
-    {{-- <div class="separator-breadcrumb border-top"></div> --}}
+
+    <div class="separator-breadcrumb border-top"></div>
 
     <div class="row">
         <div class="col-md-6 mb-4">
             <h4>Set Grading Scheme Here :-</h4>
 
-
             <div class="separator-breadcrumb border-top"></div>
-            @if(!empty($stream_master))
-            <form id="progress-form" class="p-4 progress-form" action="{{url('store-greadingmaster')}}" method="post">
-                <input type="hidden" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->id }}" @endforeach @else value="" @endif name="id">
-                @else
-                <form id="progress-form" class="p-4 progress-form" action="{{url('save-greadingmaster')}}" method="post">
-                    @endif
-                    @csrf
+            <form id="progress-form" class="p-4 progress-form" action="{{ !empty($editingGrade) ? url('store-greadingmaster') : url('save-greadingmaster') }}" method="post">
+                @csrf
+                @if(!empty($editingGrade))
+                    <input type="hidden" value="{{ $editingGrade->id }}" name="id">
+                @endif
 
-                    <div class="row">
-
-                        {{--<div class="col-md-3 form-group mb-3">
-                         <label for="grading_name">Greading Name</label>
-                         <input name="grading_name" class="form-control" id="grading_name" type="text"/>
-                     </div> --}}
-
-
-
-                        <div class="col-md-3 form-group mb-3">
-                            <label for="grading_name">Greading Name </label>
-                            <input required class="form-control uperletter" id="grading_name" name="grading_name" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->grading_name }}" @endforeach @else value="" @endif placeholder="grading" />
-                        </div>
-
-
-
-
-                        <div class="col-md-3 form-group mb-3">
-                            <br>
-                            <label for="lastName1">Applicable to overall Grade</label><br>
-
-                            <label class="checkbox-inline">
-                                <input type="checkbox" name="op1" {{ (isset($stream_master[0]->applicable) && in_array('op1', explode(',', $stream_master[0]->applicable))) ? 'checked' : '' }}>
-                                Option 1
-                            </label>
-
-                            <label class="checkbox-inline">
-                                <input type="checkbox" name="op2" {{ (isset($stream_master[0]->applicable) && in_array('op2', explode(',', $stream_master[0]->applicable))) ? 'checked' : '' }}>
-                                Option 2
-                            </label>
-
-                            <label class="checkbox-inline">
-                                <input type="checkbox" name="op3" {{ (isset($stream_master[0]->applicable) && in_array('op3', explode(',', $stream_master[0]->applicable))) ? 'checked' : '' }}>
-                                Option 3
-                            </label>
-                        </div>
-
-
-
-
-
-
-
-
-                        {{-- <div class="col-md-3 form-group mb-3">
-                         <br>
-                         <label for="applicable">Applicable to overall Grade</label>
-                         <label class="radio-inline">
-                             <input type="checkbox" name="applica value="Option 1" checked>Option 1
-                           </label>
-                           <label class="radio-inline">
-                             <input type="checkbox" name="applicable" value="Option 2">Option 2
-                           </label>
-                           <label class="radio-inline">
-                             <input type="checkbox" name="applicable" value="Option 3">Option 3
-                           </label>
-                     </div> --}}
-
-                        <h5>Grade Details Below Percent Wise :-</h5>
-                        {{-- <div class="col-md-3 form-group mb-3">
-                         <label for="min_per">Min %</label>
-                         <input name="min_per" class="form-control" id="min_per" type="text"/>
-                     </div> --}}
-
-
-                        <div class="col-md-3 form-group mb-3">
-                            <label for="min_per">Min % </label>
-                            <input class="form-control" id="min_per" name="min_per" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->min_per }}" @endforeach @else value="" @endif placeholder="min%" />
-                        </div>
-
-                        {{-- <div class="col-md-3 form-group mb-3">
-                         <label for="max_per">Max %</label>
-                         <input name="max_per" class="form-control" id="max_per" type="text"/>
-                     </div> --}}
-
-
-                        <div class="col-md-3 form-group mb-3">
-                            <label for="max_per">Max %</label>
-                            <input class="form-control" id="max_per" name="max_per" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->max_per }}" @endforeach @else value="" @endif placeholder="max%" />
-                        </div>
-                        {{-- <div class="col-md-3 form-group mb-3">
-                         <label for="grade">Grade</label>
-                         <input name="grade" class="form-control" id="grade" type="text"/>
-                     </div>                      --}}
-
-
-                        <div class="col-md-3 form-group mb-3">
-                            <label for="grade">Grade </label>
-                            <input class="form-control uperletter" id="grade" name="grade" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->grade }}" @endforeach @else value="" @endif placeholder="grade" />
-                        </div>
-
-                        <input type="text" name="groups" id="groups" class="d-none">
-
-
-
-
-
-
-
-                        <div class="col-md-12">
-                            <button type="submit" id="submitBtn" class="btn btn-primary d-none">Submit</button>
-                            <button type="button" id="submitclickBtn" class="btn btn-primary">Submit</button>
-                            <button type="button" id="reset" class="btn btn-primary" name="btn" value="Reset Form">Reset</button>
-
-
-                            @if(request()->route()->getName() !== 'greadingmaster')
-                            <a href="{{ url('greadingmaster') }}" class="btn btn-primary">Add New</a>
-                            @endif
-
-                        </div>
+                <div class="row">
+                    <div class="col-md-6 form-group mb-3">
+                        <label for="grading_name">Grading Name</label>
+                        <input required class="form-control uperletter" id="grading_name" name="grading_name" type="text" value="{{ $editingGrade->grading_name ?? '' }}" placeholder="Grading" />
                     </div>
-                </form>
+
+                    <div class="col-md-6 form-group mb-3">
+                        <label for="subject_type">Subject Type</label>
+                        <select required class="form-control" id="subject_type" name="subject_type">
+                            <option value="">-- Please select --</option>
+                            @foreach($subjectTypes ?? [] as $subjectType)
+                                <option value="{{ $subjectType }}" {{ (($editingGrade->subject_type ?? '') == $subjectType) ? 'selected' : '' }}>{{ $subjectType }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="col-md-12">
+                        <h5>Grade Details Below Grade Point Wise :-</h5>
+                    </div>
+
+                    <div class="col-md-12 form-group mb-3">
+                        <div class="table-responsive">
+                            <table class="table table-bordered grade-range-table mb-2">
+                                <thead>
+                                    <tr>
+                                        <th>From Grade Point</th>
+                                        <th>To Grade Point</th>
+                                        <th>Grade</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="grade-range-body">
+                                    <tr class="grade-range-row">
+                                        <td>
+                                            <input required class="form-control" name="grade_ranges[0][min_per]" type="number" step="0.01" value="{{ $editingGrade->min_per ?? '' }}" placeholder="From" />
+                                        </td>
+                                        <td>
+                                            <input required class="form-control" name="grade_ranges[0][max_per]" type="number" step="0.01" value="{{ $editingGrade->max_per ?? '' }}" placeholder="To" />
+                                        </td>
+                                        <td>
+                                            <input required class="form-control uperletter" name="grade_ranges[0][grade]" type="text" value="{{ $editingGrade->grade ?? '' }}" placeholder="Grade" />
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-danger btn-sm remove-grade-row">Remove</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <button type="button" id="add-grade-row" class="btn btn-info btn-sm">Add More</button>
+                    </div>
+
+                    <input type="hidden" name="groups" id="groups" value="{{ $editingGrade->groups ?? '[]' }}">
+
+                    <div class="col-md-12">
+                        <div id="classes_error" class="text-danger mb-2"></div>
+                        <button type="submit" id="submitBtn" class="btn btn-primary">Save Grade</button>
+                        <button type="button" id="reset" class="btn btn-secondary" name="btn" value="Reset Form">Reset</button>
+
+                        @if(request()->route()->getName() !== 'greadingmaster')
+                            <a href="{{ url('greadingmaster') }}" class="btn btn-primary">Add New</a>
+                        @endif
+                    </div>
+                </div>
+            </form>
         </div>
 
         <div class="col-md-6 mb-4">
             <div class="card text-start">
-                <div class="card-body">                      
-                    <div class="table-responsive">
-                      <div id="classes_error" class="text-danger"></div>
-                    <table class="display table table-striped table-bordered" id="deafult_ordering_table_wrapper" style="width: 100%">
+                <div class="card-body">
+                    <h4 class="mb-3">Select Classes</h4>
+                    <div class="table-responsive class-list-panel">
+                        <table class="display table table-striped table-bordered" style="width: 100%">
                             <thead>
-                            <tr>
-                                <th>Sr.</th>
-                                <th>Class Name</th>
-                                <th class="action-checkbox-header">Action <input type="checkbox" class="class_checkbox_header"></th>
-                            </tr>
+                                <tr>
+                                    <th>Sr.</th>
+                                    <th>Class Name</th>
+                                    <th>Action <input type="checkbox" class="class_checkbox_header"></th>
+                                </tr>
                             </thead>
                             <tbody>
-                            @if(!empty($studentclasses))
-                    @foreach($studentclasses as $studentclasses)
-                    <tr>
-                      <td>{{++$i}}</td>
-                      <td>{{$studentclasses->class_name}}</td>  
-                      {{-- <td>{{$studentclasses->exam_name}}</td>                                             --}}
-                      <!-- <td><input type="checkbox" id="id_{{$studentclasses->class_name}}" name="class_checkbox" value="{{$studentclasses->class_name}}"></td> -->                          
-                      <td><input type="checkbox" class="class_checkbox"
-                        @if(!empty($exam_master))                                                                               
-                          @if(in_array($studentclasses->class_name, $exam_master[count($exam_master)-1]->class_name))
-                          checked
-                          @endif 
-                        @endif
-                        id="id_{{$studentclasses->class_name}}" name="class_checkbox" value="{{$studentclasses->class_name}}">
-                      </td>
-                        
-                      </tr>
-                    <!-- </?php $i++; ?> -->
-                    @endforeach
-                    @else
-                    <tr><td colspan="9" class="text-center">No Data Found</td></tr>
-                    @endif           
-                                <!-- <tr>
-                                    <td>1</td>
-                                    <td>9th</td>
-                                    <td><input type="checkbox" id="vehicle1" name="vehicle1" value="Bike"><br></td>
-                                </tr>
-                                <tr>
-                                    <td>2</td>
-                                    <td>10th</td>
-                                    <td><input type="checkbox" id="vehicle1" name="vehicle1" value="Bike"></td>
-                                </tr> -->
+                                @forelse($studentclasses ?? [] as $index => $class)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $class->class_name }}</td>
+                                        <td>
+                                            <input type="checkbox" class="class_checkbox" name="class_checkbox" value="{{ $class->class_name }}" {{ $selectedClasses->contains($class->class_name) ? 'checked' : '' }}>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="3" class="text-center">No Data Found</td></tr>
+                                @endforelse
                             </tbody>
-                            <!-- <tfoot>
-                            <tr>
-                                <th>Sr.</th>
-                                <th>Class Name</th>
-                                <th>Action </th>
-                            </tr>
-                            </tfoot> -->
                         </table>
-
-                        <div id="error-message" class="text-danger"></div>
-
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <!-- end of main-content -->
 
     <div class="separator-breadcrumb border-top"></div>
+
     <div class="row">
-
-
         <div class="col-md-12 mb-4">
             <div class="breadcrumb">
                 <h1 class="me-2">List of Saved Records :-</h1>
@@ -228,408 +150,147 @@ $i = 0;
             <div class="card text-start">
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="display table table-striped table-bordered" id="deafult_ordering_table_wrapper" style="width: 100%">
+                        <table class="display table table-striped table-bordered" style="width: 100%">
                             <thead>
                                 <tr>
                                     <th>Sr.</th>
                                     <th>Grading Name</th>
-                                    <th>Applicable to overall Grade </th>
-                                    <th>Min % </th>
-                                    <th>Max % </th>
-                                    <th>Grade </th>
-                                    <th>Action </th>
-
+                                    <th>Subject Type</th>
+                                    <th>From Grade Point</th>
+                                    <th>To Grade Point</th>
+                                    <th>Grade</th>
+                                    <th>Classes</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-
-
-                                @if(!empty($stream))
-                                @foreach($stream as $streams)
-                                <tr>
-                                    <td>{{++$i}}</td>
-                                    <td class= "uperletter">{{$streams->grading_name}}</td>
-                                    <td class= "uperletter">{{$streams->applicable}}</td>
-                                    <td>{{$streams->min_per}}</td>
-                                    <td>{{$streams->max_per}}</td>
-                                    <td class= "uperletter">{{$streams->grade}}</td>
-
-                                    <td class='d-flex'>
-                                        <a class="btn btn-primary m-1" href="{{ url('view-greadingmaster') .'/'.$streams->id}}">Edit</a>
-                                        <!-- <form id="deleteForm" method="post" action="{{url('delete-streammaster')}}">                                
-                                    @csrf
-                                    <input type="hidden" name="table_name" value="streams">
-                                    <input type="hidden" name="delete_id" value="{{ $streams->id }}">
-                                    <button type="button" class="btn btn-danger m-1" onclick="confirmDelete(event)">Delete</button>
-                                </form> -->
-                                        <?php $a = "grademaster"."-".$streams->id ; ?>
-                                        <a class="btn btn-raised ripple btn-danger m-1" href="{{url('delete-greadingmaster').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
-                                    </td>
-                                </tr>
-                                <!-- </?php $i++; ?> -->
-                                @endforeach
-                                @else
-                                <tr>
-                                    <td colspan="9" class="text-center">No Data Found</td>
-                                </tr>
-                                @endif
+                                @forelse($stream ?? [] as $index => $streams)
+                                    @php
+                                        $classes = collect(json_decode($streams->groups ?? '[]', true) ?: [])->implode(', ');
+                                    @endphp
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td class="uperletter">{{ $streams->grading_name }}</td>
+                                        <td>{{ $streams->subject_type ?? '-' }}</td>
+                                        <td>{{ $streams->min_per }}</td>
+                                        <td>{{ $streams->max_per }}</td>
+                                        <td class="uperletter">{{ $streams->grade }}</td>
+                                        <td>{{ $classes ?: '-' }}</td>
+                                        <td class="d-flex">
+                                            <a class="btn btn-primary m-1" href="{{ url('view-greadingmaster') . '/' . $streams->id }}">Edit</a>
+                                            @php $deleteKey = 'grademaster-' . $streams->id; @endphp
+                                            <a class="btn btn-raised ripple btn-danger m-1" href="{{ url('delete-greadingmaster') . '/' . $deleteKey }}" onclick="confirmDelete(event)">Delete</a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="8" class="text-center">No Data Found</td>
+                                    </tr>
+                                @endforelse
                             </tbody>
-                            <tfoot>
-
-                            </tfoot>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-
-
-
-
-    {{-- @php
-    $i = 0;
-    @endphp --}}
-
-    {{-- <form id="progress-form" class="p-4 progress-form" action="{{url('save-gread')}}" method="post">
-        
-        @csrf
-
-        <div class="row">
-
-            {{--<div class="col-md-3 form-group mb-3">
-             <label for="grading_name">Greading Name</label>
-             <input name="grading_name" class="form-control" id="grading_name" type="text"/>
-         </div> --}}
-
-            {{-- <div class="col-md-3 form-group mb-3">
-             <br>
-             <label for="applicable">Applicable to overall Grade</label>
-             <label class="radio-inline">
-                 <input type="checkbox" name="applica value="Option 1" checked>Option 1
-               </label>
-               <label class="radio-inline">
-                 <input type="checkbox" name="applicable" value="Option 2">Option 2
-               </label>
-               <label class="radio-inline">
-                 <input type="checkbox" name="applicable" value="Option 3">Option 3
-               </label>
-         </div> --}}
-
-            {{-- <h5>Co-Scholastic Areas :-</h5> --}}
-            {{-- <div class="col-md-3 form-group mb-3">
-             <label for="min_per">Min %</label>
-             <input name="min_per" class="form-control" id="min_per" type="text"/>
-         </div> --}}
-
-
-            {{-- <div class="col-md-3 form-group mb-3">
-                <label for="min_per">Term - I Grade </label>
-                <input class="form-control" id="term-i-grade-co-scholasticareas" name="term-i-grade-co-scholasticareas" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->min_per }}" @endforeach @else value="" @endif placeholder="Term - I Grade" />
-            </div> --}}
-
-            {{-- <div class="col-md-3 form-group mb-3">
-             <label for="max_per">Max %</label>
-             <input name="max_per" class="form-control" id="max_per" type="text"/>
-         </div> --}}
-
-
-            {{-- <div class="col-md-3 form-group mb-3">
-                <label for="max_per">Term - II Grade</label>
-                <input class="form-control" id="term-ii-grade-co-scholasticareas" name="term-ii-grade-co-scholasticareas" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->max_per }}" @endforeach @else value="" @endif placeholder="Term - II Grade" />
-            </div> --}}
-
-
-            {{-- <h5>Discipline :-</h5> --}}
-            {{-- <div class="col-md-3 form-group mb-3">
-             <label for="min_per">Min %</label>
-             <input name="min_per" class="form-control" id="min_per" type="text"/>
-         </div> --}}
-
-
-            {{-- <div class="col-md-3 form-group mb-3">
-                <label for="min_per">Term - I Grade</label>
-                <input class="form-control" id="term-i-grade-dicipline" name="term-i-grade-dicipline" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->min_per }}" @endforeach @else value="" @endif placeholder="Term - I Grade" />
-            </div> --}}
-
-            {{-- <div class="col-md-3 form-group mb-3">
-             <label for="max_per">Max %</label>
-             <input name="max_per" class="form-control" id="max_per" type="text"/>
-         </div> --}}
-
-
-            {{-- <div class="col-md-3 form-group mb-3">
-                <label for="term-ii-grade-dicipline">Term - II Grade</label>
-                <input class="form-control" id="term-ii-grade-dicipline" name="term-ii-grade-dicipline" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->max_per }}" @endforeach @else value="" @endif placeholder="Term - II Grade" />
-            </div> --}}
-
-            {{-- <div class="col-md-3 form-group mb-3">
-             <label for="grade">Grade</label>
-             <input name="grade" class="form-control" id="grade" type="text"/>
-         </div>                      --}}
-
-
-            {{-- <div class="col-md-3 form-group mb-3">
-                <label for="grade">Grade </label>
-                <input class="form-control uperletter" id="grade" name="grade" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->grade }}" @endforeach @else value="" @endif placeholder="grade" />
-            </div> --}}
-{{-- 
-            <input type="text" name="groups" id="groups" class="d-none">
-
-
-            <div class="col-md-12">
-                <button type="submit" id="submitBtn" class="btn btn-primary d-none">Submit</button>
-                <button type="button" id="submitclickBtn" class="btn btn-primary">Submit</button>
-                <button type="button" id="reset" class="btn btn-primary" name="btn" value="Reset Form">Reset</button>
-
-
-                @if(request()->route()->getName() !== 'greadingmaster')
-                <a href="{{ url('greadingmaster') }}" class="btn btn-primary">Add New</a>
-                @endif
-
-            </div>
-        </div>
-    </form>  --}}
-
-    {{-- <div class="col-md-12 mb-4">
-        <div class="breadcrumb">
-            <h1 class="me-2">List of Saved Records :-</h1>
-        </div>
-        <div class="separator-breadcrumb border-top"></div>
-
-        <div class="card text-start">
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="display table table-striped table-bordered" id="deafult_ordering_table_wrapper" style="width: 100%">
-                        <thead>
-                            <tr>
-                                <th>Sr.</th>
-                                <th>Term I Grade Co Scholasticareas</th>
-                                <th>Term II Grade Co Scholasticareas </th>
-                                <th>Term I Grade Dicipline	 </th>
-                                <th>Term II Grade Dicipline</th>
-                                {{-- <th>Grade </th> --}}
-                                {{-- <th>Action </th> --}}
-
-                            {{-- </tr> --}}
-                        {{-- </thead> --}}
-                        {{-- <tbody> --}}
-
-
-                            @if(!empty($stream))
-                            @foreach($stream as $streams)
-                            <tr>
-                                <td>{{++$i}}</td>
-                                <td class= "uperletter">{{$streams['term-i-grade-co-scholasticareas']}}</td>
-                                <td class= "uperletter">{{$streams['term-ii-grade-co-scholasticareas']}}</td>
-                                <td>{{$streams['term-i-grade-dicipline']}}</td>
-                                <td>{{$streams['term-ii-grade-dicipline']}}</td>
-                                {{-- <td class= "uperletter">{{$streams->grade}}</td> --}}
-
-                                {{-- <td class='d-flex'>
-                                    <a class="btn btn-primary m-1" href="{{ url('view-gread') .'/'.$streams->id}}">Edit</a> --}} 
-                                    <!-- <form id="deleteForm" method="post" action="{{url('delete-streammaster')}}">                                
-                                {{-- @csrf --}}
-                                <input type="hidden" name="table_name" value="streams">
-                                <input type="hidden" name="delete_id" value="{{ $streams->id }}">
-                                <button type="button" class="btn btn-danger m-1" onclick="confirmDelete(event)">Delete</button>
-                            </form> -->
-                                    {{-- </?php $a = "grades"."-".$streams->id ; ?>
-                                    <a class="btn btn-raised ripple btn-danger m-1" href="{{url('delete-gread').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
-                                </td> --}}
-                            {{-- </tr> --}}
-                            <!-- </?php $i++; ?> -->
-                            @endforeach
-                            @else
-                            <tr>
-                                <td colspan="9" class="text-center">No Data Found</td>
-                            </tr>
-                            @endif
-                        {{-- </tbody> --}}
-                        {{-- <tfoot>
-
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </div> --}}
-    {{-- </div>  --}}
 </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-    <!-- end of main-content -->
-</div>
-
-
-
-
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 <script>
     function confirmDelete(event) {
-        event.preventDefault(); // Prevents the default link navigation
+        event.preventDefault();
 
         Swal.fire({
-            title: 'Are you sure?'
-            , text: "You won't be able to revert this!"
-            , icon: 'warning'
-            , showCancelButton: true
-            , confirmButtonColor: '#d33'
-            , cancelButtonColor: '#3085d6'
-            , confirmButtonText: 'Yes, delete it!'
-            , cancelButtonText: 'Cancel'
+            title: 'Are you sure?',
+            text: "You won't be able to revert this!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
         }).then((result) => {
             if (result.isConfirmed) {
-                // If the user clicks on "Yes, delete it!", navigate to the delete URL
                 window.location.href = event.target.href;
             }
         });
     }
 
+    document.addEventListener('DOMContentLoaded', function() {
+        $('.class_checkbox_header').change(function () {
+            $('.class_checkbox').prop('checked', $(this).prop('checked'));
+        });
 
-
-    //  submitclickBtn
-
-    document.addEventListener("DOMContentLoaded", function() {
-
-
-        $('#submitclickBtn').click(function() {
-
-            // let selectedGrad = document.getElementById("grad_table_body").children;
-            // let selectedGradData = [];
-
-            // for (var i = 0; i < selectedGrad.length; i++) {
-            //     let tr_elm = selectedGrad[i];
-            //     let gradObj = {};
-
-            //     if (tr_elm.children[3].children[0].checked) {
-            //         gradObj['grade'] = (tr_elm.children[1].innerHTML).trim();
-            //         gradObj['grading_name'] = (tr_elm.children[2].innerHTML).trim();
-            //         selectedGradData.push(gradObj);
-            //     }
-            // }
-
-            // console.log(selectedGradData);
-
-            // const selectedGradjsonData = JSON.stringify(selectedGradData);
-            
-            let classes = [];
-            $("input:checkbox[name=class_checkbox]:checked").each(function(){
+        $('#progress-form').on('submit', function(e) {
+            const classes = [];
+            $("input:checkbox[name=class_checkbox]:checked").each(function() {
                 classes.push($(this).val());
             });
-            const selectedGradjsonData = JSON.stringify(classes);
 
-            $("#groups").val(selectedGradjsonData)
-            $("#submitBtn").click();
-
-        })
-    })
-
-    document.addEventListener('DOMContentLoaded', function() {
-        $("#reset").on("click", function () {
-            $("#grading_name").val("");     
-            $("#max_per").val("");     
-            $("#min_per").val("");                      
-            $("#grade").val(""); 
-            $("input[type='checkbox']").prop('checked', false);
-            $("input[type='radio']").prop('checked', false);              
-        });
-    })
-
-
-</script>
-
-<script>
-     $(document).ready(function () {
-        // Handle the "Action" checkbox change event
-        $('.class_checkbox_header').change(function () {
-            // Get the state of the "Action" checkbox
-            var isChecked = $(this).prop('checked');
-
-            // Set the state of all checkboxes in the column based on the "Action" checkbox
-            $('.class_checkbox').prop('checked', isChecked);
-        });
-
-
-        function create_exammaster(e){
+            if (classes.length < 1) {
                 e.preventDefault();
-                $("#classes_error").html("");
-                const _token = document.getElementsByName("_token")[0].value;
-
-                let classes = [];
-                $("input:checkbox[name=class_checkbox]:checked").each(function(){
-                  classes.push($(this).val());
-                });
-
-                if(classes.length<1){
-                  $("#classes_error").html("Please select at least one class.")
-                  return
-                }
-
-                let classes_names = classes.join(",");                               
-
-                var formData = new FormData()
-                formData.append('_token', _token);                
-                formData.append('exam_name', $('#exam_name').val());
-                formData.append('max_marks_theory', $('#max_marks_theory').val());
-                formData.append('max_marks_practical', $('#max_marks_practical').val());
-                formData.append('fail_if', $('#fail_if').val());                
-                formData.append('exam_type', $('#exam_type').val());
-                
-                formData.append('remarks', $('#remarks').val());                
-                formData.append('is_ser', $('#is_ser').is(":checked"));
-                formData.append('class_name', classes_names);
-                // alert(formData);
-                // formData.append('file', $('#file_path').prop('files')[0])
-                $.ajax({
-                   // url: "/lvn-school/public/save-exammaster",
-                  //  {{url('save-exammaster')}},
-                  url: "{{url('save-exammaster')}}",
-                    type: "POST",
-                    // dataType: "json",
-                    data: formData,                    
-                    contentType: false,
-                    cache: false,
-                    processData: false,
-                    success: function(response) {
-                      console.log(response);
-                      toastr.success("exammaster has been created successfully.", "Success");                     
-                      // toastr.error("exammaster has been created successfully.", "Success");                     
-                      setTimeout(() => {
-                        // location.reload()
-                        window.location.href = "{{ route('exammaster') }}";
-
-                      }, 1500);
-                    }
-                });
+                $('#classes_error').html('Please select at least one class.');
+                return;
             }
-    
 
+            $('#classes_error').html('');
+            $('#groups').val(JSON.stringify(classes));
+        });
 
+        let gradeRangeIndex = 1;
+        $('#add-grade-row').on('click', function () {
+            $('#grade-range-body').append(`
+                <tr class="grade-range-row">
+                    <td>
+                        <input required class="form-control" name="grade_ranges[${gradeRangeIndex}][min_per]" type="number" step="0.01" placeholder="From" />
+                    </td>
+                    <td>
+                        <input required class="form-control" name="grade_ranges[${gradeRangeIndex}][max_per]" type="number" step="0.01" placeholder="To" />
+                    </td>
+                    <td>
+                        <input required class="form-control uperletter" name="grade_ranges[${gradeRangeIndex}][grade]" type="text" placeholder="Grade" />
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-danger btn-sm remove-grade-row">Remove</button>
+                    </td>
+                </tr>
+            `);
+            gradeRangeIndex++;
+        });
 
+        $(document).on('click', '.remove-grade-row', function () {
+            if ($('.grade-range-row').length === 1) {
+                $(this).closest('tr').find('input').val('');
+                return;
+            }
 
+            $(this).closest('tr').remove();
+        });
 
-
+        $('#reset').on('click', function () {
+            $('#grading_name, #subject_type').val('');
+            $('#grade-range-body').html(`
+                <tr class="grade-range-row">
+                    <td>
+                        <input required class="form-control" name="grade_ranges[0][min_per]" type="number" step="0.01" placeholder="From" />
+                    </td>
+                    <td>
+                        <input required class="form-control" name="grade_ranges[0][max_per]" type="number" step="0.01" placeholder="To" />
+                    </td>
+                    <td>
+                        <input required class="form-control uperletter" name="grade_ranges[0][grade]" type="text" placeholder="Grade" />
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-danger btn-sm remove-grade-row">Remove</button>
+                    </td>
+                </tr>
+            `);
+            gradeRangeIndex = 1;
+            $('.class_checkbox, .class_checkbox_header').prop('checked', false);
+            $('#groups').val('[]');
+            $('#classes_error').html('');
+        });
     });
-
-
 </script>
-
-
-
-</div>
 @endsection

@@ -124,16 +124,18 @@ class MarksheetController extends Controller
         $studentId = $request->integer('student_id') ?: null;
         $template = $this->fixedTemplate();
         $printData = $this->buildPrintData($classId, $examId, $studentId, $request);
+        $sheets = [compact('template', 'printData')];
 
-        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData'));
+        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
     }
 
     public function printGenerated(Marksheet $marksheet, Request $request)
     {
         ['template' => $template, 'printData' => $printData] = $this->savedPrintSheet($marksheet, $request);
         $marksheet->forceFill(['printed_at' => now()])->save();
+        $sheets = [compact('template', 'printData')];
 
-        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData'));
+        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
     }
 
     public function bulkPrintGeneratedPage(string $marksheets, Request $request)
@@ -251,13 +253,16 @@ class MarksheetController extends Controller
         $rows = [];
         $grandTotal = 0.0;
         $maxTotal = 0.0;
+        $hasFailingSubject = false;
 
         foreach ($subjects as $subject) {
             $row = [
+                'subject_id' => (int) $subject->id,
                 'subject' => $this->marksheetSubjectName($subject->subject_name ?? $subject->name ?? '-'),
                 'terms' => [],
                 'grand_total' => 0,
                 'grade' => '',
+                'result' => '',
             ];
 
             foreach ($layout['scholastic_terms'] as $termIndex => $term) {
@@ -288,23 +293,36 @@ class MarksheetController extends Controller
                 if ($termTotal === 0.0) {
                     $termTotal = (float) $termValues['final_total'];
                 }
-                $maxTotal += $this->termMax($term);
+                $termMax = $this->termMax($term);
+                $termFailed = $this->isBelowFailPercent($termTotal, $termMax, $termExam);
+                $hasFailingSubject = $hasFailingSubject || $termFailed;
+                $maxTotal += $termMax;
                 $row['terms'][$termIndex] = [
                     'cells' => $cells,
                     'total' => $termTotal,
-                    'grade' => $this->gradeFor($termTotal, $this->termMax($term), $grading),
+                    'grade' => $this->gradeFor($termTotal, $termMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null),
+                    'result' => $termFailed ? 'Fail' : 'Pass',
                 ];
                 $row['grand_total'] += $termTotal;
                 $grandTotal += $termTotal;
             }
 
-            $row['grade'] = $this->gradeFor($row['grand_total'], max(1, $this->rowMax($layout)), $grading);
+            $rowMax = max(1, $this->rowMax($layout));
+            $rowFailed = $this->isBelowFailPercent($row['grand_total'], $rowMax, $exam);
+            $hasFailingSubject = $hasFailingSubject || $rowFailed;
+            $row['grade'] = $this->gradeFor($row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
+            $row['result'] = $rowFailed ? 'Fail' : 'Pass';
             $rows[] = $row;
         }
 
-        $percentage = $maxTotal > 0 ? round(($grandTotal / $maxTotal) * 100, 2) : null;
-        $result = $percentage !== null && $percentage >= (float) ($logic['pass_percentage'] ?? 33) ? 'Passed' : ($percentage === null ? '' : 'Needs Improvement');
-        $remarks = $logic['default_remark'] ?? 'Passed and promoted to next class.';
+        $percentageRaw = $maxTotal > 0 ? ($grandTotal / $maxTotal) * 100 : null;
+        $percentage = $percentageRaw !== null ? $this->roundPercentage($percentageRaw) : null;
+        $result = $percentageRaw === null
+            ? ''
+            : ($hasFailingSubject || $this->isBelowFailPercent($grandTotal, $maxTotal, $exam) ? 'Fail' : 'Pass');
+        $remarks = $result === 'Fail'
+            ? 'Needs Improvement'
+            : ($logic['default_remark'] ?? 'Passed and promoted to next class.');
 
         return [
             'layout' => $layout,
@@ -332,6 +350,11 @@ class MarksheetController extends Controller
             'title' => 'Term - II (Annual) Examination Report Card',
             'student_fields' => ['student_name', 'mother_name', 'father_name', 'scholar_no', 'roll_no', 'date_of_birth', 'class_section'],
             'optional_fields' => ['percentage', 'attendance'],
+            'separate_subject_ids' => collect(Config::get('global.marksheet_separate_subject_ids', [14, 5]))
+                ->map(fn ($id) => (int) $id)
+                ->filter()
+                ->values()
+                ->all(),
             'scholastic_terms' => [
                 [
                     'key' => 'term_1',
@@ -456,7 +479,7 @@ class MarksheetController extends Controller
                 ->where(function ($q) {
                     $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
                 })
-                ->select('s.id', 's.subject_name')
+                ->select('s.id', 's.subject_name', 's.subject_type')
                 ->distinct()
                 ->orderBy('cs.subject_order')
                 ->orderBy('s.subject_name')
@@ -472,7 +495,7 @@ class MarksheetController extends Controller
                 ->table('academic_class_subject as acs')
                 ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
                 ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
-                ->select('s.id', 's.subject_name')
+                ->select('s.id', 's.subject_name', 's.subject_type')
                 ->orderBy('s.subject_name')
                 ->get();
             if ($subjects->count() > 0) {
@@ -488,7 +511,7 @@ class MarksheetController extends Controller
                         $q->where('is_delete', 0)->orWhereNull('is_delete');
                     }
                 })
-                ->select('id', 'subject_name')
+                ->select('id', 'subject_name', 'subject_type')
                 ->orderBy('subject_name')
                 ->get();
         }
@@ -782,13 +805,13 @@ class MarksheetController extends Controller
         $internalTotal = min(20, $pt + $nb + $mas + $sea);
 
         return [
-            'theory' => $theory,
+            'theory' => $this->roundMark($theory),
             'pt' => $pt,
             'nb' => $nb,
             'mas' => $mas,
             'sea' => $sea,
-            'internal_total' => $internalTotal,
-            'final_total' => min(100, $theory + $internalTotal),
+            'internal_total' => $this->roundMark($internalTotal),
+            'final_total' => $this->roundMark(min(100, $theory + $internalTotal)),
         ];
     }
 
@@ -811,7 +834,7 @@ class MarksheetController extends Controller
             $max = max(1, $obtained);
         }
 
-        return round(min(5, ($obtained / $max) * 5), 2);
+        return $this->roundPtMark(min(5, ($obtained / $max) * 5));
     }
 
     private function internalAssessmentValue($mark, array $keys): float
@@ -828,7 +851,7 @@ class MarksheetController extends Controller
         foreach ($internalMarks as $key => $value) {
             $normalizedKey = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
             if (in_array($normalizedKey, $normalizedKeys, true)) {
-                return min(5, $this->numericMark($value));
+                return $this->roundMark(min(5, $this->numericMark($value)));
             }
         }
 
@@ -840,13 +863,29 @@ class MarksheetController extends Controller
         return is_numeric($value) ? (float) $value : 0.0;
     }
 
+    private function roundMark(float $value): float
+    {
+        return round($value, 0, PHP_ROUND_HALF_UP);
+    }
+
+    private function roundPtMark(float $value): float
+    {
+        return $this->roundMark($value);
+    }
+
+    private function roundPercentage(float $value): float
+    {
+        return round($value, 2, PHP_ROUND_HALF_UP);
+    }
+
+    private function formatPtMarkValue(float $value): string
+    {
+        return $this->formatMarkValue($value);
+    }
+
     private function formatMarkValue(float $value): string
     {
-        if (abs($value - round($value)) < 0.005) {
-            return (string) (int) round($value);
-        }
-
-        return number_format($value, 2, '.', '');
+        return number_format($this->roundMark($value), 2, '.', '');
     }
 
     private function internalAssessmentMarks($mark): array
@@ -879,13 +918,34 @@ class MarksheetController extends Controller
         return collect($layout['scholastic_terms'] ?? [])->sum(fn ($term) => $this->termMax($term));
     }
 
-    private function gradeFor(float $marks, float $max, array $grading): string
+    private function isBelowFailPercent(float $marks, float $max, $exam = null): bool
+    {
+        if ($max <= 0) {
+            return false;
+        }
+
+        return (($marks / $max) * 100) < $this->failPercentFor($exam);
+    }
+
+    private function failPercentFor($exam = null): float
+    {
+        $failPercent = (float) ($exam->fail_percent ?? 0);
+
+        return $failPercent > 0 ? $failPercent : 33.0;
+    }
+
+    private function gradeFor(float $marks, float $max, array $grading, ?string $className = null, ?string $subjectType = null): string
     {
         if ($max <= 0) {
             return '';
         }
 
         $percentage = ($marks / $max) * 100;
+        $dynamicGrade = $this->gradeFromMaster($percentage, $className, $subjectType);
+        if ($dynamicGrade !== '') {
+            return $dynamicGrade;
+        }
+
         foreach (($grading['scale'] ?? []) as $range) {
             if ($percentage >= (float) ($range['min'] ?? 0) && $percentage <= (float) ($range['max'] ?? 100)) {
                 return (string) ($range['grade'] ?? '');
@@ -893,6 +953,32 @@ class MarksheetController extends Controller
         }
 
         return '';
+    }
+
+    private function gradeFromMaster(float $marks, ?string $className, ?string $subjectType): string
+    {
+        if (!Schema::connection('dynamic')->hasTable('grademaster')) {
+            return '';
+        }
+
+        $subjectType = trim((string) $subjectType);
+        if ($subjectType === '') {
+            return '';
+        }
+
+        $range = DB::connection('dynamic')->table('grademaster')
+            ->where('is_delete', 0)
+            ->whereRaw('LOWER(TRIM(subject_type)) = ?', [strtolower($subjectType)])
+            ->whereRaw('CAST(min_per AS DECIMAL(10,2)) <= ?', [$marks])
+            ->whereRaw('CAST(max_per AS DECIMAL(10,2)) >= ?', [$marks])
+            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
+            ->get()
+            ->first(function ($item) use ($className) {
+                $classes = collect(json_decode($item->groups ?? '[]', true) ?: []);
+                return $classes->isEmpty() || $classes->contains($className);
+            });
+
+        return (string) ($range->grade ?? '');
     }
 
     private function resolveDynamicSessionYear(Request $request): ?string
