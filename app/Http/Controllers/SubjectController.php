@@ -45,7 +45,8 @@ class SubjectController extends Controller
                 "subject_name" => $request->input('subject_name'),
                 "subject_type" => $request->input('subject_type'),
                 "evaluation" => $request->input('evaluation'),
-                "practical" => $request->input('practical')
+                "practical" => $request->input('practical'),
+                "do_not_print_in_main_scholastic_area" => $request->boolean('special_subject_formatting'),
             ]);
             $classes = $request->input('classes');
             foreach ($classes as $classId) {
@@ -88,6 +89,7 @@ class SubjectController extends Controller
             'subject_type' => $request->subject_type,
             'evaluation' => $request->evaluation,
             'practical' => $request->practical,
+            'do_not_print_in_main_scholastic_area' => $request->boolean('special_subject_formatting'),
         ];
         $subject = Subject::findOrFail($request->id);
         $subject->update($data);

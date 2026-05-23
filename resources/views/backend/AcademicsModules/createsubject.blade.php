@@ -151,6 +151,13 @@
                     } ?> value="Yes">
                     <label for="vehicle1"> Yes</label><br>
                 </div>
+                <div class="col-md-4 form-group mb-3">
+                    <label for="special_subject_formatting">Special Subject Formatting</label><br>
+                    <input type="checkbox" id="special_subject_formatting" name="special_subject_formatting" value="1" <?php if (!empty($subject_s[0]['do_not_print_in_main_scholastic_area'])) {
+                        echo 'checked';
+                    } ?>>
+                    <label for="special_subject_formatting"> Yes</label><br>
+                </div>
                 <div class="col-md-12">
                     <button class="btn btn-primary">Submit</button>
                     <button type="button" id="reset" class="btn btn-primary" name="btn"
@@ -190,6 +197,7 @@
                                         <th>Classes Name</th>
                                         <th>Subject Type</th>
                                         <th>Is Practical Type</th>
+                                        <th>Special Subject Formatting</th>
                                         <th>Evaluation</th>
                                         <th>Action</th>
                                     </tr>
@@ -208,6 +216,7 @@
                                                 @endforeach</td>
                                                 <td>{{ $data->subject_type }}</td>
                                                 <td>{{ $data->practical }}</td>
+                                                <td>{{ !empty($data->do_not_print_in_main_scholastic_area) ? 'Yes' : 'No' }}</td>
                                                 <td>{{ $data->evaluation }}</td>
                                                 <td>
                                                     <a class="btn btn-primary m-1"
@@ -232,8 +241,10 @@
                                     <tr>
                                         <th>Sr.</th>
                                         <th>Subject Name</th>
+                                        <th>Classes Name</th>
                                         <th>Subject Type</th>
                                         <th>Is Practical Type</th>
+                                        <th>Special Subject Formatting</th>
                                         <th>Evaluation</th>
                                         <th>Action</th>
                                     </tr>

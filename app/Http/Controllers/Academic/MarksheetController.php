@@ -259,6 +259,7 @@ class MarksheetController extends Controller
             $row = [
                 'subject_id' => (int) $subject->id,
                 'subject' => $this->marksheetSubjectName($subject->subject_name ?? $subject->name ?? '-'),
+                'special_subject_formatting' => !empty($subject->do_not_print_in_main_scholastic_area),
                 'terms' => [],
                 'grand_total' => 0,
                 'grade' => '',
@@ -295,8 +296,11 @@ class MarksheetController extends Controller
                 }
                 $termMax = $this->termMax($term);
                 $termFailed = $this->isBelowFailPercent($termTotal, $termMax, $termExam);
-                $hasFailingSubject = $hasFailingSubject || $termFailed;
-                $maxTotal += $termMax;
+                if (empty($row['special_subject_formatting'])) {
+                    $hasFailingSubject = $hasFailingSubject || $termFailed;
+                    $maxTotal += $termMax;
+                    $grandTotal += $termTotal;
+                }
                 $row['terms'][$termIndex] = [
                     'cells' => $cells,
                     'total' => $termTotal,
@@ -304,12 +308,13 @@ class MarksheetController extends Controller
                     'result' => $termFailed ? 'Fail' : 'Pass',
                 ];
                 $row['grand_total'] += $termTotal;
-                $grandTotal += $termTotal;
             }
 
             $rowMax = max(1, $this->rowMax($layout));
             $rowFailed = $this->isBelowFailPercent($row['grand_total'], $rowMax, $exam);
-            $hasFailingSubject = $hasFailingSubject || $rowFailed;
+            if (empty($row['special_subject_formatting'])) {
+                $hasFailingSubject = $hasFailingSubject || $rowFailed;
+            }
             $row['grade'] = $this->gradeFor($row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
             $row['result'] = $rowFailed ? 'Fail' : 'Pass';
             $rows[] = $row;
@@ -330,6 +335,7 @@ class MarksheetController extends Controller
             'student' => $student,
             'student_meta' => $this->studentMeta($student),
             'class' => $class,
+            'class_section' => $this->classSectionText($class, $student),
             'exam' => $exam,
             'roll_no' => $rollNo,
             'rows' => $rows,
@@ -362,10 +368,10 @@ class MarksheetController extends Controller
                     'exam_type' => 'Term 1',
                     'pt_exam_type' => 'PT 1',
                     'columns' => [
-                        ['label' => 'PT (5)', 'source' => 'pt', 'max' => 5],
-                        ['label' => 'NB (5)', 'source' => 'nb', 'max' => 5],
-                        ['label' => 'MAS (5)', 'source' => 'mas', 'max' => 5],
-                        ['label' => 'SEA (5)', 'source' => 'sea', 'max' => 5],
+                        ['label' => 'PT', 'source' => 'pt', 'max' => 5],
+                        ['label' => 'NB', 'source' => 'nb', 'max' => 5],
+                        ['label' => 'MAS', 'source' => 'mas', 'max' => 5],
+                        ['label' => 'SEA', 'source' => 'sea', 'max' => 5],
                         ['label' => 'Theory (80)', 'source' => 'mark_theory', 'max' => 80],
                         ['label' => 'Marks obtained (100)', 'source' => 'final_total', 'max' => 100, 'counts_in_total' => true],
                     ],
@@ -376,10 +382,10 @@ class MarksheetController extends Controller
                     'exam_type' => 'Term 2',
                     'pt_exam_type' => 'PT 2',
                     'columns' => [
-                        ['label' => 'PT (5)', 'source' => 'pt', 'max' => 5],
-                        ['label' => 'NB (5)', 'source' => 'nb', 'max' => 5],
-                        ['label' => 'MAS (5)', 'source' => 'mas', 'max' => 5],
-                        ['label' => 'SEA (5)', 'source' => 'sea', 'max' => 5],
+                        ['label' => 'PT', 'source' => 'pt', 'max' => 5],
+                        ['label' => 'NB', 'source' => 'nb', 'max' => 5],
+                        ['label' => 'MAS', 'source' => 'mas', 'max' => 5],
+                        ['label' => 'SEA', 'source' => 'sea', 'max' => 5],
                         ['label' => 'Theory (80)', 'source' => 'mark_theory', 'max' => 80],
                         ['label' => 'Marks obtained (100)', 'source' => 'final_total', 'max' => 100, 'counts_in_total' => true],
                     ],
@@ -463,6 +469,7 @@ class MarksheetController extends Controller
     private function subjectsFor(?int $classId, ?int $studentId)
     {
         $class = $classId ? Classes::query()->find($classId) : null;
+        $subjectColumns = $this->marksheetSubjectColumns();
 
         if ($studentId && Schema::connection('dynamic')->hasTable('subject_assign_student') && Schema::connection('dynamic')->hasTable('combination_subject')) {
             $assigned = DB::connection('dynamic')
@@ -479,7 +486,7 @@ class MarksheetController extends Controller
                 ->where(function ($q) {
                     $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
                 })
-                ->select('s.id', 's.subject_name', 's.subject_type')
+                ->select($subjectColumns)
                 ->distinct()
                 ->orderBy('cs.subject_order')
                 ->orderBy('s.subject_name')
@@ -495,7 +502,7 @@ class MarksheetController extends Controller
                 ->table('academic_class_subject as acs')
                 ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
                 ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
-                ->select('s.id', 's.subject_name', 's.subject_type')
+                ->select($subjectColumns)
                 ->orderBy('s.subject_name')
                 ->get();
             if ($subjects->count() > 0) {
@@ -511,12 +518,30 @@ class MarksheetController extends Controller
                         $q->where('is_delete', 0)->orWhereNull('is_delete');
                     }
                 })
-                ->select('id', 'subject_name', 'subject_type')
+                ->select(
+                    'id',
+                    'subject_name',
+                    'subject_type',
+                    Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
+                        ? 'do_not_print_in_main_scholastic_area'
+                        : DB::raw('0 as do_not_print_in_main_scholastic_area')
+                )
                 ->orderBy('subject_name')
                 ->get();
         }
 
         return collect();
+    }
+
+    private function marksheetSubjectColumns(): array
+    {
+        $columns = ['s.id', 's.subject_name', 's.subject_type'];
+
+        $columns[] = Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
+            ? 's.do_not_print_in_main_scholastic_area'
+            : DB::raw('0 as do_not_print_in_main_scholastic_area');
+
+        return $columns;
     }
 
     private function marksForStudent(int $studentId, ?int $classId, ?int $examId, array $layout)
@@ -642,7 +667,7 @@ class MarksheetController extends Controller
     private function rollNoFor(?int $studentId, ?int $classId, ?int $examId): string
     {
         if (!$studentId || !Schema::connection('dynamic')->hasTable('academic_student_roll_no')) {
-            return '';
+            return $this->studentRegistrationRollNo($studentId);
         }
 
         $className = $classId ? Classes::query()->where('id', $classId)->value('class_name') : null;
@@ -660,11 +685,89 @@ class MarksheetController extends Controller
                     }
                 });
             })
-            ->when($examId, fn ($q) => $q->where('exam_id', (string) $examId))
+            ->when($examId, function ($q) use ($examId) {
+                $q->where(function ($inner) use ($examId) {
+                    $inner->where('exam_id', (string) $examId)
+                        ->orWhereNull('exam_id')
+                        ->orWhere('exam_id', '');
+                });
+            })
             ->latest('id')
             ->first();
 
-        return (string) ($row->roll_no ?? '');
+        return (string) ($row->roll_no ?? $this->studentRegistrationRollNo($studentId));
+    }
+
+    private function studentRegistrationRollNo(?int $studentId): string
+    {
+        if (!$studentId || !Schema::connection('dynamic')->hasTable('student_registration')) {
+            return '';
+        }
+
+        $student = DB::connection('dynamic')->table('student_registration')->where('id', $studentId)->first();
+
+        return (string) ($student->roll_no ?? $student->roll_number ?? '');
+    }
+
+    private function classSectionText($class, $student): string
+    {
+        $className = $this->romanClassName((string) ($class->class_name ?? $student->class_name ?? ''));
+        $sectionName = $this->studentSectionName($student);
+
+        return trim($className . ($sectionName !== '' ? ' - ' . $sectionName : ''));
+    }
+
+    private function studentSectionName($student): string
+    {
+        if (!$student) {
+            return '';
+        }
+
+        if (!empty($student->section_name)) {
+            return (string) $student->section_name;
+        }
+
+        foreach (['json_str', 'jsondata'] as $field) {
+            if (!empty($student->{$field})) {
+                $decoded = json_decode($student->{$field}, true);
+                if (is_array($decoded) && !empty($decoded['section_name'])) {
+                    return is_array($decoded['section_name'])
+                        ? (string) reset($decoded['section_name'])
+                        : (string) $decoded['section_name'];
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function romanClassName(string $className): string
+    {
+        $value = trim($className);
+        if ($value === '') {
+            return '';
+        }
+
+        $romanMap = [
+            1 => 'I',
+            2 => 'II',
+            3 => 'III',
+            4 => 'IV',
+            5 => 'V',
+            6 => 'VI',
+            7 => 'VII',
+            8 => 'VIII',
+            9 => 'IX',
+            10 => 'X',
+            11 => 'XI',
+            12 => 'XII',
+        ];
+
+        if (preg_match('/(^|\D)(1[0-2]|[1-9])(\D|$)/', $value, $match)) {
+            return trim(str_replace($match[2], $romanMap[(int) $match[2]] ?? $match[2], $value));
+        }
+
+        return $value;
     }
 
     private function studentMeta($student): array

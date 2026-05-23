@@ -33,9 +33,10 @@
         width: 281mm;
         height: 194mm;
         margin: 0 auto;
-        padding: 30mm 0 18mm;
+        padding: 30mm 0 34mm;
         position: relative;
         overflow: hidden;
+        background: #fff;
         break-after: page;
         page-break-after: always;
         page-break-inside: avoid;
@@ -56,6 +57,15 @@
     .date {
         text-align: right;
         font-size: 11px;
+    }
+
+    .cbse-logo {
+        position: absolute;
+        top: 8mm;
+        right: 1mm;
+        width: 18mm;
+        height: 18mm;
+        object-fit: contain;
     }
 
     .title {
@@ -150,15 +160,62 @@
 
     .summary {
         display: grid;
-        grid-template-columns: 1fr 32mm 34mm 32mm;
+        grid-template-columns: 1fr 34mm 42mm;
         gap: 5mm;
         align-items: center;
         font-size: 13px;
         margin-top: 3mm;
+        margin-bottom: 2mm;
+    }
+
+    .summary div:nth-child(2),
+    .summary div:nth-child(3) {
+        text-align: right;
     }
 
     .remarks {
         font-weight: bold;
+    }
+
+    .footer-area {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: grid;
+        grid-template-columns: 58mm 132mm 58mm;
+        align-items: end;
+        justify-content: space-between;
+        gap: 0;
+        font-size: 12px;
+        background: #fff;
+    }
+
+    .signature {
+        min-height: 16mm;
+        display: flex;
+        align-items: end;
+        justify-content: center;
+        font-weight: bold;
+        text-align: center;
+    }
+
+    .signature:first-child {
+        justify-content: flex-start;
+        text-align: left;
+    }
+
+    .signature:last-child {
+        justify-content: flex-end;
+        text-align: right;
+    }
+
+    .abbr-box {
+        border: 1px solid #333;
+        padding: 2mm 3mm;
+        text-align: center;
+        font-weight: bold;
+        line-height: 1.25;
     }
 
     @media print {
@@ -206,64 +263,17 @@
             return is_numeric($value) ? (float) $value : 0;
             });
             };
-            $hasSubject = function ($subjects, $subject) {
-            $needle = strtolower(preg_replace('/\s+/', ' ', trim((string) $subject)));
-            return collect($subjects)->contains(fn ($item) => str_contains($item, $needle) || str_contains($needle, $item));
-            };
-            $isPrimaryAdditionalSubject = function ($subject) {
-            $value = strtolower(preg_replace('/\s+/', ' ', trim((string) $subject)));
-
-            return str_contains($value, 'computer') || str_contains($value, 'sanskrit');
-            };
-            $classNumber = function ($className) {
-            $value = strtolower(preg_replace('/\s+/', ' ', trim((string) $className)));
-            if (preg_match('/(^|\D)([1-5])(\D|$)/', $value, $match)) {
-            return (int) $match[2];
-            }
-
-            $romanMap = ['i' => 1, 'ii' => 2, 'iii' => 3, 'iv' => 4, 'v' => 5];
-            foreach ($romanMap as $roman => $number) {
-            if (preg_match('/(^|\W)' . preg_quote($roman, '/') . '(\W|$)/', $value)) {
-            return $number;
-            }
-            }
-
-            $wordMap = ['one' => 1, 'first' => 1, 'two' => 2, 'second' => 2, 'three' => 3, 'third' => 3, 'four' => 4, 'fourth' => 4, 'five' => 5, 'fifth' => 5];
-            foreach ($wordMap as $word => $number) {
-            if (preg_match('/(^|\W)' . preg_quote($word, '/') . '(\W|$)/', $value)) {
-            return $number;
-            }
-            }
-
-            return null;
-            };
             @endphp
             @foreach($sheets as $sheet)
             @php
             $template = $sheet['template'];
             $printData = $sheet['printData'];
-            $className = (string) optional($printData['class'])->class_name;
-            $isPrimaryClass = in_array($classNumber($className), [1, 2, 3, 4, 5], true);
             $allRows = collect($printData['rows']);
-            $primarySubjectRows = $isPrimaryClass ? $allRows->filter(fn ($row) => $isPrimaryAdditionalSubject($row['subject'] ?? ''))->values() : collect();
-            $scholasticRows = $isPrimaryClass ? $allRows->reject(fn ($row) => $isPrimaryAdditionalSubject($row['subject'] ?? ''))->values() : $allRows;
-            $primaryAdditionalSubjects = $isPrimaryClass
-            ? collect(['Computer Science', 'Sanskrit'])->map(function ($subject) use ($primarySubjectRows, $hasSubject, $printData) {
-            $matchedRow = $primarySubjectRows->first(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject));
-
-            return $matchedRow ?: [
-            'subject' => $subject,
-            'terms' => collect($printData['layout']['scholastic_terms'] ?? [])->map(fn ($term) => [
-            'cells' => array_fill(0, count($term['columns'] ?? []), ''),
-            'grade' => '',
-            ])->all(),
-            'grade' => $printData['grading']['co_scholastic_default_grade'] ?? 'A',
-            'grand_total' => '',
-            ];
-            })
-            : collect();
+            $specialSubjectRows = $allRows->filter(fn ($row) => !empty($row['special_subject_formatting']))->values();
+            $scholasticRows = $allRows->reject(fn ($row) => !empty($row['special_subject_formatting']))->values();
             @endphp
             <main class="sheet">
+                <img class="cbse-logo" src="{{ url('images/cbse-logo.png') }}" alt="CBSE">
                 <div class="date">Date : {{ $printData['date'] }}</div>
 
                 <div class="title">
@@ -300,8 +310,8 @@
                             <td>: {{ $printData['student_meta']['date_of_birth'] ?? '' }}</td>
                         </tr>
                         <tr>
-                            <td>Class</td>
-                            <td>: {{ optional($printData['class'])->class_name }}</td>
+                            <td>Class-Section</td>
+                            <td>: {{ $printData['class_section'] ?? optional($printData['class'])->class_name }}</td>
                         </tr>
                     </table>
                 </section>
@@ -320,12 +330,18 @@
                             <th class="subject">Subject Name</th>
                             @foreach($printData['layout']['scholastic_terms'] as $term)
                             @foreach($term['columns'] ?? [] as $column)
-                            <th>{{ $column['label'] ?? '' }}</th>
+                            @php $columnLabel = (string) ($column['label'] ?? ''); @endphp
+                            <th>
+                                {{ $columnLabel }}
+                                @if(!empty($column['max']) && !str_contains($columnLabel, '('))
+                                <br>({{ $column['max'] }})
+                                @endif
+                            </th>
                             @endforeach
                             @endforeach
                         </tr>
                     </thead>
-                    <tbodnpm run devy>
+                    <tbody>
                         @forelse($scholasticRows as $row)
                         @php
                         $subjectName = $row['subject'] ?? '';
@@ -359,20 +375,51 @@
                             <td></td>
                             <td></td>
                         </tr>
-                        @foreach($primaryAdditionalSubjects as $subject)
+                        @if($specialSubjectRows->isNotEmpty())
+                        <tr>
+                            <td></td>
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $termIndex => $term)
+                            @php
+                            $columnCount = count($term['columns'] ?? []);
+                            $isLastTerm = $termIndex === count($printData['layout']['scholastic_terms'] ?? []) - 1;
+                            @endphp
+                            @if($isLastTerm)
+                            <td colspan="{{ $columnCount }}"></td>
+                            @else
+                            @if($columnCount > 1)
+                            <td colspan="{{ $columnCount - 1 }}"></td>
+                            @endif
+                            <td class="total-label">Grade</td>
+                            @endif
+                            @endforeach
+                            <td></td>
+                            <td class="total-label">Grade</td>
+                        </tr>
+                        @endif
+                        @foreach($specialSubjectRows as $subject)
                         @php
                         $subjectName = $subject['subject'] ?? '';
                         $normalizedSubject = strtolower(preg_replace('/\s+/', ' ', trim($subjectName)));
+                        $displaySubjectName = in_array($normalizedSubject, ['environmental studies', 'environmental study', 'environment studies', 'environment study'], true) ? 'EVS' : $subjectName;
                         @endphp
                         <tr>
-                            <td class="subject">{{ str_contains($normalizedSubject, 'computer') ? 'Computer Science' : $subjectName }}</td>
-                            @foreach($subject['terms'] ?? [] as $term)
-                            @foreach($term['cells'] ?? [] as $cell)
-                            <td>{{ $cell }}</td>
+                            <td class="subject">{{ $displaySubjectName }}</td>
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $termIndex => $term)
+                            @php
+                            $columnCount = count($term['columns'] ?? []);
+                            $isLastTerm = $termIndex === count($printData['layout']['scholastic_terms'] ?? []) - 1;
+                            @endphp
+                            @if($isLastTerm)
+                            <td class="subject" colspan="{{ $columnCount }}">{{ $displaySubjectName }}</td>
+                            @else
+                            @if($columnCount > 1)
+                            <td class="subject" colspan="{{ $columnCount - 1 }}"></td>
+                            @endif
+                            <td>{{ $subject['terms'][$termIndex]['grade'] ?? '' }}</td>
+                            @endif
                             @endforeach
-                            @endforeach
-                            <td>{{ $subject['grade'] ?? '' }}</td>
-                            <td>{{ is_numeric($subject['grand_total'] ?? null) ? $formatMark($subject['grand_total']) : '' }}</td>
+                            <td></td>
+                            <td>{{ $subject['terms'][count($printData['layout']['scholastic_terms'] ?? []) - 1]['grade'] ?? '' }}</td>
                         </tr>
                         @endforeach
                     </tbody>
@@ -399,7 +446,15 @@
                     <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] }}</div>
                     <div>Percentage : {{ $printData['percentage'] !== null ? $formatPercentage($printData['percentage']) : '' }}</div>
                     <div>Attendance : {{ $printData['attendance'] }}</div>
-                    <div>Result : {{ $printData['result'] }}</div>
+                </section>
+
+                <section class="footer-area">
+                    <div class="signature">Signature of Class Teacher</div>
+                    <div class="abbr-box">
+                        <div>PT-Periodic Test, MAS-Multiple Assessment Strategy,</div>
+                        <div>NB-Notebook, SEA-Subject Enrichment Activity</div>
+                    </div>
+                    <div class="signature">Signature of Principal</div>
                 </section>
             </main>
             @endforeach

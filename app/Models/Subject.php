@@ -11,7 +11,14 @@ class Subject extends Model
     protected $connection = 'dynamic';
     protected $table="subjectmaster";
     protected $primarykey="id";
-    protected $fillable = ['subject_name', 'subject_type', 'evaluation', 'practical', 'is_delete'];
+    protected $fillable = [
+        'subject_name',
+        'subject_type',
+        'evaluation',
+        'practical',
+        'do_not_print_in_main_scholastic_area',
+        'is_delete',
+    ];
 
     public function Classname()
     {
