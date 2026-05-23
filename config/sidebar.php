@@ -201,6 +201,7 @@ return [
                     [ 'title' => 'Internal Assessment (IA)', 'route' => 'internal-assessment-master', 'roles' => ['Admin'] ],
                     [ 'title' => 'Roll No & Admit Card', 'route' => 'academic/roll-no-tools', 'roles' => ['Admin'] ],
                     [ 'title' => 'Enter Marks', 'route' => 'marks', 'staff_route' => 'staff/marks', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
+                    [ 'title' => 'Teacher Remark Entry', 'route' => 'teacher-remark-entry', 'staff_route' => 'staff/teacher-remark-entry', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Report Marks', 'route' => 'show_report_marks', 'roles' => ['Admin'] ],
                     [ 'title' => 'Marksheet', 'route' => 'marksheet', 'roles' => ['Admin'] ],
                     [ 'title' => 'Consolidated Marksheet', 'route' => 'academic/consolidated-marksheets', 'roles' => ['Admin'] ],

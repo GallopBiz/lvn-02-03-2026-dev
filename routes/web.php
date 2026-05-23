@@ -134,6 +134,7 @@ use App\Http\Controllers\Academic\ExamController;
 use App\Http\Controllers\Academic\SeatingArrangementController;
 use App\Http\Controllers\Academic\ConsolidatedMarksheetController;
 use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetController;
+use App\Http\Controllers\Academic\TeacherRemarkEntryController;
 // Remove any duplicate use statement for SeatingArrangementController below this line
 
 // use App\Http\Controllers\FormController;
@@ -216,6 +217,14 @@ Route::middleware(['auth:web,staff'])->group(function () {
     Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata']);
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject']);
+    Route::get('teacher-remark-entry', [TeacherRemarkEntryController::class, 'index'])->name('teacher-remark-entry');
+    Route::post('save-teacher-remark-entry', [TeacherRemarkEntryController::class, 'create'])->name('save-teacher-remark-entry');
+    Route::post('teacher-remark-class-studentdata', [TeacherRemarkEntryController::class, 'classStudentData'])->name('teacher-remark-class-studentdata');
+    Route::post('teacher-remark-pick-marks', [TeacherRemarkEntryController::class, 'pickMarks'])->name('teacher-remark-pick-marks');
+    Route::post('check-teacher-remark-entry-status', [TeacherRemarkEntryController::class, 'checkRemarkEntryStatus'])->name('check-teacher-remark-entry-status');
+    Route::get('view-teacher-remark-entry/{id}', [TeacherRemarkEntryController::class, 'view'])->name('view-teacher-remark-entry');
+    Route::post('store-teacher-remark-entry', [TeacherRemarkEntryController::class, 'store'])->name('store-teacher-remark-entry');
+    Route::get('delete-teacher-remark-entry/{id}', [TeacherRemarkEntryController::class, 'destroy'])->name('delete-teacher-remark-entry');
 });
 
 Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(function () {
@@ -232,6 +241,14 @@ Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(functi
     Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata'])->name('getteachersdata');
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject'])->name('getteachersandsubject');
+    Route::get('teacher-remark-entry', [TeacherRemarkEntryController::class, 'index'])->name('teacher-remark-entry');
+    Route::post('save-teacher-remark-entry', [TeacherRemarkEntryController::class, 'create'])->name('save-teacher-remark-entry');
+    Route::post('teacher-remark-class-studentdata', [TeacherRemarkEntryController::class, 'classStudentData'])->name('teacher-remark-class-studentdata');
+    Route::post('teacher-remark-pick-marks', [TeacherRemarkEntryController::class, 'pickMarks'])->name('teacher-remark-pick-marks');
+    Route::post('check-teacher-remark-entry-status', [TeacherRemarkEntryController::class, 'checkRemarkEntryStatus'])->name('check-teacher-remark-entry-status');
+    Route::get('view-teacher-remark-entry/{id}', [TeacherRemarkEntryController::class, 'view'])->name('view-teacher-remark-entry');
+    Route::post('store-teacher-remark-entry', [TeacherRemarkEntryController::class, 'store'])->name('store-teacher-remark-entry');
+    Route::get('delete-teacher-remark-entry/{id}', [TeacherRemarkEntryController::class, 'destroy'])->name('delete-teacher-remark-entry');
 });
 
 Route::group(['middleware' => ['auth']], function() {
