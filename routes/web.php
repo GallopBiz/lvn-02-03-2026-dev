@@ -49,7 +49,6 @@ use App\Http\Controllers\MonthController;
 use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\AssignSubjectController;
 use App\Http\Controllers\TeacherSubjectController;
-use App\Http\Controllers\AttandenceController;
 use App\Http\Controllers\AttandenceReportsController;
 use App\Http\Controllers\StudentAttendReportController;
 use App\Http\Controllers\DailyAttandanceController;
@@ -135,6 +134,7 @@ use App\Http\Controllers\Academic\SeatingArrangementController;
 use App\Http\Controllers\Academic\ConsolidatedMarksheetController;
 use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetController;
 use App\Http\Controllers\Academic\TeacherRemarkEntryController;
+use App\Http\Controllers\Academic\AttendanceController as AcademicAttendanceController;
 // Remove any duplicate use statement for SeatingArrangementController below this line
 
 // use App\Http\Controllers\FormController;
@@ -347,13 +347,13 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('fetch-subjects-classwise-for-exam',[ExamMasterController::class, 'fetch_subjects_classwise_for_exam'])->name('fetch_subjects_classwise_for_exam');
 
 
-    Route::get('student-attandence-report',[StudentAttendReportController::class, 'index'])->name('student-attandence-report');
+    Route::get('student-attandence-report',[AcademicAttendanceController::class, 'studentWise'])->name('student-attandence-report');
     Route::post('classstudent-view/{id}', [StudentAttendReportController::class, 'class_student']);
     Route::post('filter-classattendence',[StudentAttendReportController::class, 'filter_class_attandence'])->name('filter-classattendence');
 
 
     Route::get('studentattandancereport',[StudentAttandanceController::class, 'index'])->name('studentattandancereport');
-    Route::post('classwisestudent',[DailyAttandanceController::class, 'filter'])->name('classwisestudent');
+    Route::post('classwisestudent',[AcademicAttendanceController::class, 'students'])->name('classwisestudent');
     Route::post('filterdailyattandence',[AttandenceReportsController::class, 'classattandence'])->name('filterdailyattandence');
     Route::post('filterclassattandence',[AttandenceReportsController::class, 'classstrenght'])->name('filterclassattandence');
     Route::post('filterstatusattandence',[AttandenceReportsController::class, 'classstrenghtstatuswise'])->name('filterstatusattandence');
@@ -426,12 +426,19 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('delete-subject/{id}', [SubjectController::class, 'subjects_delete']);
 
     // Route::get('teachersubject',[TeacherSubjectController::class, 'index'])->name('teachersubject');
-    Route::get('Attandencelist',[AttandenceController::class, 'index'])->name('Attandencelist');
-    Route::get('Attandencereports',[AttandenceReportsController::class, 'index'])->name('Attandencereports');
-    Route::get('dailyattandence',[DailyAttandanceController::class, 'index'])->name('dailyattandence');
-    Route::post('dailyattandence',[DailyAttandanceController::class, 'Attendance'])->name('dailyattandence');
-    Route::get('dailyattandence-update/{id}',[DailyAttandanceController::class, 'dailyattandenceUpdate'])->name('dailyattandenceUpdate');
-    Route::post('dailyattandence-updateinfo',[DailyAttandanceController::class, 'dailyattandenceUpdateInfo'])->name('dailyattandenceUpdateInfo');
+    Route::get('Attandencelist',[AttendanceController::class, 'index'])->name('Attandencelist');
+    Route::get('Attandencereports',[AcademicAttendanceController::class, 'reports'])->name('Attandencereports');
+    Route::get('academic/attendance-collective',[AcademicAttendanceController::class, 'collective'])->name('academic.attendance.collective');
+    Route::post('academic/attendance-collective',[AcademicAttendanceController::class, 'storeCollective'])->name('academic.attendance.collective.store');
+    Route::get('academic/attendance-collective/{collective}/print',[AcademicAttendanceController::class, 'printCollective'])->name('academic.attendance.collective.print');
+    Route::delete('academic/attendance-collective/{collective}',[AcademicAttendanceController::class, 'destroyCollective'])->name('academic.attendance.collective.delete');
+    Route::get('dailyattandence',[AcademicAttendanceController::class, 'daily'])->name('dailyattandence');
+    Route::post('dailyattandence',[AcademicAttendanceController::class, 'store'])->name('dailyattandence');
+    Route::get('dailyattandence-update/{id}',[AcademicAttendanceController::class, 'daily'])->name('dailyattandenceUpdate');
+    Route::post('dailyattandence-updateinfo',[AcademicAttendanceController::class, 'store'])->name('dailyattandenceUpdateInfo');
+    Route::post('dailyattandence-lock/{attendance}',[AcademicAttendanceController::class, 'lock'])->name('dailyattandence.lock');
+    Route::post('dailyattandence-unlock/{attendance}',[AcademicAttendanceController::class, 'unlock'])->name('dailyattandence.unlock');
+    Route::delete('dailyattandence-delete/{attendance}',[AcademicAttendanceController::class, 'destroy'])->name('dailyattandence.delete');
     Route::get('primarygroup',[PrimaryGrupController::class, 'index'])->name('primarygroup');
     Route::get('groupmaster',[GrupController::class, 'index'])->name('groupmaster');
     Route::get('headmaster',[HeadController::class, 'index'])->name('headmaster');

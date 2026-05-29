@@ -343,10 +343,57 @@ class MarksheetController extends Controller
             'percentage' => $percentage,
             'result' => $result,
             'remarks' => $remarks,
-            'attendance' => $request->input('attendance', ''),
+            'attendance' => $this->collectiveAttendanceForMarksheet($studentId, $classId, $examId, $this->resolveDynamicSessionYear($request), $request->input('attendance', '')),
             'date' => $request->input('date', now()->format('F d, Y')),
             'session_year' => $this->resolveDynamicSessionYear($request),
         ];
+    }
+
+    private function collectiveAttendanceForMarksheet(?int $studentId, ?int $classId, ?int $examId, ?string $sessionYear, string $fallback = ''): string
+    {
+        if (!$studentId || !$classId || !Schema::connection('dynamic')->hasTable('academic_attendance_collectives') || !Schema::connection('dynamic')->hasTable('academic_attendance_collective_details')) {
+            return $fallback;
+        }
+
+        $sessionVariants = $this->sessionYearVariants($sessionYear);
+        $record = DB::connection('dynamic')
+            ->table('academic_attendance_collective_details as acd')
+            ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
+            ->where('ac.is_delete', 0)
+            ->where('acd.student_id', $studentId)
+            ->where('ac.class_id', $classId)
+            ->when($examId, fn ($query) => $query->where('ac.exam_id', $examId))
+            ->when(!empty($sessionVariants), fn ($query) => $query->whereIn('ac.academic_session', $sessionVariants))
+            ->orderByDesc('ac.id')
+            ->select('acd.attendance_percentage', 'acd.present_days', 'acd.working_days')
+            ->first();
+
+        if (!$record) {
+            return $fallback;
+        }
+
+        return number_format((float) $record->attendance_percentage, 2) . '%';
+    }
+
+    private function sessionYearVariants(?string $sessionYear): array
+    {
+        if (!$sessionYear) {
+            return [];
+        }
+
+        $normalizedDash = str_replace('_', '-', $sessionYear);
+        $normalizedUnderscore = str_replace('-', '_', $sessionYear);
+        $short = null;
+
+        if (preg_match('/^(\d{4})[-_](\d{4})$/', $sessionYear, $matches)) {
+            $short = $matches[1] . '-' . substr($matches[2], -2);
+        }
+
+        return collect([$sessionYear, $normalizedDash, $normalizedUnderscore, $short])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function defaultLayoutConfig(): array

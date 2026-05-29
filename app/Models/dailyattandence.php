@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class dailyattandence extends Model
 {
     use HasFactory;
-    protected $table="dailattandence";
+    protected $table="academic_attendance";
     protected $primarykey="id";
-    protected $fillable = ['Teacher_id','section_name','Attandence_date','class_id'];
+    protected $fillable = ['teacher_id','section_name','attendance_date','class_id','class_name','academic_session','total_students','present_count','absent_count','leave_count','half_day_count'];
 
     public function Class()
     {
@@ -18,6 +18,6 @@ class dailyattandence extends Model
     }
     public function Teacher()
     {
-        return $this->belongsTo(HrmsEmployee::class, 'Teacher_id');
+        return $this->belongsTo(HrmsEmployee::class, 'teacher_id');
     }
 }

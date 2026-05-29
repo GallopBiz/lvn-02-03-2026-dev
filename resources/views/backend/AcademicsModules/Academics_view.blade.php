@@ -44,6 +44,7 @@
                                   <div class="ul-widget-app__browser-list">
                                     <a href="{{ 'student-attandence-report' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Student Attandence Report</span></div></a>
                                     <a href="{{ 'Attandencereports' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Attandence Reports</span></div></a>
+                                    <a href="{{ route('academic.attendance.collective') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Student Collective Attendance</span></div></a>
                                     <a href="{{ 'dailyattandence' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Daily Attandence</span></div></a>
                                   </div>
                               </div>

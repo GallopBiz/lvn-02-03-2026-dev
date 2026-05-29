@@ -1,466 +1,315 @@
 @extends('backend.layouts.main')
 @section('main-container')
+@php
+    $detailByStudent = $editingAttendance ? $editingAttendance->details->keyBy('student_id') : collect();
+    $isStaffAttendanceUser = auth()->guard('staff')->check() && !auth()->guard('web')->check();
+@endphp
 <style>
-    .ct_res_table{
-        height: 600px; overflow: auto;
-    }
+    .attendance-page { color: #24324b; }
+    .attendance-toolbar, .attendance-panel { background: #fff; border: 1px solid #e7edf5; border-radius: 8px; box-shadow: 0 8px 20px rgba(36, 50, 75, .05); }
+    .attendance-toolbar { padding: 18px; }
+    .attendance-panel { padding: 20px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; }
+    .summary-card { border: 1px solid #e7edf5; border-radius: 8px; padding: 14px; background: #f8fbff; }
+    .summary-card span { display: block; color: #69758a; font-size: 12px; text-transform: uppercase; }
+    .summary-card strong { font-size: 24px; }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; border: 1px solid transparent; cursor: pointer; margin: 2px; }
+    .status-pill input { margin: 0; }
+    .status-present { background: #e9f8ef; color: #167146; border-color: #bfe9ce; }
+    .status-absent { background: #fff0f0; color: #b42318; border-color: #ffd0d0; }
+    .status-leave { background: #fff7df; color: #936600; border-color: #ffe6a3; }
+    .status-half_day { background: #eaf2ff; color: #2257a7; border-color: #c9dcff; }
+    .status-pl { background: #f0edff; color: #5740a8; border-color: #d8d0ff; }
+    .table thead th { white-space: nowrap; background: #f4f7fb; color: #41516a; border-bottom: 1px solid #e3e9f2; }
+    .table td { vertical-align: middle; }
+    .student-search { max-width: 320px; }
+    @media (max-width: 991px) { .summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
+    @media (max-width: 575px) { .summary-grid { grid-template-columns: 1fr; } .attendance-panel { padding: 14px; } }
 </style>
-    <div class="main-content">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
-        <div class="breadcrumb">
-            <h1 class="me-2">Daily Attandence Entry :-</h1>
+
+<div class="main-content attendance-page pt-4">
+    <div class="breadcrumb d-flex justify-content-between align-items-center flex-wrap">
+        <h2 class="mb-2">
+            {{ $editingAttendance ? 'Edit Daily Attendance' : 'Daily Attendance' }}
+            @if($editingAttendance && $editingAttendance->is_locked)
+                <span class="badge badge-dark ml-2">Locked</span>
+            @endif
+        </h2>
+        <a href="{{ route('Attandencereports') }}" class="btn btn-outline-primary btn-sm">Reports</a>
+    </div>
+    <div class="separator-breadcrumb border-top"></div>
+
+    @if(session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
+    @if(session('error')) <div class="alert alert-danger">{{ session('error') }}</div> @endif
+    @if($errors->any()) <div class="alert alert-danger">{{ $errors->first() }}</div> @endif
+    @if($nonWorkingDay)
+        <div class="alert alert-warning">
+            {{ $nonWorkingDay['label'] }}. Attendance cannot be marked for this date.
         </div>
-        <div class="separator-breadcrumb border-top"></div>
-        @if(!empty($dailyreportMarster))
-        <form id="attendanceForm" class="p-4 progress-form" action="{{ route('dailyattandenceUpdateInfo') }}" method="post">
-            <input type="hidden" name="attendance_id" value="{{ $dailyreportMarster->id }}">
-        @else
-        <form id="attendanceForm" class="p-4 progress-form" action="{{ url('dailyattandence') }}" method="post">
-        @endif
-            @csrf
+    @endif
+
+    <div class="summary-grid mb-3">
+        <div class="summary-card"><span>Total Students</span><strong id="totalStudents">{{ $summary['total_students'] }}</strong></div>
+        <div class="summary-card"><span>Present</span><strong id="presentCount">{{ $summary['present'] }}</strong></div>
+        <div class="summary-card"><span>Absent</span><strong id="absentCount">{{ $summary['absent'] }}</strong></div>
+        <div class="summary-card"><span>Leave</span><strong id="leaveCount">{{ $summary['leave'] }}</strong></div>
+        <div class="summary-card"><span>Half Day</span><strong id="halfDayCount">{{ $summary['half_day'] }}</strong></div>
+        <div class="summary-card"><span>PL</span><strong id="plCount">{{ $summary['pl'] }}</strong></div>
+    </div>
+
+    <div class="attendance-toolbar mb-3">
+        <form method="GET" action="{{ $editingAttendance ? route('dailyattandenceUpdate', $editingAttendance->id) : route('dailyattandence') }}" id="filterForm">
             <div class="row">
-                <div class="col-md-5 mb-4">
-                    <div class = "row">
-                        <div class="table-responsive">
-                            <table class="table table-borderless">
-                                <tbody>
-                                    <tr>
-
-                                        <td><label for="firstName1">Attandence Date:</label></td>
-                                        <td><input name="Attandence_Name" class="form-control" id="callno" type="date"
-                                                placeholder="Attandence_Name" required @if(!empty($dailyreportMarster)) value="{{ $dailyreportMarster->Attandence_date }}" disabled @endif/></td>
-                                    </tr>
-                                    <tr>
-
-                                        <td><label for="firstName1">Teacher:</label></td>
-                                        <td>
-                                            <select name="teacher_name" class="form-control" id="teacher_name" required @if(!empty($dailyreportMarster)) disabled @endif>
-                                                <option value="">-- Please select --</option>
-                                                @foreach ($teacherlist as $teacherlist)
-                                                    <option
-                                                        {{ !empty($dailyreportMarster) && ($teacherlist->Teacher->id = $dailyreportMarster->Teacher_id) ? 'selected' : '' }}
-                                                        value="{{ $teacherlist->Teacher->id }}">
-                                                        {{ $teacherlist->Teacher->first_name }} {{ $teacherlist->Teacher->last_name }} - {{ $teacherlist->Teacher->biometricDetails->ess_emp_code?? '' }}</option>
-                                                @endforeach
-                                            </select>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-
-                                        <td><label for="class_name">Class:</label></td>
-                                        <td>
-                                            <select id="class_name" class="form-control" name="class_name" autocomplete=""
-                                                required @if(!empty($dailyreportMarster)) disabled @endif>
-                                                <option value="" >--Please select--</option>
-                                                @if(!empty($dailyreportMarster))
-                                                <option value="{{ $dailyreportMarster->class_id }}"  selected>{{ $dailyreportMarster->Class->class_name }}</option>
-                                                @endif
-                                            </select>
-
-                                        </td>
-
-
-                                    </tr>
-
-                                    <tr>
-
-                                        <td><label for="firstName1">Section:</label></td>
-                                        <td><select name="section_name" class="form-control" id="section_name" @if(!empty($dailyreportMarster)) disabled @endif>
-                                            @if(!empty($dailyreportMarster))
-                                                <option value="{{ $dailyreportMarster->section_name }}"  selected>{{ $dailyreportMarster->section_name }}</option>
-                                                @endif
-                                            </select></td>
-                                    </tr>
-                                    <tr>
-                                        <td><button class="btn btn-primary">Submit</button></td>
-                                        <td> @if(empty($dailyreportMarster))<button type="reset" class="btn btn-primary" name="btn"
-                                                value="Reset Form">Reset</button> @endif</td>
-
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        {{-- <div class="row">
-                            <div class="col-md-2 form-group mb-3">
-                                <!-- <input type="text" id="schedule_nameb" name="schedule_nameb" value=""> -->
-                                <label for="lastName1">from date:</label>
-                                <input type="date" class="form-control" id="picker2-" />
-                            </div>
-                            <div class="col-md-2 form-group mb-3">
-                                <!-- <input type="text" id="schedule_nameb" name="schedule_nameb" value=""> -->
-                                <label for="lastName1">to date:</label>
-                                <input type="date" class="form-control" id="picker2-" />
-                            </div>
-                            <div class="col-md-2 form-group mb-3">
-                                <br>
-                                <button class="btn btn-primary">show</button>
-                            </div>
-                        </div> --}}
-
-                    </div>
-                    <div class="row">
-
-                    </div>
+                <div class="col-lg-2 col-md-4 form-group">
+                    <label>Date</label>
+                    <input type="date" name="date" value="{{ $filters['date'] }}" class="form-control" onchange="document.getElementById('filterForm').submit()">
                 </div>
-                <div class="col-md-6 mb-4">
-                    <div class="row">
-                        <h4>Marks Attandence below :-</h4>
-                        <div class="table-responsive @if(!empty($dailyreportMarster)) ct_res_table @endif" id="student_list_table">
-                            <table class="display table table-striped table-bordered" id="another_div">
-                                <thead id="another_div">
-                                    @if(!empty($dailyreportMarster))
-                                    <tr>
-                                    <th scope="col">S.no.</th>
-                                    <th scope="col">Roll no.</th>
-                                    <th scope="col">Board roll no.</th>
-                                    <th scope="col">Student Name</th>
-                                    <th scope="col">Attandence:
-                                        <select class="form-control" onchange="updateRadioButtons(this)">
-                                        <option value="Please Select">Please Select</option>
-                                        <option value="P" >P</option>
-                                        <option value="A">A</option>
-                                        <option value="N">N</option>
-                                        <option value="E">E</option>
-                                        <option value="O">O</option>
-                                        <option value="OFF">OFF</option>
-                                        <option value="PL">PL</option>
-                                        </select>
-                                    </th>
-                                    </tr>
-                                    @endif
-                                </thead>
-                                <tbody id="bus_Attend_data">
-                                    @if(!empty($dailyreportMarster))
-                                        @php
-                                            $sno = 1;
-                                        @endphp
-                                        @foreach ($studentAttendances as $entry)
-                                            <tr>
-                                            <td style="font-size: 16px; font-weight: bold;"> {{ $sno++ }} </td>
-                                            <td style="font-size: 16px;"> {{ $entry->student->form_number }}</td>
-                                            <td style="font-size: 16px;"> {{ $entry->student->id }} </td>
-                                            <td style="font-size: 16px;"> {{ $entry->student->student_name }} </td>
-                                            <td class="updateselectvalue">
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="P"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "P") checked @endif> P</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="A"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "A") checked @endif> A</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="N"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "N") checked @endif> N</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="E"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "E") checked @endif> E</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="O"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "O") checked @endif> O</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="OFF"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "OFF") checked @endif> OFF</label>
-                                                <label><input type="radio" name="attendance[ {{ $entry->student->id }} ]" value="PL"
-                                                    @if(!empty($dailyreportMarster) && $entry->status == "PL") checked @endif> PL</label>
-                                            </td>
-                                            </tr>
-                                        @endforeach
-                                    @endif
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div class="col-lg-2 col-md-4 form-group">
+                    <label>Academic Session</label>
+                    <input type="text" name="academic_session" value="{{ $filters['academic_session'] }}" class="form-control" placeholder="2026-2027">
+                </div>
+                <div class="col-lg-3 col-md-4 form-group">
+                    <label>Class</label>
+                    <select name="class_id" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                        <option value="">Select class</option>
+                        @foreach($classes as $class)
+                            <option value="{{ $class->id }}" data-name="{{ $class->class_name }}" @selected((string)$filters['class_id'] === (string)$class->id)>{{ $class->class_name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4 form-group">
+                    <label>Section</label>
+                    <select name="section_name" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                        <option value="">Select section</option>
+                        @foreach($sections as $section)
+                            <option value="{{ $section }}" @selected($filters['section_name'] === $section)>{{ $section }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-8 form-group d-flex align-items-end">
+                    <button class="btn btn-primary mr-2" type="submit">Load Students</button>
+                    <a class="btn btn-outline-secondary" href="{{ route('dailyattandence') }}">Reset</a>
                 </div>
             </div>
         </form>
-        @if(empty($dailyreportMarster))
-        <div class="row">
-            <div class="col-12 table-responsive" style="height: 250px; overflow: auto;">
-                <table class="display table table-striped table-bordered">
+    </div>
+
+    <form method="POST" action="{{ $editingAttendance ? route('dailyattandenceUpdateInfo') : route('dailyattandence') }}" id="attendanceForm">
+        @csrf
+        @if($editingAttendance)
+            <input type="hidden" name="attendance_id" value="{{ $editingAttendance->id }}">
+        @endif
+        <input type="hidden" name="attendance_date" value="{{ $filters['date'] }}">
+        <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
+        <input type="hidden" name="section_name" value="{{ $filters['section_name'] }}">
+        <input type="hidden" name="academic_session" value="{{ $filters['academic_session'] }}">
+        <input type="hidden" name="class_name" value="{{ optional($classes->firstWhere('id', (int) $filters['class_id']))->class_name }}">
+
+        <div class="attendance-panel mb-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                <div>
+                    <h4 class="mb-1">Mark Attendance</h4>
+                    <p class="text-muted mb-0">Bulk mark the class, then adjust individual students where needed.</p>
+                </div>
+                <div class="d-flex flex-wrap align-items-center">
+                    <select name="teacher_id" class="form-control mr-2 mb-2" style="min-width:220px">
+                        <option value="">Teacher/Admin</option>
+                        @foreach($teachers as $teacherSubject)
+                            @php $teacher = $teacherSubject->Teacher; @endphp
+                            @if($teacher)
+                                <option value="{{ $teacher->id }}" @selected($editingAttendance && (string)$editingAttendance->teacher_id === (string)$teacher->id)>
+                                    {{ $teacher->first_name }} {{ $teacher->last_name }}
+                                </option>
+                            @endif
+                        @endforeach
+                    </select>
+                    <input type="search" id="studentSearch" class="form-control student-search mb-2" placeholder="Search student">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <span class="text-muted mr-2">Set all:</span>
+                @foreach($statuses as $key => $label)
+                    <button type="button" class="btn btn-sm btn-outline-primary mb-1" onclick="markAll('{{ $key }}')">{{ $label }}</button>
+                @endforeach
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover" id="attendanceTable">
                     <thead>
                         <tr>
-                            <th scope="col">S.no.</th>
-                            <th scope="col">Teacher Name</th>
-                            <th scope="col">Class</th>
-                            <th scope="col">Sec.</th>
-                            <th scope="col">Attendance Date</th>
-                            <th scope="col">Create Date</th>
-                            <th scope="col">Action</th>
+                            <th>#</th>
+                            <th>Roll No.</th>
+                            <th>Scholar No.</th>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Remark</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @php
-                            $i = 0;
-                        @endphp
-                        @if (!empty($dailyreport))
-                            @foreach ($dailyreport as $listR)
-                                <tr>
-                                    <th scope="row">{{ ++$i }}</th>
-                                    <td>{{ $listR->Teacher->first_name }} {{ $listR->Teacher->last_name }} - {{ $listR->Teacher->biometricDetails->ess_emp_code?? '' }}</td>
-                                    <td>{{ $listR->Class->class_name }}</td>
-                                    <td>{{ $listR->section_name }}</td>
-                                    <td>{{ date('d-m-Y', strtotime($listR->Attandence_date)) }}</td>
-                                    <td>{{ date('d-m-Y', strtotime($listR->created_at)) }}</td>
-                                    <td><a class="btn btn-primary m-1" href="{{ route('dailyattandenceUpdate',$listR->id) }}">Edit</a></td>
-                                </tr>
-                            @endforeach
-                        @else
+                        @forelse($students as $student)
+                            @php
+                                $detail = $detailByStudent->get($student->id);
+                                $selected = old("attendance.$student->id", optional($detail)->status ?: 'present');
+                            @endphp
                             <tr>
-                                <td colspan="9" class="text-center">No Data Found</td>
+                                <td>{{ $loop->iteration }}</td>
+                                <td>{{ $student->form_number }}</td>
+                                <td>{{ $student->scholar_no ?: $student->id }}</td>
+                                <td class="student-name">{{ $student->student_name }}</td>
+                                <td>
+                                    @foreach($statuses as $key => $label)
+                                        <label class="status-pill status-{{ $key }}" title="{{ $key === 'pl' ? 'Preparation Leave' : $label }}">
+                                            <input type="radio" name="attendance[{{ $student->id }}]" value="{{ $key }}" @checked($selected === $key)>
+                                            {{ $label }}
+                                        </label>
+                                    @endforeach
+                                </td>
+                                <td><input type="text" name="remarks[{{ $student->id }}]" value="{{ old("remarks.$student->id", optional($detail)->remarks) }}" class="form-control" placeholder="Optional"></td>
                             </tr>
+                        @empty
+                            <tr><td colspan="6" class="text-center text-muted">Choose class and section to load students.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-right mt-3">
+                <button class="btn btn-primary" type="submit" @disabled($students->isEmpty() || $nonWorkingDay)>Save Attendance</button>
+            </div>
+        </div>
+    </form>
+
+    @if($editingAttendance)
+        <div class="attendance-panel mb-4 no-print">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <h4 class="mb-1">Attendance Controls</h4>
+                    <p class="text-muted mb-0">
+                        @if($editingAttendance->is_locked)
+                            Locked attendance must be unlocked by admin before edit or delete.
+                        @else
+                            Lock attendance after final verification.
                         @endif
+                    </p>
+                </div>
+                <div class="d-flex flex-wrap">
+                    @if(!$editingAttendance->is_locked && $isStaffAttendanceUser)
+                        <form method="POST" action="{{ route('dailyattandence.lock', $editingAttendance) }}" class="mr-2 mb-2">
+                            @csrf
+                            <button class="btn btn-dark" type="submit" onclick="return confirm('Lock this attendance? After locking, only admin can edit or delete it.');">Lock Attendance</button>
+                        </form>
+                    @endif
+                    @if($editingAttendance->is_locked && !$isStaffAttendanceUser)
+                        <form method="POST" action="{{ route('dailyattandence.unlock', $editingAttendance) }}" class="mr-2 mb-2">
+                            @csrf
+                            <button class="btn btn-warning" type="submit" onclick="return confirm('Unlock this attendance?');">Unlock</button>
+                        </form>
+                    @endif
+                    @if(!$editingAttendance->is_locked)
+                        <form method="POST" action="{{ route('dailyattandence.delete', $editingAttendance) }}" class="mb-2">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-danger" type="submit" onclick="return confirm('Delete this attendance entry?');">Delete</button>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if(!$editingAttendance)
+        <div class="attendance-panel">
+            <h4 class="mb-3">Recent Attendance</h4>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Present</th><th>Absent</th><th>Leave</th><th>Half Day</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                        @forelse($recentAttendance as $item)
+                            <tr>
+                                <td>{{ optional($item->attendance_date)->format('d-m-Y') }}</td>
+                                <td>{{ optional($item->className)->class_name ?: $item->class_name }}</td>
+                                <td>{{ $item->section_name }}</td>
+                                <td>{{ $item->present_count }}</td>
+                                <td>{{ $item->absent_count }}</td>
+                                <td>{{ $item->leave_count }}</td>
+                                <td>{{ $item->half_day_count }}</td>
+                                <td>
+                                    @if($item->is_locked)
+                                        <span class="badge badge-dark">Locked</span>
+                                    @else
+                                        <span class="badge badge-success">Open</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap">
+                                        @if(!$item->is_locked)
+                                            <a class="btn btn-sm btn-outline-primary mr-1 mb-1" href="{{ route('dailyattandenceUpdate', $item->id) }}">Edit</a>
+                                        @endif
+                                        @if(!$item->is_locked && $isStaffAttendanceUser)
+                                            <form method="POST" action="{{ route('dailyattandence.lock', $item) }}" class="mr-1 mb-1">
+                                                @csrf
+                                                <button class="btn btn-sm btn-dark" type="submit" onclick="return confirm('Lock this attendance? After locking, only admin can edit or delete it.');">Lock</button>
+                                            </form>
+                                        @endif
+                                        @if($item->is_locked && !$isStaffAttendanceUser)
+                                            <form method="POST" action="{{ route('dailyattandence.unlock', $item) }}" class="mr-1 mb-1">
+                                                @csrf
+                                                <button class="btn btn-sm btn-warning" type="submit" onclick="return confirm('Unlock this attendance?');">Unlock</button>
+                                            </form>
+                                        @endif
+                                        @if(!$item->is_locked)
+                                            <form method="POST" action="{{ route('dailyattandence.delete', $item) }}" class="mb-1">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete this attendance entry?');">Delete</button>
+                                            </form>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="9" class="text-center text-muted">No attendance recorded yet.</td></tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
-        @endif
+    @endif
+</div>
 
-
-        <!-- end of main-content -->
-    </div>
-    <script>
-        var responseData;
-        var stu;
-        var checkedValues = []; // Initialize the array globally
-        // Function to fetch data and populate the table
-        function fetch_select(class_id,section_name) {
-            // Reset the checkedValues array
-            checkedValues = [];
-            var newRow = "";
-            var class_id = class_id;
-            var section_name = section_name;
-
-            $.ajax({
-                data: {
-                    class_id: class_id,
-                    section_name: section_name
-                },
-                url: "{{ url('classwisestudent') }}",
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                method: "POST",
-                datatype: 'json',
-                success: function(response) {
-                    responseData = response;
-                    var stuData = JSON.parse(responseData);
-                    stu = stuData; // Assign 'stuData' to the global 'stu' variable
-                    $('#student_list_table').addClass('ct_res_table');
-                    // Clear the existing rows from the table body and header
-                    $('#bus_Attend_data tbody').empty();
-                    $('#another_div thead').empty();
-
-                    // Construct the table header with a single select dropdown
-                    var tableHeader = '<tr>' +
-                        '<th scope="col">S.no.</th>' +
-                        '<th scope="col">Roll no.</th>' +
-                        '<th scope="col">Board roll no.</th>' +
-                        '<th scope="col">Student Name</th>' +
-                        '<th scope="col">Attandence: ' +
-                        '<select class="form-control" onchange="updateRadioButtons(this)">' +
-                        '<option value="Please Select">Please Select</option>' +
-                        '<option value="P">P</option>' +
-                        '<option value="A">A</option>' +
-                        '<option value="N">N</option>' +
-                        '<option value="E">E</option>' +
-                        '<option value="O">O</option>' +
-                        '<option value="OFF">OFF</option>' +
-                        '<option value="PL">PL</option>' +
-                        '</select>' +
-                        '</th>' +
-                        '</tr>';
-                    $('#another_div thead').html(tableHeader);
-
-                    // Iterate over the arrays and construct the table rows
-                    for (var i = 0; i < stu.length; i++) {
-                        // Construct the table rows for attendance
-                        newRow += '<tr>' +
-                            '<td style="font-size: 16px; font-weight: bold;">' + (i + 1) + '</td>' +
-                            '<td style="font-size: 16px;">' + stu[i].form_number + '</td>' +
-                            '<td style="font-size: 16px;">' + stu[i].id + '</td>' +
-                            '<td style="font-size: 16px;">' + stu[i].student_name + '</td>' +
-                            '<td class="updateselectvalue">' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="P" checked> P</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="A"> A</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="N"> N</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="E"> E</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="O"> O</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="OFF"> OFF</label>' +
-                                '<label><input type="radio" name="attendance[' + stu[i].id + ']" value="PL"> PL</label>' +
-                            '</td>' +
-                            '</tr>';
-
-                    }
-                    $('#bus_Attend_data').html(newRow);
-                    // Attach the change event handler to the radio buttons
-                    /* $(document).on('change', 'input[type="radio"]', function() {
-                        console.log(1);
-                        updateCheckedValues(this);
-                    }); */
-
-                }
-            });
-        }
-        // Fetch student data based on class, stream and section
-        document.addEventListener("DOMContentLoaded", function(){
-            $('#class_name').on('change', function(){
-                var class_id = $("#class_name").text();
-                var section_name = $("#section_name").val();
-                if(section_name){
-                    fetch_select(class_id,section_name);
-                }
-            });
-            $('#section_name').on('change', function(){
-                var class_id = $("#class_name").find('option:selected').text();
-                var section_name = $("#section_name").val();
-                if(class_id){
-                    fetch_select(class_id,section_name);
-                }
-                //fetch_select();
-            });
+<script>
+    function markAll(status) {
+        document.querySelectorAll('input[type="radio"][value="' + status + '"]').forEach(function(input) {
+            input.checked = true;
         });
-        // Function to update the checked values array
-        /* function updateCheckedValues(radioButton) {
-            console.log('updateCheckedValues function called');
+        updateCounts();
+    }
 
-            var selectedValue = $('input[name="' + $(radioButton).attr('name') + '"]:checked').val();
-            console.log('Selected Value:', selectedValue);
-
-            // Reset the checkedValues array
-            checkedValues = [];
-
-            // Iterate over the radio buttons and collect the checked values
-            $('input[type="radio"]:checked').each(function() {
-                var rowIndex = $(this).closest('tr').index();
-                var selectedValue = $(this).val();
-                var studentName = stu[rowIndex].student_name;
-                var formNumber = stu[rowIndex].form_number;
-                var studentId = stu[rowIndex].id;
-
-                checkedValues.push({
-                    row: rowIndex,
-                    value: selectedValue,
-                    student_name: studentName,
-                    form_Number: formNumber,
-                    student_id: studentId,
-                });
-            });
-            console.log('Checked Values:', checkedValues);
-
-            // Set the value of the hidden input field with the collected checked values as JSON
-            $('#attendance_data').val(JSON.stringify(checkedValues));
-        } */
-
-        // Function to update the radio buttons based on the selected value in the header dropdown
-        function updateRadioButtons(selectElement) {
-            var selectedValue = selectElement.value;
-            var checkedValues = []; // reset before pushing fresh values
-
-            // Apply selected value to all radio buttons per student
-            $('input[name^="attendance["]').each(function() {
-                if ($(this).val() === selectedValue) {
-                    $(this).prop('checked', true);
-                }
-            });
-
-            // Loop through rows to collect data after update
-            $('#bus_Attend_data tr').each(function(rowIndex) {
-                var radios = $(this).find('input[type="radio"]:checked');
-                if (radios.length > 0) {
-                    var selectedValue = radios.val();
-                    var studentData = stu[rowIndex]; // assuming stu[i] matches table row
-
-                    checkedValues.push({
-                        row: rowIndex,
-                        value: selectedValue,
-                        student_name: studentData.student_name,
-                        form_number: studentData.form_number,
-                        student_id: studentData.id,
-                    });
-                }
-            });
-
-            // Store JSON-encoded data in a hidden field
-            $('#attendance_data').val(JSON.stringify(checkedValues));
-
-            // Reset dropdown
-            selectElement.selectedIndex = 0;
-        }
-        document.addEventListener("DOMContentLoaded", function() {
-
-            function showSections() {
-                var iso2 = $("#classname").val();
-                let token = document.getElementsByName("_token")[0].value
-                console.log(iso2);
-                if (iso2) {
-                    $.ajax({
-                        data: {
-                            id: iso2
-                        },
-                        url: "{{ url('classsection-view') }}/" + iso2,
-                        headers: {
-                            'X-CSRF-TOKEN': token
-                        },
-                        method: "POST",
-                        dataType: 'json',
-                        success: function(data) {
-                            // console.log(data);
-                            $('#section_name').html('<option value=""> -- Select All -- </option>');
-                            for (var i = 0; i < data.length; i++) {
-                                var studentData = data[i].section_name;
-                                // console.log(studentData, ' ', selected_section);
-                                $('#section_name').append('<option value="' + studentData + '">' +
-                                    studentData + '</option>');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            console.error(error);
-                        }
-                    });
-                } else {
-                    $('#section_name').html('<option value="">Select class first</option>');
-                }
-            }
-
-
-            $('#classname').on('change', showSections)
-
-        })
-
-        document.getElementById("teacher_name").addEventListener("change", (e) => {
-            let teacher = e.target.value;
-            let token = document.getElementsByName("_token")[0].value
-
-            $.ajax({
-                data: {
-                    teacher: teacher
-                },
-                url: "{{ url('getteachersdata') }}",
-                headers: {
-                    'X-CSRF-TOKEN': token
-                },
-                method: "POST",
-                dataType: 'json',
-                success: function(data) {
-                    // Handle classes dropdown
-                    $('#class_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['classes'].length; i++) {
-                        var className = data['classes'][i].class.class_name;
-                        var class_id = data['classes'][i].class_id;
-                        $('#class_name').append('<option value="' + class_id + '">' + className + '</option>');
-                    }
-
-                    // Handle subjects dropdown
-                    $('#subject_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['subjects'].length; i++) {
-                        var subjectName = data['subjects'][i].subject.subject_name;
-                        var subject_id = data['subjects'][i].subject_id;
-                        $('#subject_name').append('<option value="' + subject_id + '">' + subjectName + '</option>');
-                    }
-                    $('#section_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['sections'].length; i++) {
-                        var subjectName = data['sections'][i];
-                        $('#section_name').append('<option value="' + subjectName + '">' + subjectName + '</option>');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error(error);
-                }
-            });
+    function updateCounts() {
+        var counts = {present: 0, absent: 0, leave: 0, half_day: 0, pl: 0};
+        document.querySelectorAll('#attendanceTable tbody tr').forEach(function(row) {
+            if (row.style.display === 'none') return;
+            var checked = row.querySelector('input[type="radio"]:checked');
+            if (checked && counts.hasOwnProperty(checked.value)) counts[checked.value]++;
         });
-    </script>
+        document.getElementById('totalStudents').textContent = Object.values(counts).reduce(function(a, b) { return a + b; }, 0);
+        document.getElementById('presentCount').textContent = counts.present;
+        document.getElementById('absentCount').textContent = counts.absent + counts.leave;
+        document.getElementById('leaveCount').textContent = counts.leave;
+        document.getElementById('halfDayCount').textContent = counts.half_day;
+        document.getElementById('plCount').textContent = counts.pl;
+    }
+
+    document.querySelectorAll('#attendanceTable input[type="radio"]').forEach(function(input) {
+        input.addEventListener('change', updateCounts);
+    });
+    document.getElementById('studentSearch')?.addEventListener('input', function(e) {
+        var term = e.target.value.toLowerCase();
+        document.querySelectorAll('#attendanceTable tbody tr').forEach(function(row) {
+            row.style.display = row.textContent.toLowerCase().indexOf(term) > -1 ? '' : 'none';
+        });
+        updateCounts();
+    });
+    updateCounts();
+</script>
 @endsection

@@ -214,7 +214,8 @@ return [
                 'title' => 'Attendance',
                 'icon' => 'i-Checked-User',
                 'children' => [
-                    [ 'title' => 'Daily Attendance', 'route' => 'dailyattandence', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Daily Attendance', 'route' => 'dailyattandence', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
+                    [ 'title' => 'Student Collective Attendance', 'route' => 'academic/attendance-collective', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Student-wise Attendance', 'route' => 'student-attandence-report', 'roles' => ['Admin'] ],
                     [ 'title' => 'Attendance Reports', 'route' => 'Attandencereports', 'roles' => ['Admin'] ],
                 ],
