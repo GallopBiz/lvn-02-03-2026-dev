@@ -112,6 +112,7 @@ use App\Http\Controllers\EmployeeLeavesController;
 use App\Http\Controllers\BasicDeductionsController;
 use App\Http\Controllers\EmployeeLoanController;
 use App\Http\Controllers\EmployeePayrollController;
+use App\Http\Controllers\PayrollAttendanceConfigurationController;
 use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\backend\StudentOnlineFeesController;
 use App\Http\Controllers\backend\StudentTransferController;
@@ -1243,6 +1244,8 @@ Route::post('/pause-emi', [EmployeeLoanController::class, 'pauseEmi'])->name('pa
 
 Route::get('payroll',[EmployeePayrollController::class, 'index'])->name('payroll');
 Route::post('payroll/generate',[EmployeePayrollController::class, 'Generate'])->name('payroll.generate');
+Route::get('payroll-attendance-configuration',[PayrollAttendanceConfigurationController::class, 'index'])->name('payroll.attendance.configuration');
+Route::post('payroll-attendance-configuration',[PayrollAttendanceConfigurationController::class, 'update'])->name('payroll.attendance.configuration.update');
 // Payroll JSON generation endpoint
 Route::post('/payroll/generate-json', [EmployeePayrollController::class, 'GenerateJson'])->name('payroll.generate-json');
 Route::post('/payroll/{employeeId}/calculate', [EmployeePayrollController::class, 'Generate'])->name('payroll.calculate');

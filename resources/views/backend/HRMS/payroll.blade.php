@@ -53,6 +53,9 @@
 
                         <!-- Generate Payroll button (Right side) -->
                         <div class="col-md-6 d-flex justify-content-end">
+                            <a href="{{ route('payroll.attendance.configuration') }}" class="btn btn-outline-secondary me-2">
+                                Attendance Settings
+                            </a>
                             <button id="generatePayrollButton" class="btn btn-primary" style="display: none;">Generate
                                 Payroll</button>
                         </div>

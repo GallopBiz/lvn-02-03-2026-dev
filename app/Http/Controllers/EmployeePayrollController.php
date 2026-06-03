@@ -31,12 +31,61 @@ use App\Models\HrmsBankDetail;
 use App\Models\HrmsStatutoryInformation;
 use App\Models\HrmsPosition;
 use App\Models\HrmsEmployeeLeaveBalance;
+use App\Models\PayrollAttendanceConfiguration;
+use App\Models\PayrollDepartmentAttendanceConfiguration;
+use App\Models\PayrollStaffAttendanceConfiguration;
 
 
 
 
 class EmployeePayrollController extends Controller
 {
+	private function isBiometricRequiredForPayrollMonth($month, $staffTypeId = null, $departmentId = null)
+	{
+		$monthConfiguration = PayrollAttendanceConfiguration::where('month_number', (int) $month)->first();
+
+		if (!$monthConfiguration) {
+			return true;
+		}
+
+		if ($monthConfiguration->biometric_required) {
+			return true;
+		}
+
+		if ($staffTypeId) {
+			$staffConfiguration = PayrollStaffAttendanceConfiguration::where('staff_type_id', $staffTypeId)->first();
+			if ($staffConfiguration && $staffConfiguration->biometric_required) {
+				return true;
+			}
+		}
+
+		if ($departmentId) {
+			$departmentConfiguration = PayrollDepartmentAttendanceConfiguration::where('department_id', $departmentId)->first();
+			if ($departmentConfiguration && $departmentConfiguration->biometric_required) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private function selectedEmployeesRequireBiometric($employeeIds, $month)
+	{
+		if (empty($employeeIds)) {
+			return true;
+		}
+
+		$employees = HrmsEmployee::whereIn('id', $employeeIds)->get(['staff_type_id', 'department_id']);
+
+		foreach ($employees as $employee) {
+			if ($this->isBiometricRequiredForPayrollMonth($month, $employee->staff_type_id, $employee->department_id)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public function GenerateJson(Request $request)
 	{
 		try {
@@ -45,8 +94,10 @@ class EmployeePayrollController extends Controller
 			$year = $request->input('year');
 			$skipLateComing = $request->boolean('skip_late_coming');
 
-			// Check if attendance is locked
-			if (!HrmsAttendanceLock::isLocked($year, $month)) {
+			$attendanceLockRequired = $this->selectedEmployeesRequireBiometric($employeeIds, $month);
+
+			// Check if attendance is locked when biometric attendance is required.
+			if ($attendanceLockRequired && !HrmsAttendanceLock::isLocked($year, $month)) {
 				$monthName = Carbon::createFromFormat('m', $month)->format('F');
 				return response()->json(['error' => "Attendance must be locked before processing payroll for {$monthName} {$year}."], 403);
 			}
@@ -92,6 +143,7 @@ class EmployeePayrollController extends Controller
 			$payrollResults = [];
 			foreach ($employees as $employee) {
 				try {
+					$biometricRequired = $this->isBiometricRequiredForPayrollMonth($month, $employee->staff_type_id, $employee->department_id);
 					// ...existing payroll calculation logic from Generate...
 					$activeSalary = $employee->salaries->first();
 					$basicSalary = $activeSalary->basic_salary * 0.5;
@@ -117,10 +169,13 @@ class EmployeePayrollController extends Controller
 						];
 					}
 					$lwp = 0;
-					$EmpAttandanceLog = DB::table('hrms_employee_attendance')
-						->where('ess_emp_code', $employee->biometricDetails->ess_emp_code)
-						->whereBetween('log_date', [$startDate, $endDate])
-						->get();
+					$EmpAttandanceLog = collect();
+					if ($biometricRequired && optional($employee->biometricDetails)->ess_emp_code) {
+						$EmpAttandanceLog = DB::table('hrms_employee_attendance')
+							->where('ess_emp_code', $employee->biometricDetails->ess_emp_code)
+							->whereBetween('log_date', [$startDate, $endDate])
+							->get();
+					}
 					$holidays = Holidays::where(function ($q) use ($startDate, $endDate) {
 						$q->whereBetween('HolidayStartDate', [$startDate, $endDate])
 							->orWhereBetween('HolidayEndDate', [$startDate, $endDate])
@@ -136,15 +191,17 @@ class EmployeePayrollController extends Controller
 					}
 					$employeeShift = HrmsShift::find($employee->shift_id);
 					$lateComingCount = 0;
-					foreach ($EmpAttandanceLog as $log) {
-						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-						if (in_array($logDate, $holidayDates)) continue;
-						$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-						$inTime = strtotime($logDate . ' ' . $log->in_time);
-						if ($inTime > $shiftStart) {
-							$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
-							if ($lateMinutes > $employeeShift->late_coming_threshold) {
-								$lateComingCount++;
+					if ($biometricRequired && $employeeShift) {
+						foreach ($EmpAttandanceLog as $log) {
+							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
+							if (in_array($logDate, $holidayDates)) continue;
+							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
+							$inTime = strtotime($logDate . ' ' . $log->in_time);
+							if ($inTime > $shiftStart) {
+								$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
+								if ($lateMinutes > $employeeShift->late_coming_threshold) {
+									$lateComingCount++;
+								}
 							}
 						}
 					}
@@ -160,7 +217,9 @@ class EmployeePayrollController extends Controller
 						}
 						$currentDate->addDay();
 					}
-					$attendanceDates = $EmpAttandanceLog->pluck('log_date')->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))->toArray();
+					$attendanceDates = $biometricRequired
+						? $EmpAttandanceLog->pluck('log_date')->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))->toArray()
+						: $workingDays;
 					$leaveDates = [];
 					foreach ($employee->leaveRequest as $lr) {
 						if ($lr->status === 'Approved') {
@@ -300,8 +359,8 @@ class EmployeePayrollController extends Controller
 					$payrollResults[] = [
 						'employee_id' => $employee->id,
 						'employee_name' => $employee->first_name . ' ' . $employee->last_name,
-						'employee_code' => $employee->biometricDetails->ess_emp_code,
-						'staff_type' => $employee->staffType->staff_type_name,
+						'employee_code' => optional($employee->biometricDetails)->ess_emp_code,
+						'staff_type' => optional($employee->staffType)->staff_type_name,
 						'lwp' => $lwp,
 						'sandwich_days' => $sandwichCoveredDays ?? 0,
 						'sandwich_applied' => $sandwichApplied,
@@ -366,8 +425,10 @@ class EmployeePayrollController extends Controller
 			$skipLateComing = $request->boolean('skip_late_coming');
 
 
-			// Check if attendance is locked
-			if (!HrmsAttendanceLock::isLocked($year, $month)) {
+			$attendanceLockRequired = $this->selectedEmployeesRequireBiometric($employeeIds, $month);
+
+			// Check if attendance is locked when biometric attendance is required.
+			if ($attendanceLockRequired && !HrmsAttendanceLock::isLocked($year, $month)) {
 				$monthName = Carbon::createFromFormat('m', $month)->format('F');
 				return response()->json(['error' => "Attendance must be locked before processing payroll for {$monthName} {$year}."], 403);
 			}
@@ -413,6 +474,7 @@ class EmployeePayrollController extends Controller
 
 			foreach ($employees as $employee) {
 				try {
+					$biometricRequired = $this->isBiometricRequiredForPayrollMonth($month, $employee->staff_type_id, $employee->department_id);
 					\Log::info("Processing Employee ID: {$employee->id}, Name: {$employee->first_name} {$employee->last_name}");
 
 					// --- Gross Salary Calculation ---
@@ -451,10 +513,13 @@ class EmployeePayrollController extends Controller
 
 					// --- Attendance and LWP Calculation ---
 					$lwp = 0;
-					$EmpAttandanceLog = DB::table('hrms_employee_attendance')
-						->where('ess_emp_code', $employee->biometricDetails->ess_emp_code)
-						->whereBetween('log_date', [$startDate, $endDate])
-						->get();
+					$EmpAttandanceLog = collect();
+					if ($biometricRequired && optional($employee->biometricDetails)->ess_emp_code) {
+						$EmpAttandanceLog = DB::table('hrms_employee_attendance')
+							->where('ess_emp_code', $employee->biometricDetails->ess_emp_code)
+							->whereBetween('log_date', [$startDate, $endDate])
+							->get();
+					}
 
 					$holidays = Holidays::where(function ($q) use ($startDate, $endDate) {
 						$q->whereBetween('HolidayStartDate', [$startDate, $endDate])
@@ -474,17 +539,19 @@ class EmployeePayrollController extends Controller
 					$employeeShift = HrmsShift::find($employee->shift_id);
 					$lateComingCount = 0;
 
-					foreach ($EmpAttandanceLog as $log) {
-						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-						if (in_array($logDate, $holidayDates)) continue;
+					if ($biometricRequired && $employeeShift) {
+						foreach ($EmpAttandanceLog as $log) {
+							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
+							if (in_array($logDate, $holidayDates)) continue;
 
-						$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-						$inTime = strtotime($logDate . ' ' . $log->in_time);
-						if ($inTime > $shiftStart) {
-							$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
-							if ($lateMinutes > $employeeShift->late_coming_threshold) {
-								$lateComingCount++;
-								\Log::info("Late Entry on $logDate: $lateMinutes minutes.");
+							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
+							$inTime = strtotime($logDate . ' ' . $log->in_time);
+							if ($inTime > $shiftStart) {
+								$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
+								if ($lateMinutes > $employeeShift->late_coming_threshold) {
+									$lateComingCount++;
+									\Log::info("Late Entry on $logDate: $lateMinutes minutes.");
+								}
 							}
 						}
 					}
@@ -507,7 +574,9 @@ class EmployeePayrollController extends Controller
 					}
 					\Log::info('Working Days: ' . implode(', ', $workingDays));
 
-					$attendanceDates = $EmpAttandanceLog->pluck('log_date')->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))->toArray();
+					$attendanceDates = $biometricRequired
+						? $EmpAttandanceLog->pluck('log_date')->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))->toArray()
+						: $workingDays;
 					\Log::info('Attendance Dates: ' . implode(', ', $attendanceDates));
 					$missingDays = array_diff($workingDays, $attendanceDates);
 					\Log::info('Missing Days: ' . implode(', ', $missingDays));
@@ -795,7 +864,7 @@ class EmployeePayrollController extends Controller
 
 					$sandwichAppliedText = $sandwichApplied ? 'Yes' : 'No';
 					$csvData[] = array_merge(
-						[$sno++, $employee->id, $employee->first_name . ' ' . $employee->last_name, $employee->biometricDetails->ess_emp_code, $employee->staffType->staff_type_name, $lwp, ($sandwichCoveredDays ?? 0), $sandwichAppliedText, $grossSalary, $basicSalary, $da, $hra, $earnSalary],
+						[$sno++, $employee->id, $employee->first_name . ' ' . $employee->last_name, optional($employee->biometricDetails)->ess_emp_code, optional($employee->staffType)->staff_type_name, $lwp, ($sandwichCoveredDays ?? 0), $sandwichAppliedText, $grossSalary, $basicSalary, $da, $hra, $earnSalary],
 						array_values($deductionDetails),
 						[$netSalary]
 					);
