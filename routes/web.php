@@ -1361,12 +1361,15 @@ Route::get('/basicDeduction/fetch', [BasicDeductionsController::class, 'fetchDed
 Route::prefix('transfer-certificate')->group(function () {
     Route::get('/', [App\Http\Controllers\backend\TransferCertificateController::class, 'index'])->name('transfercertificate.index');
     Route::get('/create', [App\Http\Controllers\backend\TransferCertificateController::class, 'create'])->name('transfercertificate.create');
+    Route::get('/search-student', [App\Http\Controllers\backend\TransferCertificateController::class, 'searchStudent'])->name('transfercertificate.search-student');
+    Route::get('/student/{id}/details', [App\Http\Controllers\backend\TransferCertificateController::class, 'studentDetails'])->name('transfercertificate.student-details');
     Route::post('/store', [App\Http\Controllers\backend\TransferCertificateController::class, 'store'])->name('transfercertificate.store');
     Route::get('/edit/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'edit'])->name('transfercertificate.edit');
     Route::post('/update/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'update'])->name('transfercertificate.update');
     Route::get('/delete/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'destroy'])->name('transfercertificate.delete');
     Route::get('/print/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'print'])->name('transfercertificate.print');
     Route::get('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate');
+    Route::post('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate.store');
 });
 
 

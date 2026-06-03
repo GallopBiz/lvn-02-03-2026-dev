@@ -327,6 +327,23 @@ return [
         ],
     ],
     [
+        'title' => 'TC Module',
+        'route' => 'transfer-certificate',
+        'icon' => 'i-File-Clipboard-Text--Image',
+        'permission' => 'tc-module',
+        'roles' => ['Admin'],
+        'children' => [
+            [
+                'title' => 'Transfer Certificate',
+                'icon' => 'i-Certificate',
+                'children' => [
+                    [ 'title' => 'Generate T.C.', 'route' => 'transfer-certificate/create', 'roles' => ['Admin'] ],
+                    [ 'title' => 'T.C. Reports', 'route' => 'transfer-certificate', 'roles' => ['Admin'] ],
+                ],
+            ],
+        ],
+    ],
+    [
         'title' => 'Setting',
         'route' => 'setting',
         'icon' => 'i-Gear',
