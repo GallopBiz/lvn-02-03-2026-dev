@@ -255,6 +255,7 @@ return [
                 'children' => [
                     [ 'title' => 'Shift Type', 'route' => 'shifttype', 'roles' => ['Admin'] ],
                     [ 'title' => 'Create Shift', 'route' => 'shifts', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Shift History', 'route' => 'shifts-history', 'roles' => ['Admin'] ],
                 ],
             ],
             [

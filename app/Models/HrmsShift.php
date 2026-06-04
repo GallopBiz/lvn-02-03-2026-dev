@@ -26,4 +26,9 @@ class HrmsShift extends Model
         return $this->hasMany(HrmsEmployee::class);
     }
 
+    public function employeeShiftHistories()
+    {
+        return $this->hasMany(HrmsEmployeeShiftHistory::class, 'shift_id');
+    }
+
 }

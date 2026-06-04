@@ -12,7 +12,7 @@
         <div class="form_section1_div">
             <div class="d-flex justify-content-between align-items-center">
                 <h1 class="me-2">Leave Type Master</h1>
-                <button id="runCommandBtn" class="btn btn-primary">Run Leave Reset</button>
+                <button id="runCommandBtn" type="button" class="btn btn-warning">Reset Employee Leave Balances</button>
             </div>
             <div class="separator-breadcrumb border-top"></div>
             
@@ -234,7 +234,12 @@
         });
 
         document.getElementById("runCommandBtn").addEventListener("click", function () {
-        if (confirm("Are you sure you want to run the leave reset")) {
+        if (confirm("Are you sure you want to reset employee leave balances? This will assign leave balances again based on each employee's staff type configuration.")) {
+            const resetButton = this;
+            const originalText = resetButton.innerText;
+            resetButton.disabled = true;
+            resetButton.innerText = "Resetting...";
+
             fetch("{{ route('run.leave.reset') }}", {
                 method: "POST",
                 headers: {
@@ -242,9 +247,18 @@
                     "Content-Type": "application/json"
                 }
             })
-            .then(response => response.json())
-            .then(data => alert(data.message))
-            .catch(error => alert("Error: " + error));
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    throw new Error(data.message || "Leave reset failed.");
+                }
+                alert(data.message);
+            })
+            .catch(error => alert("Error: " + error.message))
+            .finally(() => {
+                resetButton.disabled = false;
+                resetButton.innerText = originalText;
+            });
         }
     });
     </script>

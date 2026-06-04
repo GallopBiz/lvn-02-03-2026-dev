@@ -34,6 +34,7 @@ use App\Models\HrmsEmployeeLeaveBalance;
 use App\Models\PayrollAttendanceConfiguration;
 use App\Models\PayrollDepartmentAttendanceConfiguration;
 use App\Models\PayrollStaffAttendanceConfiguration;
+use App\Services\Hrms\ShiftResolver;
 
 
 
@@ -189,12 +190,13 @@ class EmployeePayrollController extends Controller
 							$holidayDates[] = $day->format('Y-m-d');
 						}
 					}
-					$employeeShift = HrmsShift::find($employee->shift_id);
 					$lateComingCount = 0;
-					if ($biometricRequired && $employeeShift) {
+					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
 							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
 							if (in_array($logDate, $holidayDates)) continue;
+							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
+							if (!$employeeShift) continue;
 							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
 							$inTime = strtotime($logDate . ' ' . $log->in_time);
 							if ($inTime > $shiftStart) {
@@ -536,13 +538,14 @@ class EmployeePayrollController extends Controller
 						}
 					}
 
-					$employeeShift = HrmsShift::find($employee->shift_id);
 					$lateComingCount = 0;
 
-					if ($biometricRequired && $employeeShift) {
+					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
 							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
 							if (in_array($logDate, $holidayDates)) continue;
+							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
+							if (!$employeeShift) continue;
 
 							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
 							$inTime = strtotime($logDate . ' ' . $log->in_time);
@@ -916,7 +919,7 @@ class EmployeePayrollController extends Controller
         $userName = 'dev';
         $userPassword = 'Test@123';
         $strDataList = 'Blank';
-        $url = 'http://45.248.190.34:8083/iclock/WebAPIService.asmx?op=GetTransactionsLog';
+        $url = 'http://45.248.190.2:8083/iclock/WebAPIService.asmx?op=GetTransactionsLog';
         $xml = '<?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xmlns:xsd="http://www.w3.org/2001/XMLSchema"

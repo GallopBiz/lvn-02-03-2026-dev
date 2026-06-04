@@ -33,56 +33,62 @@ class ResetEmployeeLeaveBalance extends Command
     {
         DB::beginTransaction();
         try {
-            // Fetch all employees
-            $employees = HrmsEmployee::all();
-            foreach ($employees as $employee) {
-                // Fetch leave balances for the employee
-                $leaveBalances = HrmsEmployeeLeaveBalance::where('employee_id', $employee->id)->get();
-                $employeeStaffId = $employee->staff_type_id; 
-                $carryForwardBalances = [];
-                $leaveBalances = HrmsEmployeeLeaveBalance::where('employee_id', $employee->id)->get();
+            $employees = HrmsEmployee::with('leaveBalances.leaveType')
+                ->where(fn($query) => $query->where('employee_status', 'active')->orWhereNull('employee_status'))
+                ->get();
 
-                foreach ($leaveBalances as $leave) {
-                    if ($leave->leaveType->is_carry_forward) {
-                        $carryForwardBalances[$leave->leave_type_id] = $leave->balance;
-                    } else {
-                        $carryForwardBalances[$leave->leave_type_id] = 0;
+            $updatedBalances = 0;
+
+            foreach ($employees as $employee) {
+                $carryForwardBalances = [];
+
+                foreach ($employee->leaveBalances as $leaveBalance) {
+                    if (optional($leaveBalance->leaveType)->is_carry_forward) {
+                        $carryForwardBalances[$leaveBalance->leave_type_id] = $leaveBalance->balance;
                     }
                 }
-                $this->initializeLeaveBalances($employee->id, $employeeStaffId, $employee->is_vacation, $carryForwardBalances);
 
+                $updatedBalances += $this->initializeLeaveBalances(
+                    $employee->id,
+                    $employee->staff_type_id,
+                    $carryForwardBalances
+                );
             }
 
-            // Commit transaction
             DB::commit();
-            
-            $this->info('Employee leave balances have been reset successfully.');
+
+            $this->info("Employee leave balances have been reset successfully. Updated {$updatedBalances} balance(s) for {$employees->count()} employee(s).");
         } catch (\Exception $e) {
             DB::rollBack();
             $this->error('Error resetting leave balances: ' . $e->getMessage());
+            return Command::FAILURE;
         }
+
         return Command::SUCCESS;
     }
 
-    private function initializeLeaveBalances($employeeId, $employeeStaffId, $isVacationType, $carryForwardBalances)
+    private function initializeLeaveBalances($employeeId, $employeeStaffId, $carryForwardBalances)
     {
+        if (!$employeeStaffId) {
+            return 0;
+        }
+
         $leaveAllocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employeeStaffId)->get();
+        $updatedBalances = 0;
 
         foreach ($leaveAllocated as $leave) {
-            $newBalance = $leave->max_allowed;
+            $newBalance = (float) ($leave->max_allowed ?? 0);
             $carryForward = $carryForwardBalances[$leave->leave_type_id] ?? 0;
-            $totalBalance = $newBalance + $carryForward; // Add carry forward balance
+            $totalBalance = $newBalance + $carryForward;
+
             HrmsEmployeeLeaveBalance::updateOrCreate(
                 ['employee_id' => $employeeId, 'leave_type_id' => $leave->leave_type_id],
                 ['balance' => $totalBalance]
             );
+
+            $updatedBalances++;
         }
 
-        if ($isVacationType) {
-            HrmsEmployeeLeaveBalance::updateOrCreate(
-                ['employee_id' => $employeeId, 'leave_type_id' => 1],
-                ['remaining_balance' => 0]
-            );
-        }
+        return $updatedBalances;
     }
 }

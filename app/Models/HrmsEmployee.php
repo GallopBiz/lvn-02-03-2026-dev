@@ -144,6 +144,11 @@ class HrmsEmployee extends Model
         return $this->hasMany(HrmsEmployeeLeaveBalance::class,'employee_id');
     }
 
+    public function shiftHistories()
+    {
+        return $this->hasMany(HrmsEmployeeShiftHistory::class, 'employee_id');
+    }
+
     /** Query Scopes **/
     public function scopeActive($query)
     {

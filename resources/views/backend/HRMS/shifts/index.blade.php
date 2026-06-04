@@ -6,6 +6,7 @@
             <div class="col-md-12">
                 <h1>Shifts</h1>
                 <a href="{{ route('shifts.create') }}" class="btn btn-primary">Create Shift</a>
+                <a href="{{ route('shifts.history') }}" class="btn btn-outline-secondary">Shift History</a>
                 <table class="table">
                     <thead>
                         <tr>

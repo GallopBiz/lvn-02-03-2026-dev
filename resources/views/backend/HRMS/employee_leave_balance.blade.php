@@ -11,6 +11,15 @@
 
     <div class="card text-start">
         <div class="card-body">
+            @if (session('success'))
+                <div class="alert alert-success">{{ session('success') }}</div>
+            @endif
+
+            @if ($errors->any())
+                <div class="alert alert-danger">
+                    {{ $errors->first() }}
+                </div>
+            @endif
 
             {{-- Search Form --}}
             <form id="searchForm" method="GET" action="{{ route('employee.leave.balances') }}">
@@ -22,6 +31,23 @@
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-primary">Search</button>
                         <a href="{{ route('employee.leave.balances') }}" class="btn btn-secondary ms-2">Clear</a>
+                    </div>
+                </div>
+            </form>
+
+            <form method="POST" action="{{ route('employee.leave.balances.import') }}" enctype="multipart/form-data" class="mb-3">
+                @csrf
+                <div class="row align-items-end g-2">
+                    <div class="col-md-6">
+                        <label for="leave_balance_file">Bulk Import Leave Balances</label>
+                        <input type="file" name="leave_balance_file" id="leave_balance_file" class="form-control" accept=".csv,.txt" required>
+                        <small class="form-text text-muted">Download the sample, update the balance column, then import the same file.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex gap-2 justify-content-md-end">
+                            <a href="{{ route('employee.leave.balances.sample') }}" class="btn btn-secondary">Download Sample CSV</a>
+                            <button type="submit" class="btn btn-warning">Import CSV</button>
+                        </div>
                     </div>
                 </div>
             </form>

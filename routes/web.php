@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\LeaveStaffAllocation;
 use App\Http\Controllers\LeaveTypeMaster;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\backend\AdminController;
 use App\Http\Controllers\HomeController;
@@ -1210,6 +1212,11 @@ Route::post('store-employeeleave', [EmployeeLeaves::class, 'store']);
 Route::get('delete-employeeleave/{id}', [EmployeeLeaves::class, 'employeeleave_delete']);
 
 Route::resource('shifts', ShiftController::class);
+Route::get('shifts-history', [ShiftController::class, 'history'])->name('shifts.history');
+Route::post('shifts-history', [ShiftController::class, 'storeHistory'])->name('shifts.history.store');
+Route::get('shifts-history/{history}/edit', [ShiftController::class, 'editHistory'])->name('shifts.history.edit');
+Route::put('shifts-history/{history}', [ShiftController::class, 'updateHistory'])->name('shifts.history.update');
+Route::delete('shifts-history/{history}', [ShiftController::class, 'destroyHistory'])->name('shifts.history.destroy');
 
 
 Route::get('InitialLeave',[Empiniticialleave::class, 'index'])->name('InitialLeave');
@@ -1261,8 +1268,18 @@ Route::get('employeeattendance',[EmployeeAttendanceController::class, 'index'])-
 Route::post('employeeattendance/sync', [EmployeeAttendanceController::class, 'sync'])->name('employeeattendance.sync');
 
 Route::post('/run-leave-reset', function (Request $request) {
-    Artisan::call('leave:reset');
-    return response()->json(['message' => 'Leave reset command executed successfully.']);
+    $exitCode = Artisan::call('leave:reset');
+    $output = trim(Artisan::output());
+
+    if ($exitCode !== 0) {
+        return response()->json([
+            'message' => $output ?: 'Leave reset failed.',
+        ], 500);
+    }
+
+    return response()->json([
+        'message' => $output ?: 'Leave reset command executed successfully.',
+    ]);
 })->name('run.leave.reset');
 
 Route::post('/attendance/lock', [EmployeeAttendanceController::class, 'lockAttendance'])->name('attendance.lock');
@@ -1324,6 +1341,9 @@ Route::get('/basicDeduction/fetch', [BasicDeductionsController::class, 'fetchDed
 
 	//HRMS Employee Leave Balance
 	Route::get('employee-leave-balances', [EmployeeLeaveBalanceController::class, 'index'])->name('employee.leave.balances');
+	Route::post('employee-leave-balances/update', [EmployeeLeaveBalanceController::class, 'update'])->name('employee.leave.balances.update');
+	Route::post('employee-leave-balances/import', [EmployeeLeaveBalanceController::class, 'import'])->name('employee.leave.balances.import');
+	Route::get('employee-leave-balances/sample', [EmployeeLeaveBalanceController::class, 'sample'])->name('employee.leave.balances.sample');
 
 	Route::get('/manual-attendance', [ManualAttendanceController::class, 'index'])->name('manual.attendance');
 	Route::post('/manual-attendance-update', [ManualAttendanceController::class, 'update'])->name('manual.attendance.update');

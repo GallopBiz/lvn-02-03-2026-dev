@@ -35,6 +35,9 @@ class LeaveTypeMaster extends Controller
            
         // Save the data if validation passes
         $data = $request->all();
+        $data['is_paid'] = $request->boolean('is_paid');
+        $data['allow_backdate'] = $request->boolean('allow_backdate');
+        $data['is_carry_forward'] = $request->boolean('is_carry_forward');
         HrmsLeaveType::create($data);
     
         return redirect()->route('leave_Types')->with('success', 'Leave Type created successfully.');
@@ -65,6 +68,9 @@ class LeaveTypeMaster extends Controller
         }
         $leaveType = HrmsLeaveType::findOrFail($request->id);    
         $data = $request->all();
+        $data['is_paid'] = $request->boolean('is_paid');
+        $data['allow_backdate'] = $request->boolean('allow_backdate');
+        $data['is_carry_forward'] = $request->boolean('is_carry_forward');
     
         $leaveType->update($data);
     

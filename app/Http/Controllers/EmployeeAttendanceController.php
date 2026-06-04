@@ -17,6 +17,33 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 class EmployeeAttendanceController extends Controller
 {
+	private function parseBiometricLogLine(string $log): ?array
+	{
+		$log = trim($log);
+
+		if ($log === '') {
+			return null;
+		}
+
+		$parts = preg_split('/\t+/', $log);
+
+		if (count($parts) >= 2) {
+			$userId = trim($parts[0]);
+			$timestamp = trim($parts[1]);
+		} elseif (preg_match('/^(\S+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/', $log, $matches)) {
+			$userId = $matches[1];
+			$timestamp = $matches[2];
+		} else {
+			return null;
+		}
+
+		if ($userId === '' || $timestamp === '' || strtotime($timestamp) === false) {
+			return null;
+		}
+
+		return [$userId, $timestamp];
+	}
+
     public function index(Request $request)
     {
         $month = $request->input('month', now()->format('m'));
@@ -70,9 +97,10 @@ class EmployeeAttendanceController extends Controller
 			$userName = 'dev';
 			$userPassword = 'Test@123';
 			$strDataList = 'Blank';
-			$url = 'http://45.248.190.34:8083/iclock/WebAPIService.asmx';
+			$url = 'http://45.248.190.2:8083/iclock/WebAPIService.asmx';
 
 			$allLogs = [];
+			$skippedLogs = 0;
 
 			foreach ($serialNumbers as $serialNumber) {
 				// Build SOAP XML for this machine
@@ -119,10 +147,20 @@ class EmployeeAttendanceController extends Controller
 				// Split logs and include machine serial
 				$logs = explode("\n", trim($strDataListResponse));
 				foreach ($logs as $log) {
-					$log = trim($log);
-					if (empty($log)) continue;
+					$parsedLog = $this->parseBiometricLogLine($log);
 
-					[$userId, $timestamp] = explode("\t", $log);
+					if (!$parsedLog) {
+						if (trim($log) !== '') {
+							$skippedLogs++;
+							\Log::warning('Skipped malformed biometric attendance log', [
+								'serial' => $serialNumber,
+								'log' => trim($log),
+							]);
+						}
+						continue;
+					}
+
+					[$userId, $timestamp] = $parsedLog;
 					$allLogs[] = [
 						'userId' => $userId,
 						'timestamp' => $timestamp,
@@ -132,7 +170,11 @@ class EmployeeAttendanceController extends Controller
 			}
 
 			if (empty($allLogs)) {
-				return response()->json(['success' => false, 'message' => 'No logs received from any device.']);
+				$message = $skippedLogs > 0
+					? "No valid attendance logs received from any device. Skipped {$skippedLogs} malformed row(s)."
+					: 'No logs received from any device.';
+
+				return response()->json(['success' => false, 'message' => $message]);
 			}
 
 			// Process all logs together
@@ -163,7 +205,12 @@ class EmployeeAttendanceController extends Controller
 				}
 			}
 
-			return response()->json(['success' => true, 'message' => 'Attendance data synced successfully from both devices!']);
+			$message = 'Attendance data synced successfully from both devices!';
+			if ($skippedLogs > 0) {
+				$message .= " Skipped {$skippedLogs} malformed row(s).";
+			}
+
+			return response()->json(['success' => true, 'message' => $message]);
 
 		} catch (\Exception $e) {
 			\Log::error('Sync Error', ['error' => $e->getMessage()]);
