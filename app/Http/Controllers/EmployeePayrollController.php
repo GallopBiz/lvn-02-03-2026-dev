@@ -32,8 +32,6 @@ use App\Models\HrmsStatutoryInformation;
 use App\Models\HrmsPosition;
 use App\Models\HrmsEmployeeLeaveBalance;
 use App\Models\PayrollAttendanceConfiguration;
-use App\Models\PayrollDepartmentAttendanceConfiguration;
-use App\Models\PayrollStaffAttendanceConfiguration;
 use App\Services\Hrms\ShiftResolver;
 
 
@@ -49,42 +47,12 @@ class EmployeePayrollController extends Controller
 			return true;
 		}
 
-		if ($monthConfiguration->biometric_required) {
-			return true;
-		}
-
-		if ($staffTypeId) {
-			$staffConfiguration = PayrollStaffAttendanceConfiguration::where('staff_type_id', $staffTypeId)->first();
-			if ($staffConfiguration && $staffConfiguration->biometric_required) {
-				return true;
-			}
-		}
-
-		if ($departmentId) {
-			$departmentConfiguration = PayrollDepartmentAttendanceConfiguration::where('department_id', $departmentId)->first();
-			if ($departmentConfiguration && $departmentConfiguration->biometric_required) {
-				return true;
-			}
-		}
-
-		return false;
+		return (bool) $monthConfiguration->biometric_required;
 	}
 
 	private function selectedEmployeesRequireBiometric($employeeIds, $month)
 	{
-		if (empty($employeeIds)) {
-			return true;
-		}
-
-		$employees = HrmsEmployee::whereIn('id', $employeeIds)->get(['staff_type_id', 'department_id']);
-
-		foreach ($employees as $employee) {
-			if ($this->isBiometricRequiredForPayrollMonth($month, $employee->staff_type_id, $employee->department_id)) {
-				return true;
-			}
-		}
-
-		return false;
+		return $this->isBiometricRequiredForPayrollMonth($month);
 	}
 
 	public function GenerateJson(Request $request)
