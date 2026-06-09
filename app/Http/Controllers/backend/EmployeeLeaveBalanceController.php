@@ -8,6 +8,7 @@ use App\Models\HrmsEmployeeLeaveBalance;
 use App\Models\HrmsLeaveType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Artisan;
 
 class EmployeeLeaveBalanceController extends Controller
 {
@@ -114,9 +115,15 @@ class EmployeeLeaveBalanceController extends Controller
             }
         });
 
+        $message = "{$updated} leave balance(s) updated successfully.";
+
+        if ($request->wantsJson() || $request->ajax() || $request->header('Accept') === 'application/json') {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+
         return redirect()
             ->route('employee.leave.balances', $request->only('search'))
-            ->with('success', "{$updated} leave balance(s) updated successfully.");
+            ->with('success', $message);
     }
 
     public function import(Request $request)
@@ -217,5 +224,27 @@ class EmployeeLeaveBalanceController extends Controller
 
             fclose($file);
         }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    public function reset(Request $request)
+    {
+        try {
+            Artisan::call('leave:reset');
+            $output = trim(Artisan::output());
+
+            if ($request->ajax()) {
+                return response()->json(['success' => true, 'message' => $output ?: 'Employee leave balances reset successfully.']);
+            }
+
+            return redirect()
+                ->route('employee.leave.balances')
+                ->with('success', $output ?: 'Employee leave balances reset successfully.');
+        } catch (\Exception $e) {
+            if ($request->ajax()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            }
+
+            return redirect()->back()->with('error', $e->getMessage());
+        }
     }
 }

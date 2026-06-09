@@ -8,6 +8,7 @@
     <table class="table table-bordered">
         <thead class="table-dark">
             <tr>
+                <th>Sr.</th>
                 <th>Employee ID</th>
                 <th>Employee Name</th>
                 <th>Staff Type</th>
@@ -19,6 +20,7 @@
         <tbody>
             @foreach($employees as $emp)
             <tr>
+                <td>{{ $loop->iteration }}</td>
                 <td>{{ $emp['employee_id'] }}</td>
                 <td>{{ $emp['employee_name'] }}</td>
                 <td>{{ $emp['staff_type_name'] }}</td>

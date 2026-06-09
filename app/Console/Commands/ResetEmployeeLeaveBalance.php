@@ -73,19 +73,118 @@ class ResetEmployeeLeaveBalance extends Command
             return 0;
         }
 
-        $leaveAllocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employeeStaffId)->get();
+        // Load employee for eligibility checks and allocations with related leave type metadata
+        $employee = \App\Models\HrmsEmployee::with(['department', 'staffType'])->find($employeeId);
+
+        // Helper to check Earn Leave eligibility: staff type 'Permanent' OR department 'Office Staff'
+        $isEarnLeaveEligible = false;
+        if ($employee) {
+            $staffName = optional($employee->staffType)->staff_type_name;
+            $deptName = optional($employee->department)->department_name;
+            // Require BOTH Permanent staff type AND Office Staff department
+            $isEarnLeaveEligible = (
+                is_string($staffName) && strcasecmp(trim($staffName), 'Permanent') === 0
+            ) && (
+                is_string($deptName) && strcasecmp(trim($deptName), 'Office Staff') === 0
+            );
+        }
+
+        // Load allocations with related leave type metadata
+        $leaveAllocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employeeStaffId)
+            ->with('leaveType')
+            ->get();
+
         $updatedBalances = 0;
 
         foreach ($leaveAllocated as $leave) {
-            $newBalance = (float) ($leave->max_allowed ?? 0);
-            $carryForward = $carryForwardBalances[$leave->leave_type_id] ?? 0;
-            $totalBalance = $newBalance + $carryForward;
+            $leaveType = $leave->leaveType;
+            $leaveTypeId = $leave->leave_type_id;
+            $leaveName = optional($leaveType)->name;
+            $normalizedLeaveName = strtolower(preg_replace('/[^a-z]/', '', $leaveName ?? ''));
+            $isEarnLeaveType = in_array($normalizedLeaveName, ['earnleaveadmin', 'eearnleaveadmin'], true);
+            $isCompoffType = $normalizedLeaveName === 'compoff';
+
+            // Special handling for Earn Leave - Admin
+            if ($isEarnLeaveType) {
+                if ($isEarnLeaveEligible) {
+                    // Per request: assign 30 EL to eligible employees (carry-forward applies if allowed)
+                    $allocated = 30.0;
+                    $carry = 0;
+                    if (optional($leaveType)->is_carry_forward) {
+                        $carry = $carryForwardBalances[$leaveTypeId] ?? 0;
+                    }
+
+                    $totalBalance = $allocated + $carry;
+
+                    HrmsEmployeeLeaveBalance::updateOrCreate(
+                        ['employee_id' => $employeeId, 'leave_type_id' => $leaveTypeId],
+                        ['balance' => $totalBalance]
+                    );
+                    $updatedBalances++;
+                } else {
+                    // Not eligible -> force zero
+                    HrmsEmployeeLeaveBalance::updateOrCreate(
+                        ['employee_id' => $employeeId, 'leave_type_id' => $leaveTypeId],
+                        ['balance' => 0]
+                    );
+                    $updatedBalances++;
+                }
+
+                continue;
+            }
+
+            // Special handling for Compoff: always reset to 0
+            if ($isCompoffType) {
+                HrmsEmployeeLeaveBalance::updateOrCreate(
+                    ['employee_id' => $employeeId, 'leave_type_id' => $leaveTypeId],
+                    ['balance' => 0]
+                );
+                $updatedBalances++;
+                continue;
+            }
+
+            // Default allocated amount
+            $allocated = (float) ($leave->max_allowed ?? 0);
+
+            // Carry forward only if the leave type allows it. Otherwise ignore previous balance.
+            $carry = 0;
+            if (optional($leaveType)->is_carry_forward) {
+                $carry = $carryForwardBalances[$leaveTypeId] ?? 0;
+            }
+
+            $totalBalance = $allocated + $carry;
 
             HrmsEmployeeLeaveBalance::updateOrCreate(
-                ['employee_id' => $employeeId, 'leave_type_id' => $leave->leave_type_id],
+                ['employee_id' => $employeeId, 'leave_type_id' => $leaveTypeId],
                 ['balance' => $totalBalance]
             );
 
+            $updatedBalances++;
+        }
+
+        // Ensure Compoff is reset to 0 even if there is no allocation for this staff type
+        $compoffType = \App\Models\HrmsLeaveType::get()->first(function ($lt) {
+            return strtolower(preg_replace('/[^a-z]/', '', optional($lt)->name ?? '')) === 'compoff';
+        });
+        if ($compoffType && !$leaveAllocated->contains('leave_type_id', $compoffType->id)) {
+            HrmsEmployeeLeaveBalance::updateOrCreate(
+                ['employee_id' => $employeeId, 'leave_type_id' => $compoffType->id],
+                ['balance' => 0]
+            );
+            $updatedBalances++;
+        }
+
+        // If Earn Leave - Admin is not allocated for this staff type and employee is NOT eligible,
+        // ensure the balance is zero. If employee is eligible but no allocation exists, do nothing.
+        $elType = \App\Models\HrmsLeaveType::get()->first(function ($lt) {
+            $normalized = strtolower(preg_replace('/[^a-z]/', '', optional($lt)->name ?? ''));
+            return in_array($normalized, ['earnleaveadmin', 'eearnleaveadmin'], true);
+        });
+        if ($elType && !$leaveAllocated->contains('leave_type_id', $elType->id) && !$isEarnLeaveEligible) {
+            HrmsEmployeeLeaveBalance::updateOrCreate(
+                ['employee_id' => $employeeId, 'leave_type_id' => $elType->id],
+                ['balance' => 0]
+            );
             $updatedBalances++;
         }
 

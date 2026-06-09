@@ -374,6 +374,9 @@ Route::group(['middleware' => ['auth']], function() {
 	Route::post('/fetch-students', [StudentTransferController::class, 'fetchStudents'])->name('student.fetch');
 	Route::post('/promote-students', [StudentTransferController::class, 'promote'])->name('student.promote');
 
+    // Employee Leave Balance reset (trigger console command from web)
+    Route::post('employee/leave/reset', [EmployeeLeaveBalanceController::class, 'reset'])->name('employee.leave.reset');
+
 
 
 
