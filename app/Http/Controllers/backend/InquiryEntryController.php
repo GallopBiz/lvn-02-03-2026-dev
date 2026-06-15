@@ -1061,6 +1061,8 @@ class InquiryEntryController extends Controller
         $data['states'] = DB::connection('dynamic')->table('states')->get();//State::get(["name", "id"]);
         $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get();
 		$data['student_fees_exempted'] = [];
+		$data['next_year_fee_receipts'] = [];
+		$data['next_year_fee_rows'] = [];
 
 		foreach ($data['all_inquiry'] as $each_inq) {
 			$scholar_no = $each_inq->scholar_no;
@@ -1071,8 +1073,30 @@ class InquiryEntryController extends Controller
 				->first();
 
 			$data['student_fees_exempted'][$scholar_no] = $exempted;
+
+			$data['next_year_fee_receipts'][$scholar_no] = DB::connection('dynamic')
+				->table('totalnextyear')
+				->where('scholar_no', $scholar_no)
+				->whereNotNull('receipt_number')
+				->pluck('receipt_number')
+				->unique()
+				->values();
+
+			$data['next_year_fee_rows'][$scholar_no] = DB::connection('dynamic')
+				->table('totalnextyear')
+				->where('scholar_no', $scholar_no)
+				->orderBy('id')
+				->get([
+					'fees_date',
+					'due_date',
+					'account_name',
+					'fees',
+					'totalnextyear',
+					'received_type',
+					'reference_number',
+					'receipt_number',
+				]);
 		}
-		print_r($id);
 		//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
         $data['generateDueChartStatus'] = DB::connection('dynamic')->table('generate_duechartstatus')->select('*')->where('student_id',$id)->get();
         $data['late_fees_master'] = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first(); //Late_fees_master::where('id',1)->first();

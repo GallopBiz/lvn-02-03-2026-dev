@@ -145,6 +145,7 @@ font-size: 0.813rem;
                         <tr>
                           <th>SNo.</th>
                           <th>Form No.</th>
+                          <th>Scholar No.</th>
                           <th>DOB</th>
                           <th>Class Name</th>
                           <th>Student Name</th>
@@ -164,6 +165,7 @@ font-size: 0.813rem;
                         <tr>
                           <td>{{$loop->iteration}}</td>
                           <td>{{$each_inq->form_number}}</td>
+                          <td>{{$each_inq->scholar_no}}</td>
                           <td>{{date('d-m-Y',strtotime($each_inq->date_of_birth))}}</td>
                           <td>{{$each_inq->class_name}}</td>
                           <td><?php if(!empty($each_inq->studentname_prefix)){ echo ucwords($each_inq->studentname_prefix).' '; } if(!empty($each_inq->student_name)){ echo ucwords($each_inq->student_name); } ?></td>
@@ -194,13 +196,14 @@ font-size: 0.813rem;
                         </tr>
                         @endforeach
                         @else
-                        <tr><td colspan="9" class="text-center">No Data Found</td></tr>
+                        <tr><td colspan="12" class="text-center">No Data Found</td></tr>
                         @endif
                       </tbody>
                       <tfoot>
                         <tr>
                           <th>SNo.</th>
                           <th>Form No.</th>
+                          <th>Scholar No.</th>
                           <th>DOB</th>
                           <th>Class Name</th>
                           <th>Student Name</th>

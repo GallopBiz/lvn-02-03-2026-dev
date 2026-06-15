@@ -251,8 +251,14 @@ class CourseFeesStructureMaster extends Controller
         $max_num = DB::connection('dynamic')->table('totalnextyear')->max('receipt_number');
         $max = (empty($max_num)) ? 1 : $max_num + 1;    
         $total_amount = DB::connection('dynamic')->table('abvance_nextyear_fees')->where('deleted_at','=','0')->first();
-        // print_r($total_amount->amount);die();
-        if ($total_amount->amount > $res->total_fees){
+        $allowedAmount = (float) ($total_amount->amount ?? 0);
+        $existingAmount = (float) ($res->total_fees ?? 0);
+
+        if ($allowedAmount <= 0) {
+            return response()->json(['error' => "Next year fee amount is not configured."]);
+        }
+
+        if ($existingAmount < $allowedAmount){
             foreach ($request->data1 as $data) {
                 $insertArr = [
                     'fees_date' => $request->fees_date_str,
@@ -269,13 +275,16 @@ class CourseFeesStructureMaster extends Controller
             }
     
             // return redirect()->back()->with('success','Row Added.');
-            return response()->json(['success' => "Row Added"]);
-        } else if($total_amount->amount == $res->total_fees) {
-            // return redirect()->back()->with('error','All Ready Have Values.');
-            return response()->json(['error' => "All Ready Have Values."]);
+            return response()->json([
+                'success' => "Row Added",
+                'receipt_number' => $max,
+            ]);
         } else {
-            // return redirect()->back()->with('error','All Ready Have Values.');
-            return response()->json(['error' => "All Ready Have Values."]);
+            return response()->json([
+                'error' => "Next year fees already submitted for this student.",
+                'allowed_amount' => $allowedAmount,
+                'existing_amount' => $existingAmount,
+            ]);
         }
     }
 

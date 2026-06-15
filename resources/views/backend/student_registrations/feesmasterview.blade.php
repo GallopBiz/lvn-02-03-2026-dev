@@ -34,7 +34,10 @@
                     <div class="card">
                         <div class="card-body">
                             <div class="row">
-                                <a href="{{url('student-registrations')}}"><button style="float:right" class="btn btn-primary" type="button">Registration List</button></a>
+                                <div class="ms-auto">
+                                    <a href="{{ url('fees-master-student') }}" class="btn btn-secondary me-2">Back</a>
+                                    <a href="{{ url('student-registrations') }}" class="btn btn-primary">Registration List</a>
+                                </div>
                                 <div class="separator-breadcrumb"></div>
                                 @if(!empty($all_inquiry))
                                 <?php $i = 1; ?>
@@ -118,7 +121,22 @@
                                                 </ul>
                                                 <div class="tab-content" id="myTabContent">
                                                     <div class="tab-pane fade show active" id="homeBasic" role="tabpanel" aria-labelledby="home-basic-tab">
-                                                    <button class="btn btn-primary mb-2" type="button" data-bs-toggle="modal" data-target=".addNewStructure" >Add Next Year Fees</button>
+                                                    @php
+                                                        $nextYearReceipts = collect($next_year_fee_receipts[$each_inq->scholar_no] ?? [])->filter();
+                                                    @endphp
+                                                    <button class="btn btn-primary mb-2 next-year-fee-button" type="button" data-bs-toggle="modal" data-target=".addNewStructure" >
+                                                        {{ $nextYearReceipts->isNotEmpty() ? 'View Next Year Fees' : 'Add Next Year Fees' }}
+                                                    </button>
+                                                    <span class="next-year-fee-status ms-2" @if($nextYearReceipts->isEmpty()) style="display:none;" @endif>
+                                                        <span class="badge bg-success">
+                                                            Fees already submitted
+                                                            <span class="next-year-receipt-label">
+                                                                @if($nextYearReceipts->isNotEmpty())
+                                                                    | Receipt No.: {{ $nextYearReceipts->implode(', ') }}
+                                                                @endif
+                                                            </span>
+                                                        </span>
+                                                    </span>
                                                     <br><br>
                                                     <?php
                                                         if (!empty($generateDueChartStatus[0])) { ?>
@@ -1487,6 +1505,9 @@
                         <div>
                             <b><span class="save_structure_row_resp text-success"></span></b>
                         </div>
+                        <div class="next_year_receipt_box" style="display:none;">
+                            <b>Receipt No.: <span class="next_year_receipt_number text-primary"></span></b>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1515,14 +1536,23 @@
 <script src="//code.jquery.com/jquery-1.10.2.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBa0_Zia458Lqzrwk7PzzpU7JIwJAkITdk&libraries=places"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+@php
+    $currentScholarNo = optional($all_inquiry->first())->scholar_no;
+    $existingNextYearFeeRows = collect($next_year_fee_rows[$currentScholarNo] ?? [])->values();
+    $existingNextYearReceipts = collect($next_year_fee_receipts[$currentScholarNo] ?? [])->filter()->values();
+@endphp
 <script>
+var existingNextYearFeeRows = @json($existingNextYearFeeRows);
+var existingNextYearReceipts = @json($existingNextYearReceipts);
 
 function checkIfYes() {
     if (document.getElementById('received_amount').value == 'Online' 
     || document.getElementById('received_amount').value == 'Bank Transfer'
     || document.getElementById('received_amount').value == 'Others') {
       document.getElementById('extra').style.display = '';
-      document.getElementById('auth_by').disabled = false;
+      if (document.getElementById('auth_by')) {
+        document.getElementById('auth_by').disabled = false;
+      }
       document.getElementById('desc').disabled = false;
     } else {
       document.getElementById('extra').style.display = 'none';
@@ -1568,7 +1598,7 @@ $('.save_row_btn').click(function(e){
            success: function (res) {
             // alert(res);
                 if(res.error!=null){
-                    alert('All Ready Have Values.');
+                    alert(res.error);
                     setTimeout(function() {
                         $('.save_structure_row_resp').fadeOut('fast');
                         $('.btn-close').trigger('click');
@@ -1576,26 +1606,49 @@ $('.save_row_btn').click(function(e){
                 } else {
                     $('.save_structure_row_resp').show();
                     $('.save_structure_row_resp').text('Row Added*');
+                    $('.next_year_receipt_number').text(res.receipt_number || '');
+                    $('.next_year_receipt_box').show();
+                    if (res.receipt_number) {
+                        $('.next-year-receipt-label').text(' | Receipt No.: ' + res.receipt_number);
+                        $('.next-year-fee-status').show();
+                        $('.next-year-fee-button').text('View Next Year Fees');
+                        existingNextYearReceipts = [res.receipt_number];
+                        existingNextYearFeeRows = data1.map(function(row) {
+                            return {
+                                fees_date: fees_date_str,
+                                due_date: due_date_str,
+                                account_name: row.account_name_str,
+                                fees: row.fees_str,
+                                totalnextyear: fees_total,
+                                received_type: received_amount,
+                                reference_number: reference_number,
+                                receipt_number: res.receipt_number
+                            };
+                        });
+                    }
                     setTimeout(function() {
                         $('.save_structure_row_resp').fadeOut('fast');
                         $('.btn-close').trigger('click');
-                    }, 300);
+                    }, 2500);
                 }
                
             //    $(".structure_table").load(location.href + " .structure_table");
             //    $(".order_fees_total_main").load(location.href + ".order_fees_total_main");
                //total();
            },
-            error: function () {
+            error: function (xhr) {
                 // Handle errors (e.g., display an error message)
-                alert('All Ready Have Values.');
+                var message = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'Unable to save next year fees. Please check the entered details.';
+                alert(message);
             }
        });
    
 
    });
 
-function addNewRow() {
+function addNewRow(accountName, fees) {
       //console.log("hello")
       var newRowHtml = `<div class="row row1">
          <div class="col-md-4">
@@ -1625,6 +1678,13 @@ function addNewRow() {
          </div>
       </div>`;
       $('#rowContainer').append(newRowHtml);
+      var $row = $('#rowContainer .row1').last();
+      if (accountName) {
+        $row.find('select[name="account_name_str[]"]').val(accountName);
+      }
+      if (fees !== undefined && fees !== null && fees !== '') {
+        $row.find('input[name="fees_str[]"]').val(fees);
+      }
    }
 //    totalnextyear
 
@@ -1650,8 +1710,42 @@ function addNewRow() {
       addNewRow();
    });
 
+   function populateExistingNextYearFees() {
+      if (!existingNextYearFeeRows.length) {
+        return;
+      }
+
+      $('#rowContainer').empty();
+      existingNextYearFeeRows.forEach(function(row) {
+        addNewRow(row.account_name, row.fees);
+      });
+
+      var firstRow = existingNextYearFeeRows[0] || {};
+      $('.fees_date_str').val(normalizeDateForInput(firstRow.fees_date));
+      $('.due_date_str').val(normalizeDateForInput(firstRow.due_date));
+      $('#received_amount').val(firstRow.received_type || '');
+      $('#desc').val(firstRow.reference_number || '');
+      $('#totalnextyear').val(firstRow.totalnextyear || '');
+      calculateTotal();
+      checkIfYes();
+
+      if (existingNextYearReceipts.length) {
+        $('.next_year_receipt_number').text(existingNextYearReceipts.join(', '));
+        $('.next_year_receipt_box').show();
+      }
+   }
+
+   function normalizeDateForInput(dateValue) {
+      return dateValue ? String(dateValue).substring(0, 10) : '';
+   }
+
+   $('.addNewStructure').on('shown.bs.modal', function () {
+      populateExistingNextYearFees();
+   });
+
    $(document).on('click', '.remove_row', function () {
       $(this).closest('.row').remove();
+      calculateTotal();
    });
 
   const disableFieldsCheckbox = document.getElementById('studentaddcheck');

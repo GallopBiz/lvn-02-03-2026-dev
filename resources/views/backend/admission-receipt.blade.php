@@ -204,6 +204,7 @@
         </div>
     </div>
     <div class="text-center">
+        <button class="btn btn-sm btn-secondary mb-3" onclick="history.back()">Back</button>
         <button class="btn btn-sm btn-success mb-3" onclick="printDiv('printme')">Print Report</button>
     </div>
 </div>
