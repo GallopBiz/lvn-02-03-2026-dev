@@ -112,34 +112,26 @@
                 </div>
             </div>
             <div class="separator-breadcrumb border-top"></div>
-            <div id="smartwizard">
-                <ul>
-                    <li><a href="#step-1">Step 1<br /><small>Basic Information</small></a></li>
-                    {{-- <li>
-                        <a href="#step-2">Step 2<br /><small>Personal Details</small></a>
-                    </li>
-                    <li><a href="#step-3">Step 3<br /><small>Student Details</small></a></li>
-                    <li><a href="#step-4">Step 4<br /><small>Student Details</small></a></li> --}}
-
-                    <!--  <li>
-                                                          <a href="#step-3"
-                                                             >Step 3<br /><small>Details of Siblings</small></a
-                                                             >
-                                                          </li>
-                                                          <li>
-                                                          <a href="#step-4"
-                                                             >Step 4<br /><small>Bank Details</small></a
-                                                             >
-                                                          </li> -->
-                </ul>
-                <form id="stepper-form" class="p-4"
-                    action="{{ !empty($stream_master) ? url('store-employee') : url('save-employee') }}" method="post"
-                    enctype="multipart/form-data">
-                    @csrf
-                    <input type="hidden" name="id" value="{{ $stream_master[0]->id ?? '' }}">
+            <form id="stepper-form" class="p-4" action="{{ !empty($stream_master) ? url('store-employee') : url('save-employee') }}" method="post" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="id" value="{{ $stream_master[0]->id ?? '' }}">
+                <input type="hidden" id="save_exit_mode" name="save_exit_mode" value="0">
+                <div id="smartwizard">
+                    <ul>
+                        <li><a href="#step-1">Step 1<br /><small>Basic Information</small></a></li>
+                        <li><a href="#step-hrms-employee-address">Step 2<br /><small>Address</small></a></li>
+                        <li><a href="#step-hrms-emergency-contact">Step 3<br /><small>Emergency Contact</small></a></li>
+                        <li><a href="#step-hrms-employee-education">Step 4<br /><small>Education</small></a></li>
+                        <li><a href="#step-hrms-biometric-detail">Step 5<br /><small>Biometric</small></a></li>
+                        <li><a href="#step-hrms-documents">Step 6<br /><small>Documents</small></a></li>
+                        <li><a href="#step-hrms-bank-detail">Step 7<br /><small>Bank</small></a></li>
+                        <li><a href="#step-hrms-statutory-information">Step 8<br /><small>Statutory</small></a></li>
+                        <li><a href="#step-hrms-employee-experience">Step 9<br /><small>Experience</small></a></li>
+                    </ul>
+                    <div>
 
                     <!-- Step 1: Basic Information -->
-                    <div class="step active" id="#step-1">
+                    <div class="step active" id="step-1">
                         <h5>Basic Information</h5>
                         <div class="row">
                             <div class="col-md-3 form-group mb-3">
@@ -381,7 +373,7 @@
                         <div class="row">
                             <div class="col-md-3 form-group  upload-btn-wrapper mb-4">
                                 <input type="file" name="profile_picture" id="profile_picture" class="form-control"
-                                    accept="image/*" required>
+                                    accept="image/*">
                             </div>
                         </div>
                     </div>
@@ -985,19 +977,14 @@
                 </div>
             </div>
 
-
-
-            <!-- Stepper Navigation Buttons -->
-            <div class="stepper-buttons">
-                <button type="button" class="btn btn-secondary" id="prevBtn" onclick="nextPrev(-1)">Previous</button>
-                <button type="button" class="btn btn-primary" id="nextBtn" onclick="nextPrev(1)">Next</button>
-            </div>
             <div class="add-reset-buttons">
                 <button type="button" class="btn btn-secondary" id="reset-button">Reset</button>
                 @if (request()->route()->getName() !== 'employee')
                     <a href="{{ url('employee') }}" class="btn btn-primary">Add New</a>
                 @endif
             </div>
+                    </div>
+                </div>
             </form>
         </div>
     </div>
@@ -1197,39 +1184,6 @@
         })
     </script>
     <script>
-        let currentStep = 0;
-        const steps = document.querySelectorAll('.step');
-
-        function showStep(stepIndex) {
-            steps.forEach((step, index) => {
-                step.classList.toggle('active', index === stepIndex);
-            });
-
-            document.getElementById('prevBtn').style.display = stepIndex === 0 ? 'none' : 'inline';
-            //document.getElementById('nextBtn').innerText = stepIndex === steps.length - 1 ? 'Submit' : 'Next';
-            const nextBtn = document.getElementById('nextBtn');
-            if (stepIndex === steps.length - 1) {
-                setTimeout(() => { 
-                    nextBtn.innerText = 'Submit';
-            nextBtn.type = 'submit';
-        }, 10);
-            } else {
-                nextBtn.innerText = 'Next';
-                nextBtn.type = 'button'; // Keep button type as 'button' for other steps
-            }
-        }
-
-        function nextPrev(stepChange) {
-            if (stepChange === 1 && currentStep === steps.length - 1) {
-                document.getElementById('stepper-form').submit();
-                resetForm();
-                return;
-            }
-            currentStep += stepChange;
-            showStep(currentStep);
-        }
-
-        showStep(currentStep);
 
         // Add new address field
         document.getElementById("add-new-address").addEventListener("click", function() {
@@ -1596,28 +1550,47 @@
     }
 });
 
-
-        document.getElementById("stepper-form").addEventListener("submit", function (event) {
-    event.preventDefault(); // Prevent normal form submission
-
-    let formData = new FormData(this);
-
-    fetch(this.action, {
-        method: "POST",
-        body: formData,
-        headers: {
-            "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-        }
-    })
-    .then(response => response.json())
-    .then(data => console.log(data))
-    .catch(error => console.error("Error:", error));
-});
     </script>
-	
-	<!-- JS to toggle date fields -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
+    <script>
+        $(document).ready(function() {
+            $('#smartwizard').smartWizard({
+                selected: 0,
+                keyNavigation: false,
+                enableAllSteps: false,
+                lang: {
+                    next: 'Save & Next',
+                    previous: 'Previous'
+                },
+                toolbarSettings: {
+                    toolbarPosition: 'bottom',
+                    toolbarButtonPosition: 'end',
+                    showNextButton: true,
+                    showPreviousButton: true,
+                    showFinishButton: false,
+                    toolbarExtraButtons: [
+                        $('<button></button>')
+                            .text('Save & Exit')
+                            .attr('type', 'submit')
+                            .attr('id', 'saveExitBtn')
+                            .addClass('btn btn-success ms-2')
+                            .on('click', function () {
+                                $('#save_exit_mode').val('1');
+                            })
+                    ]
+                },
+                anchorSettings: {
+                    enableAllAnchors: true,
+                    markDoneStep: true,
+                    markAllStepsAsDone: false,
+                    removeDoneStepOnNavigateBack: true,
+                    enableAnchorOnDoneStep: true
+                },
+                buttonOrder: ['next', 'prev']
+            });
+
+            $('.sw-btn-next').text('Save & Next');
+        });
+    </script>
     const statusSelect = document.getElementById('employee_status');
     const dateWrapper  = document.getElementById('status_date_wrapper');
 

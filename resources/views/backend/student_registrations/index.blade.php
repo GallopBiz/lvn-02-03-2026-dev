@@ -168,7 +168,17 @@ font-size: 0.813rem;
                             echo ucwords($notificationData1['fathername']);
                           }
                           } ?> </td>
-                          <td>{{$each_inq->session_name}}</td>
+                          <td>
+                            <?php
+                              $sessionDisplay = $each_inq->session_name;
+                              if (!empty($notificationData1['batch'])) {
+                                  $sessionDisplay = $notificationData1['batch'];
+                              } elseif (!empty($notificationData1['intended_session'])) {
+                                  $sessionDisplay = $notificationData1['intended_session'];
+                              }
+                            ?>
+                            {{$sessionDisplay}}
+                          </td>
                           <td><?php if(!empty($notificationData1['father_mobile'])){
                             echo $notificationData1['father_mobile'];
                           }else {echo $each_inq->mobile_number; }?></td>
