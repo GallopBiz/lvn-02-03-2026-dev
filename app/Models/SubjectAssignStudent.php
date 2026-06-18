@@ -20,6 +20,7 @@ class SubjectAssignStudent extends Model
         'section_name',
         'assign_this_combtoall',
         'students_details',
+        'is_delete',
               
         
         

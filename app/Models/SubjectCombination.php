@@ -28,6 +28,17 @@ class SubjectCombination extends Model
 
 
     ];
+
+    public function getCombinationNameAttribute($value)
+    {
+        return $value === null ? null : strtoupper((string) $value);
+    }
+
+    public function setCombinationNameAttribute($value)
+    {
+        $this->attributes['combination_name'] = $value === null ? null : strtoupper((string) $value);
+    }
+
     public function subjects()
     {
         return $this->belongsToMany(Subject::class, 'combination_subject', 'subject_combination_id', 'subject_id')->withPivot('subject_order')->withTimestamps();

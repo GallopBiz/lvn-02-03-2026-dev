@@ -84,19 +84,43 @@ class AssignSubjectController extends Controller
         //$classes = Classes::where('class_name',$request->class_name)->first();
         // $data = DB::table('student_registration')->select('id', 'class_name', 'student_name')->where(['class_name','=',$class_name], ['section_name','=',$section_name])->distinct()->get();
         //$data = DB::table('student_registration')->where('class_name','=',$class_name)  ->get();
+        if (empty($class_name)) {
+            return response()->json([]);
+        }
+
         $assignedStudentIds = [];
         if($class_name && $section_name){
             $assignedStudentIds = SubjectAssignStudent::where('class_name',  $request->class_name)->where('section_name',  $request->section_name)->where('is_delete', 0)->pluck('students_details')->toArray();
         }else{
             $assignedStudentIds = SubjectAssignStudent::where('class_name',  $request->class_name)->where('is_delete', 0)->pluck('students_details')->toArray();
         }
-        $students = Student_registration::where('class_name', $request->class_name)
-            ->where('section_name', $section_name)
-            ->whereNotIn('id', $assignedStudentIds)
-            ->get();
+
+        $assignedStudentIds = collect($assignedStudentIds)
+            ->flatMap(function ($studentId) {
+                $decoded = is_string($studentId) ? json_decode($studentId, true) : null;
+
+                return is_array($decoded) ? $decoded : [$studentId];
+            })
+            ->filter(fn ($studentId) => $studentId !== null && $studentId !== '')
+            ->map(fn ($studentId) => (int) $studentId)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $students = Student_registration::where('class_name', $class_name)
+            ->when($section_name, function ($query) use ($section_name) {
+                $query->where(function ($sectionQuery) use ($section_name) {
+                    $sectionQuery->where('section_name', $section_name)
+                        ->orWhereJsonContains('json_str->section_name', $section_name);
+                });
+            })
+            ->when(!empty($assignedStudentIds), fn ($query) => $query->whereNotIn('id', $assignedStudentIds))
+            ->orderBy('student_name')
+            ->get(['id', 'class_name', 'section_name', 'student_name']);
 
 
-        return $students;
+        return response()->json($students);
 
     }
 
@@ -108,7 +132,12 @@ class AssignSubjectController extends Controller
                 // Example: insert or update logic
                 SubjectAssignStudent::updateOrCreate(
                     ['students_details' => $assign['student_id']],
-                    ['class_name' => $assign['class_name'], 'assign_this_combtoall' => $assign['combination_name'], 'is_delete' => 0,]
+                    [
+                        'class_name' => $assign['class_name'],
+                        'section_name' => $assign['section_name'] ?? null,
+                        'assign_this_combtoall' => $assign['combination_name'],
+                        'is_delete' => 0,
+                    ]
                 );
                 /* DB::table('subject_assign_student')->updateOrInsert(
                     [
@@ -136,6 +165,7 @@ class AssignSubjectController extends Controller
                     'students_details' => $validated['student_id'],
                 ],
                 [
+                    'section_name' => $request->section_name,
                     'assign_this_combtoall' => $validated['combination_name'],
                     'is_delete' => 0,
                     'updated_at' => now()
