@@ -206,6 +206,27 @@ class AssignSubjectController extends Controller
         }
     }
 
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        $deletedCount = SubjectAssignStudent::whereIn('id', $validated['ids'])
+            ->where('is_delete', 0)
+            ->update([
+                'is_delete' => 1,
+                'updated_at' => now(),
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'deleted_count' => $deletedCount,
+            'message' => $deletedCount . ' assignment(s) deleted successfully.',
+        ]);
+    }
+
     public function delete($id){
         $stream = SubjectAssignStudent::findOrFail($id);
         $stream->delete();

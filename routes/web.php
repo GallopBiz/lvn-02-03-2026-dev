@@ -412,6 +412,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('view-AssignSubject/{id}', [AssignSubjectController::class, 'view']);
     Route::post('store-AssignSubject', [AssignSubjectController::class, 'store']);
     Route::post('find-student_combination', [AssignSubjectController::class, 'student_combination_data']);
+    Route::post('bulk-delete-AssignSubject', [AssignSubjectController::class, 'bulkDelete']);
     Route::get('delete-AssignSubject/{id}', [AssignSubjectController::class, 'AssignSubject_delete']);
 
     Route::match(['get', 'post'], 'AssignSubject', [AssignSubjectController::class, 'index'])->name('AssignSubject');

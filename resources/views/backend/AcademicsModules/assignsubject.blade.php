@@ -217,13 +217,17 @@
                                     </div>
                                     <div class="mb-2">
                                         <span class="badge badge-info" id="saved_assignment_result_count">0 records</span>
+                                        <button type="button" id="bulk_delete_saved_assignments" class="btn btn-danger btn-sm ml-2" disabled>Delete Selected</button>
                                     </div>
                                     <div class="table-responsive">
                                         <table class="display table table-striped table-bordered"
                                             id="zero_configuration_table" style="width: 100%">
                                             <thead>
                                                 <tr>
-                                                    <th>Sr. No</th>
+                                                    <th>
+                                                        <input type="checkbox" id="check_all_saved_assignments">
+                                                        Sr. No
+                                                    </th>
                                                     <th>Student Name</th>
                                                     <th>Class</th>
                                                     <th>Scholar No.</th>
@@ -242,7 +246,10 @@
                                                             data-class="{{ $streams->class_name }}"
                                                             data-section="{{ $streams->section_name }}"
                                                             data-combination="{{ $streams->assign_this_combtoall }}">
-                                                            <td>{{ ++$i }}</td>
+                                                            <td>
+                                                                <input type="checkbox" class="saved-assignment-delete-check" value="{{ $streams->id }}">
+                                                                <span class="saved-assignment-sr">{{ ++$i }}</span>
+                                                            </td>
                                                             <td>{{ $streams->Student->student_name ?? 'N/A' }}</td>
                                                             <td>{{ $streams->class_name }}</td>
                                                             <td>{{ $streams->Student->scholar_no ?? 'N/A' }}</td>
@@ -287,6 +294,25 @@
         <!-- end of main-content -->
     </div>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+    <style>
+        #zero_configuration_table_filter {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #zero_configuration_table_filter label {
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 576px) {
+            #zero_configuration_table_filter {
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
     <script>
         const bulkAssignLocked = @json(!empty($stream_master));
 
@@ -637,11 +663,67 @@
                 const info = table.page.info();
 
                 table.rows({ page: 'current', search: 'applied' }).every(function (rowIndex, tableLoop, rowLoop) {
-                    $(this.node()).find('td:first').text(info.start + rowLoop + 1);
+                    $(this.node()).find('.saved-assignment-sr').text(info.start + rowLoop + 1);
                 });
 
+                updateSavedAssignmentBulkDeleteState();
                 updateSavedAssignmentResultCount();
             });
+        }
+
+        function getSavedAssignmentRows(selector) {
+            const table = savedAssignmentTable || ($.fn.DataTable && $.fn.DataTable.isDataTable('#zero_configuration_table')
+                ? $('#zero_configuration_table').DataTable()
+                : null);
+
+            if (table) {
+                return $(table.rows(selector || {}).nodes());
+            }
+
+            return $('.saved-assignment-row');
+        }
+
+        function getSavedAssignmentSelectedIds() {
+            return getSavedAssignmentRows()
+                .find('.saved-assignment-delete-check:checked')
+                .map(function () {
+                    return $(this).val();
+                })
+                .get();
+        }
+
+        function updateSavedAssignmentBulkDeleteState() {
+            const selectedCount = getSavedAssignmentSelectedIds().length;
+            const filteredRows = getSavedAssignmentRows({ search: 'applied' });
+            const filteredCheckboxes = filteredRows.find('.saved-assignment-delete-check');
+            const checkedFilteredCount = filteredCheckboxes.filter(':checked').length;
+
+            $('#bulk_delete_saved_assignments')
+                .prop('disabled', selectedCount === 0)
+                .text(selectedCount > 0 ? 'Delete Selected (' + selectedCount + ')' : 'Delete Selected');
+
+            $('#check_all_saved_assignments').prop(
+                'checked',
+                filteredCheckboxes.length > 0 && checkedFilteredCount === filteredCheckboxes.length
+            ).prop(
+                'indeterminate',
+                checkedFilteredCount > 0 && checkedFilteredCount < filteredCheckboxes.length
+            );
+        }
+
+        function placeSavedAssignmentBulkDeleteButton() {
+            const filter = $('#zero_configuration_table_filter');
+            const button = $('#bulk_delete_saved_assignments');
+
+            if (!filter.length || !button.length || filter.find('#bulk_delete_saved_assignments').length) {
+                return;
+            }
+
+            button
+                .detach()
+                .removeClass('btn-sm ml-2')
+                .addClass('saved-assignment-delete-toolbar-btn')
+                .prependTo(filter);
         }
 
         function registerSavedAssignmentFilter() {
@@ -689,13 +771,14 @@
                     ordering: true,
                     searching: true,
                     columnDefs: [
-                        { orderable: false, targets: 6 }
+                        { orderable: false, targets: [0, 6] }
                     ],
                     language: {
                         zeroRecords: 'No saved assignments found for selected filters.'
                     }
                 });
                 bindSavedAssignmentTableEvents(savedAssignmentTable);
+                placeSavedAssignmentBulkDeleteButton();
             }
 
             return savedAssignmentTable;
@@ -738,11 +821,12 @@
 
                     if (isVisible) {
                         visibleCount++;
-                        row.find('td:first').text(visibleCount);
+                        row.find('.saved-assignment-sr').text(visibleCount);
                     }
                 });
             }
 
+            updateSavedAssignmentBulkDeleteState();
             updateSavedAssignmentResultCount();
         }
 
@@ -803,10 +887,25 @@
         $(document).ready(function () {
             registerSavedAssignmentFilter();
             getSavedAssignmentTable();
+            placeSavedAssignmentBulkDeleteButton();
             applySavedAssignmentFilters();
         });
 
         $(document).on('change', '#saved_filter_class, #saved_filter_section, #saved_filter_combination', applySavedAssignmentFilters);
+
+        $(document).on('click', '#check_all_saved_assignments, .saved-assignment-delete-check', function (event) {
+            event.stopPropagation();
+        });
+
+        $(document).on('change', '#check_all_saved_assignments', function () {
+            getSavedAssignmentRows({ search: 'applied' })
+                .find('.saved-assignment-delete-check')
+                .prop('checked', $(this).is(':checked'));
+
+            updateSavedAssignmentBulkDeleteState();
+        });
+
+        $(document).on('change', '.saved-assignment-delete-check', updateSavedAssignmentBulkDeleteState);
 
         $(document).on('click', '#reset_saved_assignment_filters', function () {
             $('#saved_filter_class, #saved_filter_section, #saved_filter_combination').val('');
@@ -814,6 +913,49 @@
         });
 
         $(document).on('click', '#export_saved_assignments_excel', exportSavedAssignmentsExcel);
+
+        $(document).on('click', '#bulk_delete_saved_assignments', function () {
+            const button = $(this);
+            const ids = getSavedAssignmentSelectedIds();
+
+            if (ids.length === 0) {
+                toastr.warning('Please select assignments to delete.');
+                return;
+            }
+
+            Swal.fire({
+                title: 'Delete selected assignments?',
+                text: 'You are about to delete ' + ids.length + ' saved assignment(s).',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete'
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                button.prop('disabled', true).text('Deleting...');
+
+                $.ajax({
+                    url: "{{ url('bulk-delete-AssignSubject') }}",
+                    type: 'POST',
+                    data: {
+                        _token: $('meta[name="csrf-token"]').attr('content'),
+                        ids: ids
+                    },
+                    success: function (response) {
+                        toastr.success(response.message || 'Selected assignments deleted successfully.');
+                        setTimeout(() => location.reload(), 1000);
+                    },
+                    error: function (xhr) {
+                        toastr.error(xhr.responseJSON?.message || 'Bulk delete failed. Please try again.');
+                        updateSavedAssignmentBulkDeleteState();
+                    }
+                });
+            });
+        });
     </script>
 
 @endsection
