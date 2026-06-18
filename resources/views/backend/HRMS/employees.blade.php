@@ -4,6 +4,7 @@
 {{-- Alert Section --}}
 @if(session('success'))
     <script>
+        localStorage.removeItem('stepperFormData');
         Swal.fire({
             icon: 'success',
             title: 'Success!',
@@ -63,6 +64,14 @@
             display: inline-block;
         }
 
+        #stepper-form.was-validated .form-control:invalid {
+            border-color: #dc3545;
+        }
+
+        #stepper-form.was-validated .form-control:invalid:focus {
+            box-shadow: 0 0 0 .2rem rgba(220, 53, 69, .25);
+        }
+
         /* .upload-input {
                     position: absolute;
                     font-size: 100px;
@@ -112,10 +121,16 @@
                 </div>
             </div>
             <div class="separator-breadcrumb border-top"></div>
-            <form id="stepper-form" class="p-4" action="{{ !empty($stream_master) ? url('store-employee') : url('save-employee') }}" method="post" enctype="multipart/form-data">
+            <form id="stepper-form" class="p-4" action="{{ !empty($stream_master) ? url('store-employee') : url('save-employee') }}" method="post" enctype="multipart/form-data" novalidate>
                 @csrf
+                @if ($errors->any())
+                    <div class="alert alert-danger">
+                        Please check the required fields highlighted below.
+                    </div>
+                @endif
                 <input type="hidden" name="id" value="{{ $stream_master[0]->id ?? '' }}">
                 <input type="hidden" id="save_exit_mode" name="save_exit_mode" value="0">
+                <input type="hidden" id="next_step_hash" name="next_step_hash" value="">
                 <div id="smartwizard">
                     <ul>
                         <li><a href="#step-1">Step 1<br /><small>Basic Information</small></a></li>
@@ -137,16 +152,19 @@
                             <div class="col-md-3 form-group mb-3">
                                 <label for="FirstName">First Name <span class="text-danger">*</span></label>
                                 <input class="form-control uperletter" id="FirstName" name="FirstName" type="text"
-                                    value="{{ $stream_master[0]->first_name ?? '' }}" placeholder="First Name" />
+                                    value="{{ $stream_master[0]->first_name ?? '' }}" placeholder="First Name" required />
                                 @error('FirstName')
                                     <div class="text-danger">{{ $message }}</div>
                                 @enderror
                             </div>
 
                             <div class="col-md-3 form-group mb-3">
-                                <label for="LastName">Last Name</label>
+                                <label for="LastName">Last Name <span class="text-danger">*</span></label>
                                 <input class="form-control uperletter" id="LastName" name="LastName" type="text"
-                                    value="{{ $stream_master[0]->last_name ?? '' }}" placeholder="Last Name" />
+                                    value="{{ $stream_master[0]->last_name ?? '' }}" placeholder="Last Name" required />
+                                @error('LastName')
+                                    <div class="text-danger">{{ $message }}</div>
+                                @enderror
 
                             </div>
 
@@ -170,7 +188,7 @@
                         <div class="row">
                             <div class="col-md-3 form-group mb-3">
                                 <label for="Gender">Gender <span class="text-danger">*</span></label>
-                                <select class="form-control" name="Gender">
+                                <select class="form-control" name="Gender" required>
                                     <option value="">-- Please select --</option>
                                     <option value="male"
                                         {{ isset($stream_master[0]->gender) && $stream_master[0]->gender == 'male' ? 'selected' : '' }}>
@@ -190,7 +208,7 @@
                             <div class="col-md-3 form-group mb-3">
                                 <label for="DateOfBirth">Date Of Birth <span class="text-danger">*</span></label>
                                 <input class="form-control" id="DateOfBirth" name="DateOfBirth" type="date"
-                                    value="{{ $stream_master[0]->date_of_birth ?? '' }}" placeholder="Date Of Birth" />
+                                    value="{{ $stream_master[0]->date_of_birth ?? '' }}" placeholder="Date Of Birth" required />
                                 @error('DateOfBirth')
                                     <div class="text-danger">{{ $message }}</div>
                                 @enderror
@@ -199,7 +217,7 @@
                             <div class="col-md-3 form-group mb-3">
                                 <label for="JoiningDate">Joining Date <span class="text-danger">*</span></label>
                                 <input class="form-control" id="JoiningDate" name="JoiningDate" type="date"
-                                    value="{{ $stream_master[0]->date_of_joining ?? '' }}" placeholder="Joining Date" />
+                                    value="{{ $stream_master[0]->date_of_joining ?? '' }}" placeholder="Joining Date" required />
                                 @error('JoiningDate')
                                     <div class="text-danger">{{ $message }}</div>
                                 @enderror
@@ -209,7 +227,7 @@
                                 <label for="contact_number">Contact Number <span class="text-danger">*</span></label>
                                 <input class="form-control uperletter" id="contact_number" name="contact_number"
                                     type="text" value="{{ $stream_master[0]->contact_number ?? '' }}"
-                                    placeholder="Contact Number" onchange="validateContactNumber(this)" />
+                                    placeholder="Contact Number" pattern="[6-9][0-9]{9}" onchange="validateContactNumber(this)" required />
                                     <div class="text-danger" id="contact_number_error"></div>
                                 @error('contact_number')
                                     <div class="text-danger">{{ $message }}</div>
@@ -223,7 +241,7 @@
                         <div class="row">
                             <div class="col-md-3 form-group mb-3">
                                 <label for="ShiftID">Shift <span class="text-danger">*</span></label>
-                                <select name="ShiftID" class="form-control" id="ShiftID">
+                                <select name="ShiftID" class="form-control" id="ShiftID" required>
                                     <option value="" selected>-- Please select --</option>
                                     @foreach ($shifts as $shift)
                                         <option value="{{ $shift->id }}"
@@ -239,7 +257,7 @@
 
                             <div class="col-md-3 form-group mb-3">
                                 <label for="DepartmentID">Department <span class="text-danger">*</span></label>
-                                <select name="DepartmentID" class="form-control uperletter" id="DepartmentID">
+                                <select name="DepartmentID" class="form-control uperletter" id="DepartmentID" required>
                                     <option value="" selected>-- Please select --</option>
                                     @foreach ($deparments as $deparment)
                                         <option value="{{ $deparment->id }}"
@@ -255,7 +273,7 @@
 
                             <div class="col-md-3 form-group mb-3">
                                 <label for="PositionID">Position <span class="text-danger">*</span></label>
-                                <select name="PositionID" class="form-control uperletter" id="PositionID">
+                                <select name="PositionID" class="form-control uperletter" id="PositionID" required>
                                     <option value="" selected>-- Please select --</option>
                                     @foreach ($positions as $position)
                                         <option value="{{ $position->id }}"
@@ -270,7 +288,7 @@
                             </div>
                             <div class="col-md-3 form-group mb-3">
                                 <label for="employment_type">Staff Type <span class="text-danger">*</span></label>
-                                <select name="employment_type" class="form-control uperletter" id="employment_type">
+                                <select name="employment_type" class="form-control uperletter" id="employment_type" required>
                                     <option value="" selected>-- Please select --</option>
                                     @foreach ($staffTypes as $staffType)
                                         <option value="{{ $staffType->id }}"
@@ -348,7 +366,7 @@
 
 							<!-- Unified status date field -->
 							<div class="col-md-3 form-group mb-3" id="status_date_wrapper" style="display:none;">
-								<label for="employee_status_date">Status Date</label>
+								<label for="employee_status_date">Status Date <span class="text-danger">*</span></label>
 								<input type="date" class="form-control" name="employee_status_date" id="employee_status_date"
 									value="{{ old('employee_status_date', $stream_master[0]->employee_status_date ?? '') }}">
 								@error('employee_status_date')
@@ -1045,7 +1063,7 @@
                                             </td>
                                             
 
-                                            <td class= "uperletter">{{ $streams->biometricDetails->ess_emp_code }}
+                                            <td class= "uperletter">{{ $streams->biometricDetails->ess_emp_code ?? 'N/A' }}
                                             </td>
                                             <td>{{ date('d-m-Y', strtotime($streams->date_of_birth)) }}</td>
 
@@ -1444,9 +1462,13 @@
         // Function to save form data to localStorage
         function saveFormData() {
             const formData = {};
-            const inputs = document.querySelectorAll('#stepper-form input, #stepper-form select');
+            const inputs = document.querySelectorAll('#stepper-form input, #stepper-form select, #stepper-form textarea');
             inputs.forEach(input => {
-                formData[input.name] = input.value;
+                if (!input.name || input.type === 'file') {
+                    return;
+                }
+
+                formData[input.name] = input.type === 'checkbox' ? input.checked : input.value;
             });
             localStorage.setItem('stepperFormData', JSON.stringify(formData));
         }
@@ -1458,9 +1480,15 @@
                 const formData = JSON.parse(savedData);
                 for (const name in formData) {
                     const input = document.querySelector(`[name="${name}"]`);
-                    if (input && input.type !== "file") { // Skip file inputs
-                input.value = formData[name];
-            }
+                    if (!input || input.type === "file") {
+                        continue;
+                    }
+
+                    if (input.type === 'checkbox') {
+                        input.checked = Boolean(formData[name]);
+                    } else {
+                        input.value = formData[name];
+                    }
                 }
             }
         }
@@ -1517,10 +1545,38 @@
             // Save form data to localStorage on input change
             document.querySelector('#stepper-form').addEventListener('input', saveFormData);
 
-            // Clear localStorage on form submission
-            document.querySelector('#stepper-form').addEventListener('submit', () => {
-                localStorage.removeItem('stepperFormData');
-                // Update reset button visibility
+            document.querySelector('#stepper-form').addEventListener('submit', (event) => {
+                const form = event.currentTarget;
+
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    form.classList.add('was-validated');
+
+                    const firstInvalid = form.querySelector(':invalid');
+                    const invalidStep = firstInvalid ? firstInvalid.closest('.step') : null;
+
+                    if (invalidStep) {
+                        const stepIndex = Array.from(document.querySelectorAll('#smartwizard > div > .step')).indexOf(invalidStep);
+
+                        if (stepIndex >= 0) {
+                            const stepLink = document.querySelectorAll('#smartwizard > ul > li > a')[stepIndex];
+                            if (stepLink) {
+                                stepLink.click();
+                            }
+                        }
+                    }
+
+                    setTimeout(() => {
+                        if (firstInvalid) {
+                            firstInvalid.focus();
+                            firstInvalid.reportValidity();
+                        }
+                    }, 150);
+                    return;
+                }
+
+                saveFormData();
             });
 
             // Attach event listener to the reset button
@@ -1589,20 +1645,44 @@
             });
 
             $('.sw-btn-next').text('Save & Next');
+            $('.sw-btn-next').off('click').on('click', function (event) {
+                event.preventDefault();
+
+                const stepLinks = $('#smartwizard > ul > li > a');
+                const currentStepIndex = $('#smartwizard > ul > li.active').index();
+                const nextStepHash = stepLinks.eq(currentStepIndex + 1).attr('href') || '';
+
+                $('#save_exit_mode').val('0');
+                $('#next_step_hash').val(nextStepHash);
+                document.getElementById('stepper-form').requestSubmit();
+            });
+
+            $('#saveExitBtn').on('click', function () {
+                $('#save_exit_mode').val('1');
+                $('#next_step_hash').val('');
+            });
         });
     </script>
-    const statusSelect = document.getElementById('employee_status');
-    const dateWrapper  = document.getElementById('status_date_wrapper');
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const statusSelect = document.getElementById('employee_status');
+            const dateWrapper = document.getElementById('status_date_wrapper');
+            const statusDate = document.getElementById('employee_status_date');
 
-    function toggleDate() {
-        dateWrapper.style.display = (statusSelect.value === 'inactive' || statusSelect.value === 'retired')
-            ? 'block' : 'none';
-    }
+            if (!statusSelect || !dateWrapper || !statusDate) {
+                return;
+            }
 
-    statusSelect.addEventListener('change', toggleDate);
-    toggleDate(); // Call on page load
-});
-</script>
+            function toggleDate() {
+                const needsStatusDate = statusSelect.value === 'inactive' || statusSelect.value === 'retired';
+                dateWrapper.style.display = needsStatusDate ? 'block' : 'none';
+                statusDate.required = needsStatusDate;
+            }
+
+            statusSelect.addEventListener('change', toggleDate);
+            toggleDate();
+        });
+    </script>
 
 
 

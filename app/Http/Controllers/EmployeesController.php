@@ -60,6 +60,7 @@ class EmployeesController extends Controller
                 $request->all(),
                 [
                     'FirstName' => 'required|string|max:255',
+                    'LastName' => 'required|string|max:255',
                   //  'Email' => 'required|email|unique:users,email',
                     'DateOfBirth' => 'required|date',
                     'Gender' => 'required|string|in:male,female,other', 
@@ -140,7 +141,7 @@ class EmployeesController extends Controller
                 'department_id' => $request->DepartmentID,
                 'position_id' => $request->PositionID,
                 'contact_number' => $request->contact_number,
-                'marital_status' => $request->marital_status,
+                'marital_status' => $request->filled('marital_status') ? $request->marital_status : 'not_specified',
                 'spouse_name' => $request->spouse_name,
                 'shift_id' => $request->ShiftID,
                 'staff_type_id' => $request->employment_type,
@@ -153,6 +154,14 @@ class EmployeesController extends Controller
                 $employeeData['profile_picture'] = $profile_picture_filePath;
             }
             $employee = HrmsEmployee::create($employeeData);
+
+            if ($request->input('save_exit_mode') == '1') {
+                $this->initializeLeaveBalances($employee->id, $employee->staff_type_id, $request->is_vacation);
+
+                DB::commit();
+
+                return redirect()->route('employee')->with('success', 'Employee basic details have been saved successfully.');
+            }
 
             // Step 2: Handle multiple addresses (if any)
             if ($request->has('address_line')) {
@@ -306,6 +315,11 @@ class EmployeesController extends Controller
 
             // Step 5: If everything is fine, commit the transaction
             DB::commit();
+
+            if ($request->filled('next_step_hash')) {
+                return $this->redirectToEmployeeStep($employee->id, $request->next_step_hash)
+                    ->with('success', 'Employee details have been saved successfully.');
+            }
 
             return redirect()->route('employee')->with('success', 'Employee has been created successfully.');
         } catch (\Exception $e) {
@@ -480,8 +494,9 @@ class EmployeesController extends Controller
         DB::beginTransaction();
         $validator = Validator::make(
             $request->all(),
-            [
-                'FirstName' => 'required|string|max:255',
+                [
+                    'FirstName' => 'required|string|max:255',
+                    'LastName' => 'required|string|max:255',
                // 'Email' => 'required|email|unique:users,email',
                 'DateOfBirth' => 'required|date',
                 'Gender' => 'required|string|in:male,female,other',
@@ -563,7 +578,7 @@ class EmployeesController extends Controller
                 'department_id' => $request->DepartmentID,
                 'position_id' => $request->PositionID,
                 'contact_number' => $request->contact_number,
-                'marital_status' => $request->marital_status,
+                'marital_status' => $request->filled('marital_status') ? $request->marital_status : 'not_specified',
                 'spouse_name' => $request->spouse_name,
                 'shift_id' => $request->ShiftID,
                 'staff_type_id' => $request->employment_type,
@@ -637,7 +652,10 @@ class EmployeesController extends Controller
                 'phone_number' => $request->input('phone_number'),
                 'alternative_phone_number' => $request->input('alternative_phone_number'),
             ];
-            $employee->emergencyContacts()->update($contactData);
+            HrmsEmergencyContact::updateOrCreate(
+                ['employee_id' => $employee->id],
+                $contactData
+            );
 
             // Update bank details
             $bankData = [
@@ -648,7 +666,10 @@ class EmployeesController extends Controller
                 'branch_name' => $request->input('branch_name'),
                 'pan_number' => $request->input('pan_number'),
             ];
-            $employee->bankDetails()->update($bankData);
+            HrmsBankDetail::updateOrCreate(
+                ['employee_id' => $employee->id],
+                $bankData
+            );
 
             // Update biometric details
             $biometricData = [
@@ -657,7 +678,10 @@ class EmployeesController extends Controller
                 'ess_emp_code' => $request->input('ess_emp_code'),
                 'device_code' => $request->input('device_code'),
             ];
-            $employee->biometricDetails()->update($biometricData);
+            HrmsBiometricDetail::updateOrCreate(
+                ['employee_id' => $employee->id],
+                $biometricData
+            );
 
             // Update work experience details
             $experienceData = [
@@ -669,7 +693,10 @@ class EmployeesController extends Controller
                 'roles_responsibilities' => $request->input('roles_responsibilities'),
 				'total_experience' => $request->input('total_experience'),
             ];
-            $employee->workExperiences()->update($experienceData);
+            HrmsWorkExperience::updateOrCreate(
+                ['employee_id' => $employee->id],
+                $experienceData
+            );
 
             // Update statutory information details
             $statutoryInfo = [
@@ -682,7 +709,10 @@ class EmployeesController extends Controller
                 'aadhar_number' => $request->input('aadhar_number'),
                 'ayushman_number' => $request->input('ayushman_number'),
             ];
-            $employee->statutoryInformation()->update($statutoryInfo);
+            HrmsStatutoryInformation::updateOrCreate(
+                ['employee_id' => $employee->id],
+                $statutoryInfo
+            );
 
 
             // Handle multiple document uploads
@@ -748,6 +778,16 @@ class EmployeesController extends Controller
                 ['is_uploaded', 'updated_at']
             );
             DB::commit();
+
+            if ($request->filled('next_step_hash')) {
+                return $this->redirectToEmployeeStep($employee->id, $request->next_step_hash)
+                    ->with('success', 'Employee details have been saved successfully.');
+            }
+
+            if ($request->input('save_exit_mode') == '1') {
+                return redirect()->route('employee')->with('success', 'Employee details have been saved successfully.');
+            }
+
             return redirect()->route('employee')->with('success', 'Employee has been updated successfully.');
         } catch (\Exception $e) {
             \Log::info('Error - ' . $e->getMessage());
@@ -772,6 +812,25 @@ class EmployeesController extends Controller
         } elseif ($delete_resp === 'FALSE') {
             return redirect()->back()->with('error', 'Record not removed');
         }
+    }
+
+    private function redirectToEmployeeStep($employeeId, ?string $hash)
+    {
+        $allowedHashes = [
+            '#step-1',
+            '#step-hrms-employee-address',
+            '#step-hrms-emergency-contact',
+            '#step-hrms-employee-education',
+            '#step-hrms-biometric-detail',
+            '#step-hrms-documents',
+            '#step-hrms-bank-detail',
+            '#step-hrms-statutory-information',
+            '#step-hrms-employee-experience',
+        ];
+
+        $hash = in_array($hash, $allowedHashes, true) ? $hash : '#step-1';
+
+        return redirect()->to(url('view-employee/' . $employeeId) . $hash);
     }
 
    
@@ -923,7 +982,7 @@ private function processEmployeeRow($row)
             'department_id' => $department->id ?? null,
             'position_id' => $position->id ?? null,
             'contact_number' => $row['phone_no'],
-            'marital_status' => $row['marital_status'] ?? null,
+            'marital_status' => $row['marital_status'] ?? 'not_specified',
             'shift_id' => $row['shift_id'],
             'staff_type_id' => $staffType->id ?? null,
             'is_vacation' => Str::lower($row['is_vacation'] ?? '') === 'true' ? 1 : 0
@@ -1103,4 +1162,3 @@ private function processEmployeeRow($row)
 
 
 }
-
