@@ -26,6 +26,21 @@ class AssignSubjectController extends Controller
         return view('backend.AcademicsModules.assignsubject', compact('classes', 'classNames','classlist', 'stream', 'datas', 'subjectsassign', 'comlist', 'c_stream'));
     }
 
+    public function combinationWiseStudents()
+    {
+        $assignments = SubjectAssignStudent::with('Student', 'combination')
+            ->where('is_delete', 0)
+            ->orderBy('assign_this_combtoall')
+            ->orderBy('class_name')
+            ->orderBy('section_name')
+            ->get();
+        $classlist = DB::table('class_name')->select('class_name')->distinct()->get();
+        $classes = Classes::where('is_delete', 0)->get();
+        $comlist = SubjectCombination::select('id', 'combination_name')->where('is_delete', 0)->distinct()->get();
+
+        return view('backend.AcademicsModules.assignsubject_combination_students', compact('assignments', 'classlist', 'classes', 'comlist'));
+    }
+
     public function create(Request $request){
 
         dd($request);

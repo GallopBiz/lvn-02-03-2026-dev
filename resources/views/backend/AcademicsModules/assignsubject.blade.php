@@ -9,8 +9,11 @@
         <div class="row">
             <div class="col-md-12 form-group mb-3">
                 <div class="form_section1_div">
-                    <div class="breadcrumb">
+                    <div class="breadcrumb d-flex justify-content-between align-items-center">
                         <h1 class="me-2">Subject Combination Assign to Student</h1>
+                        <a href="{{ route('AssignSubject.combinationWiseStudents') }}" class="btn btn-info">
+                            Combination Wise Students
+                        </a>
                     </div>
 
                     <div class="separator-breadcrumb border-top"></div>

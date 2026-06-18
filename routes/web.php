@@ -408,6 +408,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject']);
 
     Route::get('AssignSubject',[AssignSubjectController::class, 'index'])->name('AssignSubject');
+    Route::get('AssignSubject/combination-wise-students', [AssignSubjectController::class, 'combinationWiseStudents'])->name('AssignSubject.combinationWiseStudents');
     Route::post('save-AssignSubject',[AssignSubjectController::class, 'create']);
     Route::get('view-AssignSubject/{id}', [AssignSubjectController::class, 'view']);
     Route::post('store-AssignSubject', [AssignSubjectController::class, 'store']);
