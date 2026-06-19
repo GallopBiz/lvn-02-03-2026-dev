@@ -38,16 +38,24 @@ use Illuminate\Validation\Rule;
 
 class EmployeesController extends Controller
 {
-    public function index()
+    private const EMPLOYEE_STATUSES = ['active', 'inactive', 'retired'];
+
+    public function index(Request $request)
     {
-        $stream = HrmsEmployee::all();
+        $employeeStatus = $request->input('employee_status');
+
+        $stream = HrmsEmployee::with(['addresses', 'biometricDetails'])
+            ->when(in_array($employeeStatus, self::EMPLOYEE_STATUSES, true), function ($query) use ($employeeStatus) {
+                $query->where('employee_status', $employeeStatus);
+            })
+            ->get();
         $deparments = HrmsDepartment::all();
 
         $staffTypes = HrmsStaffType::all();
         $shifts = HrmsShift::all();
 
         $positions = HrmsPosition::all();
-        return view('backend.HRMS.employees', compact('stream', 'deparments', 'positions', 'staffTypes', 'shifts'));
+        return view('backend.HRMS.employees', compact('stream', 'deparments', 'positions', 'staffTypes', 'shifts', 'employeeStatus'));
     }
 
 
@@ -1076,8 +1084,10 @@ private function processEmployeeRow($row)
         ]);
     }
 	
-	public function exportEmployeesCsv()
+	public function exportEmployeesCsv(Request $request)
 	{
+		$employeeStatus = $request->input('employee_status');
+
 		$employees = HrmsEmployee::with([
 			'department',
 			'staffType',
@@ -1088,7 +1098,11 @@ private function processEmployeeRow($row)
 			'workExperiences',
 			'emergencyContacts',
 			'statutoryInformation',
-		])->get();
+		])
+			->when(in_array($employeeStatus, self::EMPLOYEE_STATUSES, true), function ($query) use ($employeeStatus) {
+				$query->where('employee_status', $employeeStatus);
+			})
+			->get();
 
 		$filename = 'employees_complete_' . now()->format('Ymd_His') . '.csv';
 
@@ -1102,7 +1116,7 @@ private function processEmployeeRow($row)
 
 			// Header row
 			fputcsv($file, [
-				'Employee ID', 'Name', 'Email', 'Phone', 'Date of Birth', 'Department', 'Staff Type',
+				'Sr. No', 'Employee ID', 'Name', 'Email', 'Phone', 'Date of Birth', 'Department', 'Staff Type',
 				'Permanent Address',
 				'Bank Name', 'Account Number',
 				'Biometric ID',
@@ -1112,7 +1126,7 @@ private function processEmployeeRow($row)
 				'PAN', 'Aadhar', 'ESIC Number', 'UAN Number', 'Joining Date', 'Confirmation Date', 'Employement Status', 'Is Vacation'
 			]);
 
-			foreach ($employees as $emp) {
+			foreach ($employees as $index => $emp) {
 
 				$address   = $emp->addresses->first();
 				$bank      = $emp->bankDetails->first();
@@ -1123,6 +1137,7 @@ private function processEmployeeRow($row)
 				$statutory = $emp->statutoryInformation;
 
 				fputcsv($file, [
+					$index + 1,
 					$emp->id,
 					$emp->first_name . ' ' . $emp->last_name,
 					$emp->email,

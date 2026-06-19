@@ -19,7 +19,7 @@ class AdmissionReceiptController extends Controller
             return redirect()->back()->with('error', 'Student not found');
         }
 
-        $json = json_decode($student->json_str, true);
+        $json = json_decode($student->json_str, true) ?: [];
 
         // Get fee heads from totalnextyear
         $feeHeads = DB::table('totalnextyear')

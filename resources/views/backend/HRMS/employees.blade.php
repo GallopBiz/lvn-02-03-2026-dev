@@ -1011,7 +1011,20 @@
         <div class="col-md-12 mb-4">
             <div class="breadcrumb">
                 <h1 class="me-2">List of Saved Employees :-</h1>
-				<a href="{{ route('employees.export.csv') }}" class="btn btn-success">Export Employees CSV</a>
+                <form method="GET" action="{{ route('employee') }}" class="d-flex align-items-end gap-2 ms-auto">
+                    <div>
+                        <label for="employee_status_filter" class="form-label mb-1">Employee Status</label>
+                        <select name="employee_status" id="employee_status_filter" class="form-control">
+                            <option value="">All</option>
+                            <option value="active" @selected(request('employee_status') === 'active')>Active</option>
+                            <option value="inactive" @selected(request('employee_status') === 'inactive')>Inactive</option>
+                            <option value="retired" @selected(request('employee_status') === 'retired')>Retired</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="{{ route('employee') }}" class="btn btn-secondary">Reset</a>
+                    <a href="{{ route('employees.export.csv', array_filter(request()->only('employee_status'))) }}" class="btn btn-success">Export Employees CSV</a>
+                </form>
 
             </div>
             <div class="separator-breadcrumb border-top"></div>
@@ -1032,6 +1045,7 @@
                                     <th>Ess Emp Code</th>
                                     <th>Date Of Birth</th>
                                     <th>Joining Date</th>
+                                    <th>Status</th>
                                     {{-- <th>Departure Date</th> --}}
                                     <th>Action </th>
 
@@ -1040,7 +1054,7 @@
                             </thead>
                             <tbody>
 
-                                @if (!empty($stream))
+                                @if ($stream->isNotEmpty())
                                     @foreach ($stream as $streams)
                                         <?php $notificationData1 = json_decode($streams->json_str, true); ?>
                                         <tr>
@@ -1068,6 +1082,7 @@
                                             <td>{{ date('d-m-Y', strtotime($streams->date_of_birth)) }}</td>
 
                                             <td>{{ date('d-m-Y', strtotime($streams->date_of_joining)) }}</td>
+                                            <td class="uperletter">{{ $streams->employee_status ?? 'N/A' }}</td>
                                             <td class='d-flex'>
                                                 <a class="btn btn-primary m-1"
                                                     href="{{ url('view-employee') . '/' . $streams->id }}">Edit</a>
@@ -1082,7 +1097,7 @@
                                     @endforeach
                                 @else
                                     <tr>
-                                        <td colspan="9" class="text-center">No Data Found</td>
+                                        <td colspan="11" class="text-center">No Data Found</td>
                                     </tr>
                                 @endif
                             </tbody>

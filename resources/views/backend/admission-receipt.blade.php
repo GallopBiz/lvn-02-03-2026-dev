@@ -116,8 +116,9 @@
 @endphp
 
 @php
-    $session = $student->session_name ?? '';
+    $session = $json['batch'] ?? $json['intended_session'] ?? $student->session_name ?? '';
     $formattedSession = (!empty($session) && str_contains($session, '_')) ? str_replace('_', ' - ', $session) : ($session ?: 'N/A');
+    $createdDate = $feeHeads->first()->created_at ?? $student->created_at ?? now();
 @endphp
 
 <div class="main-content">
@@ -135,7 +136,7 @@
 
             <div class="meta-line">
                 <div><strong>School Code:</strong> 50396</div>
-                <div><strong>Date:</strong> {{ \Carbon\Carbon::parse($student->created_at ?? now())->format('d-m-Y') }}</div>
+                <div><strong>Date:</strong> {{ \Carbon\Carbon::parse($createdDate)->format('d-m-Y') }}</div>
             </div>
             <div class="student-info">
                 <div>
