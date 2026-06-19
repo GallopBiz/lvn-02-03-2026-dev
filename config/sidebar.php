@@ -186,7 +186,7 @@ return [
                     [ 'title' => 'Subject Master', 'route' => 'subjectmaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Subject Combination', 'route' => 'subjectcombinatiomaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Assign Subject to Student', 'route' => 'AssignSubject', 'roles' => ['Admin'] ],
-                    [ 'title' => 'Teachers', 'route' => 'teachers', 'roles' => ['Admin'] ],
+                    // [ 'title' => 'Teachers', 'route' => 'teachers', 'roles' => ['Admin'] ],
                     [ 'title' => 'Teacher Subject Mapping', 'route' => 'teachersubject', 'roles' => ['Admin'] ],
                     [ 'title' => 'Assign Class to Teacher', 'route' => 'calssese-assigne-to-teacher', 'roles' => ['Admin'] ],
                 ],
@@ -196,7 +196,7 @@ return [
                 'icon' => 'i-Check',
                 'children' => [
                     [ 'title' => 'Exam Type', 'route' => 'examtype', 'roles' => ['Admin'] ],
-                    [ 'title' => 'Exam Master', 'route' => 'exammaster', 'roles' => ['Admin'] ],
+                    // [ 'title' => 'Exam Master', 'route' => 'exammaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Exam Setup', 'route' => 'academic/exams/create', 'roles' => ['Admin'] ],
                     [ 'title' => 'Internal Assessment (IA)', 'route' => 'internal-assessment-master', 'roles' => ['Admin'] ],
                     [ 'title' => 'Roll No & Admit Card', 'route' => 'academic/roll-no-tools', 'roles' => ['Admin'] ],

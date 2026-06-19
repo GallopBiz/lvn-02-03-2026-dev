@@ -46,19 +46,6 @@ $i = 0;
                         </select>
                         <span class="classname_msg validation_err"></span>
                     </div>
-                    <div class="col-md-3 form-group mb-3">
-                        <label for="stream_select">Stream</label>
-                        <select name="streams" class="form-control select2" id="stream_select">
-                            <option value="">-- Please select --</option>
-                            @foreach ($streamlist as $stream)
-                                <option value="{{ $stream->id }}"
-                                    @if (!empty($teacher_subject) && $teacher_subject->stream_id == $stream->id) selected @endif>
-                                    {{ $stream->streams }}
-                                </option>
-                            @endforeach
-                        </select>
-
-                    </div>
                     {{-- <div class="col-md-3 form-group mb-3">
                         <label for="class_name">Class Name</label>
                         <select id="class_name" class="form-control" name="class_name" autocomplete="" required>
@@ -205,33 +192,16 @@ $i = 0;
                         </select>
                     </div>
                     <div class="col-md-3 form-group mb-3">
-                        <label for="DepartmentID">Staf Department <span class="text-danger">*</span></label>
-                        <select name="DepartmentID" class="form-control uperletter" id="DepartmentID">
-                            <option value="" selected>-- Please select --</option>
-                            @foreach ($deparments as $deparment)
-                                <option value="{{ $deparment->id }}"
-                                    @if (!empty($teacher_subject) && $teacher_subject->Teacher->department->id == $deparment->id) selected @endif>
-                                    {{ $deparment->department_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('DepartmentID')
-                            <div class="text-danger">{{ $message }}</div>
-                        @enderror
-                    </div>
-                    <div class="col-md-3 form-group mb-3">
                         <!-- <input type="text" id="schedule_nameb" name="schedule_nameb" value=""> -->
-                        <label for="lastName1">Teacher Name</label>
+                        <label for="teacher_name">Teacher Name</label>
                         <!-- <option value="11th SC(BPSY)">Teacher name 1</option> -->
                         <!-- <option value="11th SC(MPSY)">Teacher name 2</option> -->
                         <select required name="teacher_name" class="form-control" id="teacher_name">
                             <option value="">-- Please select --</option>
-                            @if (!empty($teacher_subject))
                             @foreach ($employee as $each)
                             <option {{( (!empty($teacher_subject)) && ($teacher_subject->teacher_id == $each->id)) ? 'selected' : '' }} value="{{ $each->id }}">
                                 {{ $each->first_name }} {{ $each->last_name }} - {{ $each->biometricDetails->ess_emp_code?? '' }}</option>
                             @endforeach
-                            @endif
                             
                         </select>
                     </div>
@@ -327,6 +297,61 @@ $i = 0;
             <div class="card text-start">
                 <div class="card-body">
                     <!-- <h4 class="card-title mb-3 text-end"><a href="{{ url('add-student-registrations') }}"><button class="btn btn-outline-primary" type="button">Create Registration</button></a></h4> -->
+                    <div class="teacher-subject-list-tools mb-3">
+                        <div class="row align-items-end">
+                            <div class="col-md-2 form-group mb-2">
+                                <label for="filter_class">Class</label>
+                                <select id="filter_class" class="form-control teacher-subject-filter">
+                                    <option value="">All</option>
+                                    @foreach($teachersubjects->pluck('Class.class_name')->filter()->unique()->sort() as $className)
+                                        <option value="{{ $className }}">{{ $className }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2 form-group mb-2">
+                                <label for="filter_section">Section</label>
+                                <select id="filter_section" class="form-control teacher-subject-filter">
+                                    <option value="">All</option>
+                                    @foreach($teachersubjects->pluck('section_name')->filter()->unique()->sort() as $sectionName)
+                                        <option value="{{ $sectionName }}">{{ $sectionName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-3 form-group mb-2">
+                                <label for="filter_subject">Subject</label>
+                                <select id="filter_subject" class="form-control teacher-subject-filter">
+                                    <option value="">All</option>
+                                    @foreach($teachersubjects->pluck('Subject.subject_name')->filter()->unique()->sort() as $subjectName)
+                                        <option value="{{ $subjectName }}">{{ $subjectName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-3 form-group mb-2">
+                                <label for="filter_teacher">Teacher</label>
+                                <select id="filter_teacher" class="form-control teacher-subject-filter">
+                                    <option value="">All</option>
+                                    @foreach($teachersubjects->map(fn ($item) => trim(($item->Teacher->first_name ?? '') . ' ' . ($item->Teacher->last_name ?? '')))->filter()->unique()->sort() as $teacherName)
+                                        <option value="{{ $teacherName }}">{{ $teacherName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2 form-group mb-2">
+                                <label for="filter_role">Role</label>
+                                <select id="filter_role" class="form-control teacher-subject-filter">
+                                    <option value="">All</option>
+                                    @foreach($teachersubjects->pluck('role')->filter()->unique()->sort() as $roleName)
+                                        <option value="{{ $roleName }}">{{ $roleName }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2 form-group mb-2">
+                                <div class="d-flex flex-wrap">
+                                    <button type="button" id="reset_teacher_subject_filters" class="btn btn-secondary mr-2 mb-2">Reset</button>
+                                    <button type="button" id="export_teacher_subject_excel" class="btn btn-success mb-2">Export Excel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="display table table-striped table-bordered" id="zero_configuration_table"
                             style="width: 100%">
@@ -419,28 +444,6 @@ $i = 0;
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        function showTeachersList(){
-            var departmentId = $("#DepartmentID").val();
-            $.get('{{ route("fetchTeachers") }}', { departmentId: departmentId, _token: '{{ csrf_token() }}' }, function (data) {
-                let subjectOptions = `<option value="">--Please Select--</option>`;
-                data.forEach(function(employee) {
-                    let empCode = employee.biometric_details ? employee.biometric_details.ess_emp_code : '';
-                    subjectOptions += `<option value="${employee.id}">${employee.first_name} ${employee.last_name} - ${empCode}</option>`;
-                });
-                $('#teacher_name').html(subjectOptions).trigger('change'); // update dropdown
-                $('#teacher_name').select2({ // re-initialize
-                    placeholder: "Select a teacher",
-                    allowClear: true,
-                    width: '100%'
-                });
-            });
-        }
-        $('#DepartmentID').on('change', showTeachersList)
-    });
-
-</script>
-<script>
     function confirmDelete(event) {
         event.preventDefault(); // Prevents the default form submission
 
@@ -527,39 +530,22 @@ $i = 0;
 
 
     document.addEventListener("DOMContentLoaded", function() {
-        function fetchSubjects(classId,streamId){
-            $.get('{{ route("fetchSubjectsForTeacher") }}', { class_id: classId,stream_id: streamId, _token: '{{ csrf_token() }}' }, function (data) {
+        function fetchSubjects(classId){
+            $.get('{{ route("fetchSubjectsForTeacher") }}', { class_id: classId, _token: '{{ csrf_token() }}' }, function (data) {
                 let subjectOptions = `<option value="">--Please Select--</option>`;
                 data.forEach(function(subject) {
                     subjectOptions += `<option value="${subject.id}">${subject.subject_name}</option>`;
                 });
-                $('#subject_name').html(subjectOptions);
+                $('#subject_name').html(subjectOptions).trigger('change');
             });
         }
         function showSubject() {
             var classId = $("#class_name").val();
             if (!classId) return;
-            var className = $('#class_name').find('option:selected');;
-            var className = className.text();
-            let token = document.getElementsByName("_token")[0].value
-            //console.log("class id : "+className);
-            if (className.includes('11') || className.includes('12')){
-                $('#stream_select').attr('required', true);
-                const selectedstream = $('#stream_select').find('option:selected');
-                const streamId = selectedstream.val();
-                //console.log("stream id : "+streamId);
-                if(streamId){
-
-                    fetchSubjects(classId,streamId);
-                }
-                return;
-            }
-            $('#stream_select').removeAttr('required');
-            fetchSubjects(classId,"");
+            fetchSubjects(classId);
         }
 
         $('#class_name').on('change', showSubject)
-        $('#stream_select').on('change', showSubject)
 
     });
 
@@ -609,17 +595,120 @@ $i = 0;
 })
 
 </script>
+<script>
+    window.addEventListener('load', function () {
+        if (!window.jQuery || !$.fn.DataTable || !document.getElementById('zero_configuration_table')) {
+            return;
+        }
+
+        var table = $.fn.dataTable.isDataTable('#zero_configuration_table')
+            ? $('#zero_configuration_table').DataTable()
+            : $('#zero_configuration_table').DataTable();
+
+        var filters = [
+            { selector: '#filter_class', column: 1 },
+            { selector: '#filter_section', column: 2 },
+            { selector: '#filter_subject', column: 3 },
+            { selector: '#filter_teacher', column: 4 },
+            { selector: '#filter_role', column: 5 }
+        ];
+
+        $('.teacher-subject-filter').select2({
+            placeholder: 'All',
+            allowClear: true,
+            width: '100%'
+        });
+
+        function escapeRegex(value) {
+            return $.fn.dataTable.util.escapeRegex(value);
+        }
+
+        function applyFilters() {
+            filters.forEach(function (filter) {
+                var value = $(filter.selector).val();
+                table.column(filter.column).search(value ? '^' + escapeRegex(value) + '$' : '', true, false);
+            });
+
+            table.draw();
+        }
+
+        function cleanCell(value) {
+            return $('<div>').html(value || '').text().replace(/\s+/g, ' ').trim();
+        }
+
+        function exportRows() {
+            var headers = ['Sr.', 'Class Name', 'Section Name', 'Subject Name', 'Teacher Name', 'Role'];
+            var rows = table.rows({ search: 'applied' }).data().toArray().map(function (row) {
+                return row.slice(0, 6).map(cleanCell);
+            });
+            var fileName = 'teacher-subjects-' + new Date().toISOString().slice(0, 10);
+
+            exportExcel(headers, rows, fileName);
+        }
+
+        function exportExcel(headers, rows, fileName) {
+            var html = '<table><thead><tr>' + headers.map(function (header) {
+                return '<th>' + escapeHtml(header) + '</th>';
+            }).join('') + '</tr></thead><tbody>' + rows.map(function (row) {
+                return '<tr>' + row.map(function (cell) {
+                    return '<td>' + escapeHtml(cell) + '</td>';
+                }).join('') + '</tr>';
+            }).join('') + '</tbody></table>';
+
+            downloadFile(html, fileName + '.xls', 'application/vnd.ms-excel;charset=utf-8;');
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function downloadFile(content, fileName, mimeType) {
+            var blob = new Blob([content], { type: mimeType });
+            var link = document.createElement('a');
+
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        $('.teacher-subject-filter').on('change', applyFilters);
+
+        $('#reset_teacher_subject_filters').on('click', function () {
+            $('.teacher-subject-filter').val('').trigger('change');
+        });
+
+        $('#export_teacher_subject_excel').on('click', function () {
+            exportRows();
+        });
+    });
+</script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-{{-- <script>
-    $('#teacher_name').select2({
-    placeholder: "Select a teacher",
-    allowClear: true,
-    width: '100%'
-});
-</script> --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        $('#subject_name').select2({
+            placeholder: "Select a subject",
+            allowClear: true,
+            width: '100%'
+        });
+
+        $('#teacher_name').select2({
+            placeholder: "Select a teacher",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+</script>
 <style>
     .select2-container--default .select2-selection--single {
     background-color: #f3f4f6 !important;

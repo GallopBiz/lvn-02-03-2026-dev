@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 use DB;
-use App\Models\Stream;
 use App\Models\Subject;
 use App\Models\Teachers;
 use App\Models\Classname;
@@ -10,7 +9,6 @@ use App\Models\CommanModel;
 use App\Models\HrmsEmployee;
 // use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
-use App\Models\HrmsDepartment;
 use App\Models\TeacherSubject;
 use App\Http\Controllers\Controller;
 use App\Models\Student_registration;
@@ -24,28 +22,22 @@ class TeacherSubjectController extends Controller
         //$subjects = Subject::select('id','subject_name')->distinct('subject_name')->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         //$session = Student_registration::select('id','session_name')->distinct('session_name')->get();
-        $teachersubjects = TeacherSubject::where('is_delete', 0)->get();
+        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])->where('is_delete', 0)->get();
         //$teachersession = Student_registration::all();
         //$pre_studentsessions = $studentsession;
         //$datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $streamlist = Stream::where('is_delete', 0)->get();
-        $deparments = HrmsDepartment::all();
-        //return view('backend.AcademicsModules.teachersubject', compact('deparments','streamlist','teacherlist','classlist','studentclasses', 'subjects', 'teachersubjects', 'session', 'studentsession', 'pre_studentsessions','teachersession'));
-        return view('backend.AcademicsModules.teachersubject', compact('deparments','streamlist','classlist', 'teachersubjects'));
+        $employee = HrmsEmployee::with('biometricDetails')->get();
+        return view('backend.AcademicsModules.teachersubject', compact('employee','classlist', 'teachersubjects'));
     }
 
     public function create(Request $request)
     {
         $class = Classname::where('id', $request->class_name)->first();
-        $stream = Stream::where('id', $request->streams)->first();
         $subject = Subject::where('id', $request->subject_name)->first();
         $employee = HrmsEmployee::where('id', $request->teacher_name)->first();
 
         $check = TeacherSubject::where('class_id', $class->id)
-            ->when(in_array($class->class_name, ['11', '12']), function ($query) use ($stream) {
-                $query->where('stream_id', $stream ? $stream->id : null);
-            })
             ->where('section_name', $request->section_name)
             ->where('subject_id', $subject->id)
             ->where('teacher_id', $employee->id)
@@ -55,7 +47,6 @@ class TeacherSubjectController extends Controller
         if ($check) {
             return redirect()->route('teachersubject')->with('error', 'Data already exists!');
         }
-        $streamId = in_array($class->class_name, ['11', '12']) ? ($stream->id ?? null) : null;
 
        // dd($check);
         if ($request->section_name == "All") {
@@ -65,7 +56,6 @@ class TeacherSubjectController extends Controller
             $sections = ['Kautilya', 'Ramanujan', 'Aryabhatta'];
             foreach ($sections as $section) {
                 $exists = TeacherSubject::where('class_id', $class->id)
-                    ->when($streamId, fn($q) => $q->where('stream_id', $streamId))
                     ->where('section_name', $section)
                     ->where('subject_id', $subject->id)
                     ->where('teacher_id', $employee->id)
@@ -75,7 +65,7 @@ class TeacherSubjectController extends Controller
                 if (!$exists) {
                     TeacherSubject::create([
                         'class_id'     => $class->id,
-                        'stream_id'    => $streamId,
+                        'stream_id'    => null,
                         'section_name' => $section,
                         'subject_id'   => $subject->id,
                         'teacher_id'   => $employee->id,
@@ -86,7 +76,7 @@ class TeacherSubjectController extends Controller
         } else {
             TeacherSubject::create([
                 'class_id' => $class->id,
-                'stream_id' => $streamId,
+                'stream_id' => null,
                 'section_name' => $request->section_name,
                 'subject_id' => $subject->id,
                 'teacher_id' => $employee->id,
@@ -137,20 +127,13 @@ class TeacherSubjectController extends Controller
         //$classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         $class_id = $teacher_subject->class_id;
-        $stream_id = $teacher_subject->stream_id;
-        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id, $stream_id) {
+        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id) {
             $query->where('academic_class_subject.class_id', $class_id);
-
-            if (!empty($stream_id)) {
-                $query->where('academic_class_subject.stream_id', $stream_id);
-            }
         })->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $streamlist = Stream::where('is_delete', 0)->get();
-        $deparments = HrmsDepartment::all();
-        $employee = HrmsEmployee::with('biometricDetails')->where('department_id', $teacher_subject->Teacher->department->id)->get();
+        $employee = HrmsEmployee::with('biometricDetails')->get();
         //dd($employee[0]->biometricDetails->ess_emp_code);
-        return view('backend.AcademicsModules.teachersubject',compact('deparments','streamlist','teacher_subject','classlist', 'subjects', 'employee'));
+        return view('backend.AcademicsModules.teachersubject',compact('teacher_subject','classlist', 'subjects', 'employee'));
 
         /* $sessions = Student_registration::whereId($id)->get();
         $teachersession = Student_registration::orderBy('id','desc');
@@ -265,7 +248,7 @@ class TeacherSubjectController extends Controller
 
             $teachersubject = array(
                 'class_id'     => $request->class_name,
-                'stream_id'    => $request->streams ?? null,
+                'stream_id'    => null,
                 'section_name' => $request->section_name ?? null,
                 'subject_id'   => $request->subject_name,
                 'teacher_id'   => $request->teacher_name,
@@ -307,14 +290,9 @@ class TeacherSubjectController extends Controller
     public function fetchSubjectsForTeacher(Request $request)
     {
         $class_id = $request->class_id;
-        $stream_id = $request->stream_id;
 
-        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id, $stream_id) {
+        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id) {
             $query->where('academic_class_subject.class_id', $class_id); // Explicit table name
-
-            if (!empty($stream_id)) {
-                $query->where('academic_class_subject.stream_id', $stream_id); // Explicit pivot field
-            }
         })->get();
         return $subjects;
     }
@@ -322,7 +300,9 @@ class TeacherSubjectController extends Controller
     public function fetchTeachers(Request $request)
     {
         $departmentId = $request->departmentId;
-        $employee = HrmsEmployee::with('biometricDetails')->where('department_id', $departmentId)->get();
+        $employee = HrmsEmployee::with('biometricDetails')
+            ->when($departmentId, fn ($query) => $query->where('department_id', $departmentId))
+            ->get();
         return $employee;
     }
 

@@ -117,11 +117,28 @@
             </div>
             <div class="col-md-6">
                 <label>Applicable to these Classes:</label>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="mb-0">
+                        <input type="checkbox" id="select_all_classes">
+                        Select All Classes
+                    </label>
+                    <button type="button" class="btn btn-sm btn-secondary" id="clear_all_classes">Clear</button>
+                </div>
                 <div class="border p-2" style="max-height: 350px; overflow-y: auto;">
+                    @php
+                        $oldClassIds = old('class_ids', []);
+                    @endphp
                     @foreach($classes as $class)
                         <div class="form-check d-flex align-items-center justify-content-between">
                             <div>
-                                <input type="checkbox" class="form-check-input" name="class_ids[]" value="{{ $class->id }}" id="class_{{ $class->id }}">
+                                <input
+                                    type="checkbox"
+                                    class="form-check-input class-checkbox"
+                                    name="class_ids[]"
+                                    value="{{ $class->id }}"
+                                    id="class_{{ $class->id }}"
+                                    {{ in_array($class->id, $oldClassIds) ? 'checked' : '' }}
+                                >
                                 <label class="form-check-label" for="class_{{ $class->id }}">{{ $class->class_name }}</label>
                             </div>
                             <!-- Edit/Delete removed from classes list -->
@@ -183,21 +200,46 @@
                                 <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Duplicate this exam in current session?');">Duplicate</button>
                             </form>
                         @endif
-                        @if(Route::has('academic.exams.destroy'))
-                            @if(!empty($exam->is_locked))
-                                <button type="button" class="btn btn-sm btn-danger" disabled>Delete</button>
-                            @else
-                                <form action="{{ route('academic.exams.destroy', $exam->id) }}" method="POST" style="display:inline;">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this exam?');">Delete</button>
-                                </form>
-                            @endif
-                        @endif
                     </td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var selectAll = document.getElementById('select_all_classes');
+        var clearAll = document.getElementById('clear_all_classes');
+        var classCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.class-checkbox'));
+
+        function syncSelectAllState() {
+            var checkedCount = classCheckboxes.filter(function (checkbox) {
+                return checkbox.checked;
+            }).length;
+
+            selectAll.checked = classCheckboxes.length > 0 && checkedCount === classCheckboxes.length;
+            selectAll.indeterminate = checkedCount > 0 && checkedCount < classCheckboxes.length;
+        }
+
+        selectAll.addEventListener('change', function () {
+            classCheckboxes.forEach(function (checkbox) {
+                checkbox.checked = selectAll.checked;
+            });
+            syncSelectAllState();
+        });
+
+        clearAll.addEventListener('click', function () {
+            classCheckboxes.forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+            syncSelectAllState();
+        });
+
+        classCheckboxes.forEach(function (checkbox) {
+            checkbox.addEventListener('change', syncSelectAllState);
+        });
+
+        syncSelectAllState();
+    });
+</script>
 @endsection
