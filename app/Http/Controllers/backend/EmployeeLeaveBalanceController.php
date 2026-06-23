@@ -39,6 +39,8 @@ class EmployeeLeaveBalanceController extends Controller
                 'lt.name as leave_type',
                 'elb.balance'
             )
+            ->whereNull('emp.deleted_at')
+            ->where('emp.employee_status', 'active')
             ->whereNull('elb.deleted_at'); // exclude deleted leave balances
 
         // ✅ Apply search filter if provided

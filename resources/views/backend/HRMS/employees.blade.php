@@ -86,10 +86,10 @@
         $i = 0;
         $documents = $stream_master[0]->documents ?? collect();
     @endphp
-    <div class="main-content">
+    <div class="main-content pt-4 employee-page">
         <div class="form_section1_div">
             <div class="breadcrumb d-flex justify-content-between align-items-center">
-                <h1 class="me-2">Employees</h1>
+                <h3 class="me-2">Employees</h3>
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importModal">
                     Import Employees
                 </button>
@@ -120,7 +120,7 @@
                     </div>
                 </div>
             </div>
-            <div class="separator-breadcrumb border-top"></div>
+            <div class="separator-breadcrumb border-top mb-3"></div>
             <form id="stepper-form" class="p-4" action="{{ !empty($stream_master) ? url('store-employee') : url('save-employee') }}" method="post" enctype="multipart/form-data" novalidate>
                 @csrf
                 @if ($errors->any())

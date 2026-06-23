@@ -16,7 +16,7 @@
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/toastr.css" />
    <link rel="stylesheet"  href="{{url('assets/backend')}}/css/plugins/perfect-scrollbar.min.css" />
 
-   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
+   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
    <meta name="csrf-token" content="{{ csrf_token() }}">
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_arrows.min.css" />
@@ -29,7 +29,7 @@
 @endif
    @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='users' ||
    Request::segment(1)=='fees-type-master' || Request::segment(1)=='bus-fees-master'
-   || Request::segment(1)=='view'  || Request::segment(1)=='selection-process' || Request::segment(1)=='student-registrations' || Request::segment(1)=='employee'  || Request::segment(1)=='payroll'
+   || Request::segment(1)=='view'  || Request::segment(1)=='selection-process' || Request::segment(1)=='student-registrations' || Request::segment(1)=='employee'  || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll'
    ||  Request::segment(1)=='filter-student-registration' || Request::segment(1)=='addvehical'|| Request::segment(1)=='bus-attandence-list' ||
    Request::segment(1)=='bus-stop' || Request::segment(1)=='admin-enquiryform' || Request::segment(1)=='followupdate'
    || Request::segment(1)=='NatureOfWork' || Request::segment(1) == 'maintenance-head-master' ||
@@ -99,7 +99,7 @@
                });
             });
          </script>
-      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
+      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
       <script src="{{url('assets/backend')}}/js/scripts/tooltip.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/script_2.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/feather.min.js"></script>
@@ -112,7 +112,7 @@
 
     @if(Request::segment(1)=='inquiry-data-show' || Request::segment(1)=='users' || Request::segment(1)=='fees-type-master'
     || Request::segment(1)=='bus-fees-master' || Request::segment(1)=='view' || Request::segment(1)=='selection-process' || Request::segment(1)=='adminenquirylist' || Request::segment(1)=='followupdate' || Request::segment(1)=='bus-fees-master' || Request::segment(1)=='view' || Request::segment(1)=='selection-process' ||
-    Request::segment(1)=='student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll'  || Request::segment(1)=='filter-student-registration'
+    Request::segment(1)=='student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll'  || Request::segment(1)=='filter-student-registration'
     || Request::segment(1)=='addvehical'|| Request::segment(1)=='bus-attandence-list' || Request::segment(1)=='bus-stop' || Request::segment(1)=='bus-stop-view'
     || Request::segment(1)=='NatureOfWork' || Request::segment(1) == 'maintenance-head-master' ||
     Request::segment(1) == 'editg-maintenance-group-master' || Request::segment(1) == 'view-maintenance-head-master'

@@ -17,6 +17,11 @@
   text-transform: capitalize;
 }
 
+.main-header,
+.layout-sidebar-large .main-header {
+  top: 0;
+}
+
   
 .select2-search__field, .select2-results__options{
   text-transform: capitalize;
