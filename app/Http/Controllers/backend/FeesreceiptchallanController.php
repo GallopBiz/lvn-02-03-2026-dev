@@ -47,7 +47,7 @@ class FeesreceiptchallanController extends Controller
     }
 
     public function index(){
-        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('type','s')->get();
+        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('status','r')->get();
         $course_fees_head_orders_list_arr = DB::connection('dynamic')->table('course_fees_head_master')->orderBy('order','ASC')->get();
         // echo"<pre>";print_r($$course_fees_head_orders_list_arr);exit;
         $late_fees_master = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first();
@@ -66,7 +66,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
     }
 
     public function fees_receipt_challan_new(){
-        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('type','s')->get();
+        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('status','r')->get();
         $course_fees_head_orders_list_arr = DB::connection('dynamic')->table('course_fees_head_master')->orderBy('order','ASC')->get();
         // echo"<pre>";print_r($$course_fees_head_orders_list_arr);exit;
         $late_fees_master = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first();

@@ -495,6 +495,7 @@ public function downloadcertificate($id)
            // 'student_name'=>$request->student_name,
             'inq_mode'=>'on',
             'status'=>'r',
+            'type'=>'s',
             // 'json_str' => $jsonStr 
             'json_str'=>json_encode($postData),
 			'registration_date'=>$request->registration_date,
