@@ -21,20 +21,32 @@
                 @endif
                 <form method="POST" action="{{ route('staff.password.update') }}">
                     @csrf
+                    @php
+                        $loggedUser = auth('staff')->user() ?? auth('web')->user() ?? auth()->user();
+                        $displayName = '';
+                        if ($loggedUser) {
+                            if (isset($loggedUser->hrmsEmployee) && $loggedUser->hrmsEmployee) {
+                                $displayName = trim($loggedUser->hrmsEmployee->first_name . ' ' . $loggedUser->hrmsEmployee->last_name);
+                            }
+                            if (empty($displayName)) {
+                                $displayName = $loggedUser->name ?? $loggedUser->student_name ?? $loggedUser->username ?? '';
+                            }
+                        }
+                    @endphp
                     <div class="mb-4">
                         <h5 class="mb-3">Profile Information</h5>
                         <div class="form-group mb-2">
                             <label>Name</label>
-                            <input class="form-control" value="{{ auth('staff')->user()->name }}" type="text" readonly>
+                            <input class="form-control" value="{{ $displayName }}" type="text" readonly>
                         </div>
                         <!-- Email removed as requested -->
                         <div class="form-group mb-2">
                             <label>Username</label>
-                            <input class="form-control" value="{{ auth('staff')->user()->username ?? '' }}" type="text" readonly>
+                            <input class="form-control" value="{{ $loggedUser->username ?? '' }}" type="text" readonly>
                         </div>
                         <div class="form-group mb-2">
                             <label>Role</label>
-                            <input class="form-control" value="{{ auth('staff')->user()->getRoleNames()->first() ?? auth('staff')->user()->role ?? '' }}" type="text" readonly>
+                            <input class="form-control" value="{{ $loggedUser->role ?? ($loggedUser->getRoleNames()->first() ?? '') }}" type="text" readonly>
                         </div>
                     </div>
                     <!-- Current password field removed as requested -->

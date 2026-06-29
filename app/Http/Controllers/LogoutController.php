@@ -13,11 +13,20 @@ class LogoutController extends Controller
      *
      * @return \Illuminate\Routing\Redirector
      */
-    public function perform()
+    public function perform(Request $request)
     {
+        $isStaff = Auth::guard('staff')->check();
+
+        Auth::guard('web')->logout();
+        Auth::guard('staff')->logout();
         Session::flush();
-        
-        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        setcookie('selectedYear', '', time() - 3600, '/');
+
+        if ($isStaff) {
+            return redirect('/staff-login');
+        }
 
         return redirect('login');
     }

@@ -62,4 +62,20 @@ class LoginController extends Controller
         return $this->redirectTo;
     }
 
+    public function logout(Request $request)
+    {
+        $isStaff = \Illuminate\Support\Facades\Auth::guard('staff')->check();
+
+        \Illuminate\Support\Facades\Auth::guard('web')->logout();
+        \Illuminate\Support\Facades\Auth::guard('staff')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        setcookie('selectedYear', '', time() - 3600, '/');
+
+        if ($isStaff) {
+            return redirect('/staff-login');
+        }
+
+        return redirect('/');
+    }
 }
