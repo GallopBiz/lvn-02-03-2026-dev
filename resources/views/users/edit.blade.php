@@ -12,30 +12,32 @@
 <div class="row justify-content-center mt-4">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Edit Staff/Admin User</h4>
+                <a href="{{ route('users.index') }}" class="btn btn-sm btn-light">Back</a>
             </div>
             <div class="card-body">
                 {!! Form::model($user, ['method' => 'PATCH','route' => ['users.update', $user->id]]) !!}
                     <div class="form-group mb-3">
-                        <label for="student_name">Name</label>
-                        {!! Form::text('student_name', $user->student_name ?? $user->name ?? '', ['class' => 'form-control', 'placeholder' => 'Enter name', 'required']) !!}
+                        {!! Form::hidden('student_name', $user->student_name ?? $user->name ?? $user->username ?? 'User') !!}
                         <label for="username">Username</label>
                         {!! Form::text('username', null, ['class' => 'form-control', 'placeholder' => 'Enter username', 'required', 'readonly']) !!}
                     </div>
                     <div class="form-group mb-3">
-                        <label for="current_password">Current Password</label>
-                        <input type="password" class="form-control mb-2" value="********" readonly>
-
-                        <label for="new_password">New Password</label>
+                        <label for="new_password">Set New Password</label>
                         <div class="input-group mb-2">
                             <input class="form-control" placeholder="Enter new password (leave blank to keep current)" id="edit_new_password" name="password" type="password">
-                            <span class="input-group-text" onclick="toggleEditPassword()" style="cursor:pointer;">
+                            <span class="input-group-text" onclick="toggleFieldPassword('edit_new_password', 'toggleEditPasswordIcon')" style="cursor:pointer;">
                                 <i class="fa fa-eye" id="toggleEditPasswordIcon"></i>
                             </span>
                         </div>
                         <label for="confirm_password">Confirm New Password</label>
-                        <input class="form-control" placeholder="Confirm new password" id="edit_confirm_password" name="confirm-password" type="password">
+                        <div class="input-group mb-2">
+                            <input class="form-control" placeholder="Confirm new password" id="edit_confirm_password" name="confirm-password" type="password">
+                            <span class="input-group-text" onclick="toggleFieldPassword('edit_confirm_password', 'toggleConfirmPasswordIcon')" style="cursor:pointer;">
+                                <i class="fa fa-eye" id="toggleConfirmPasswordIcon"></i>
+                            </span>
+                        </div>
                     </div>
                     <div class="form-group mb-3">
                         <label for="employee_id">Employee</label>
@@ -48,6 +50,7 @@
                     </div>
                     <div class="form-group mb-3 text-center">
                         <button type="submit" class="btn btn-primary">Update User</button>
+                        <a href="{{ route('users.index') }}" class="btn btn-secondary ms-2">Back</a>
                     </div>
                 {!! Form::close() !!}
             </div>
@@ -56,23 +59,11 @@
 </div>
 
 @endsection
+
 <script>
-function toggleCurrentPassword() {
-    var input = document.getElementById('current_password');
-    var icon = document.getElementById('toggleCurrentPasswordIcon');
-    if (input.type === "password") {
-        input.type = "text";
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-    } else {
-        input.type = "password";
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
-    }
-}
-function toggleEditPassword() {
-    var input = document.getElementById('edit_new_password');
-    var icon = document.getElementById('toggleEditPasswordIcon');
+function toggleFieldPassword(inputId, iconId) {
+    var input = document.getElementById(inputId);
+    var icon = document.getElementById(iconId);
     if (input.type === "password") {
         input.type = "text";
         icon.classList.remove('fa-eye');
@@ -84,19 +75,3 @@ function toggleEditPassword() {
     }
 }
 </script>
-<script>
-function togglePassword(id) {
-    var input = document.getElementById(id);
-    var icon = document.getElementById('toggleEditPasswordIcon');
-    if (input.type === "password") {
-        input.type = "text";
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-    } else {
-        input.type = "password";
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
-    }
-}
-</script>
-<!-- Make sure FontAwesome is loaded in your layout -->

@@ -30,4 +30,9 @@ class StaffUser extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    public function hrmsEmployee()
+    {
+        return $this->hasOne(HrmsEmployee::class, 'id', 'employee_id');
+    }
 }

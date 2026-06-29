@@ -1,11 +1,22 @@
 @extends('layouts.app')
 @section('main-container')
 
+@if ($errors->any())
+    <div class="alert alert-danger">
+        <ul>
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+
     <div class="row justify-content-center mt-4">
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h4 class="mb-0">Create New Staff/Admin User</h4>
+                    <a href="{{ route('users.index') }}" class="btn btn-sm btn-light">Back</a>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ route('users.store') }}">
@@ -43,6 +54,7 @@
                         </div>
                         <div class="form-group mb-3 text-center">
                             <button type="submit" class="btn btn-primary">Create User</button>
+                            <a href="{{ route('users.index') }}" class="btn btn-secondary ms-2">Back</a>
                         </div>
                     </form>
     <script>

@@ -8,6 +8,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class Staff extends Authenticatable
 {
+    protected $guard_name = 'web';
     use Notifiable, HasRoles;
 
     protected $table = 'users';

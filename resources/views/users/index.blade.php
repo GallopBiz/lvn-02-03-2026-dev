@@ -62,11 +62,11 @@
                       </tbody>
                       <tfoot>
                         <tr>
-                        <th>No</th>
-                        <th>Student Name</th>
-                        <th>Form Number</th>
-                        <th>Roles</th>
-                         <th width="280px">Action</th>
+                            <th>No</th>
+                            <th>Username</th>
+                            <th>Full Name</th>
+                            <th>Roles</th>
+                            <th width="280px">Action</th>
                         </tr>
                       </tfoot>
                     </table>

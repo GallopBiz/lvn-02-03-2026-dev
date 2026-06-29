@@ -41,9 +41,10 @@ class UserController extends Controller
      */
     public function create()
     {
-        // $roles = Role::pluck('student_name','student_name')->all();
         $roles = Role::pluck('name','name')->all();
+        $assignedEmployeeIds = StaffUser::whereNotNull('employee_id')->pluck('employee_id')->toArray();
         $employees = \App\Models\HrmsEmployee::with('biometricDetail')
+            ->whereNotIn('id', $assignedEmployeeIds)
             ->select('id', 'first_name', 'last_name')
             ->get()
             ->mapWithKeys(function($emp) {
@@ -66,23 +67,20 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        $input = $request->all();
-        
-        // $this->validate($request, [
-        //     'student_name' => 'required',
-        //     // 'email' => 'required|email|unique:users,email',
-        //     'password' => 'required|same:confirm-password',
-        //     'roles' => 'required'
-        // ]);
-        // $this->validate($request, [
-        //     'student_name' => 'required', // Assuming 'name' is equivalent to 'student_name'
-        //     'email' => 'required|email|unique:users,email',
-        //     'password' => 'required|same:confirm-password',
-        //     'roles' => 'required',
-        // ]);
+        $this->validate($request, [
+            'username' => 'required|unique:users,username',
+            'employee_id' => 'required|unique:users,employee_id',
+            'password' => 'required',
+            'role' => 'required'
+        ], [
+            'employee_id.unique' => 'This employee already has a user account assigned.',
+            'username.unique' => 'This username is already taken.'
+        ]);
+
         $input = $request->only(['username', 'password', 'employee_id', 'role']);
         $input['password'] = Hash::make($input['password']);
         $user = StaffUser::create($input);
+        
         // Assign role if using spatie/laravel-permission
         if ($request->filled('role')) {
             $user->assignRole($request->input('role'));
@@ -219,7 +217,7 @@ class UserController extends Controller
      */
     public function edit($id)
     {
-        $user = Staff::find($id);
+        $user = StaffUser::find($id);
         $roles = Role::pluck('name','name')->all();
         $userRole = [$user->role];
         $employees = \App\Models\HrmsEmployee::with('biometricDetail')
@@ -247,7 +245,7 @@ class UserController extends Controller
     {
         // print_r($request->all());die();
         $this->validate($request, [
-            'student_name' => 'required',
+            // 'student_name' => 'required',
             // 'email' => 'required|email|unique:users,email,'.$id,
             'password' => 'same:confirm-password',
             'role' => 'required'
@@ -260,7 +258,7 @@ class UserController extends Controller
             $input = Arr::except($input, ['password']);
         }
 
-        $user = Staff::find($id);
+        $user = StaffUser::find($id);
         $user->update($input);
         // If using spatie/laravel-permission, update roles
         if (method_exists($user, 'assignRole')) {
