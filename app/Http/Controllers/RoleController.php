@@ -69,15 +69,15 @@ class RoleController extends Controller
     ];
 
     protected static $Academic_functions = [
-        ['label' => 'store(greadingmaster)','functionname' => 'academic-store-greadingmaster'],
+        ['label' => 'store(gradingmaster)','functionname' => 'academic-store-gradingmaster'],
         ['label' => 'grade_master_delete','functionname' => 'academic-grade_master_delete'],
-        ['label' => 'delete(greadingmaster)','functionname' => 'academic-delete-greadingmaster'],
-        ['label' => 'index(gread)','functionname' => 'academic-index-gread'],
-        ['label' => 'create(gread)','functionname' => 'academic-create-gread'],
-        ['label' => 'view(gread)','functionname' => 'academic-view-gread'],
-        ['label' => 'store(gread)','functionname' => 'academic-store-gread'],
+        ['label' => 'delete(gradingmaster)','functionname' => 'academic-delete-gradingmaster'],
+        ['label' => 'index(grade)','functionname' => 'academic-index-grade'],
+        ['label' => 'create(grade)','functionname' => 'academic-create-grade'],
+        ['label' => 'view(grade)','functionname' => 'academic-view-grade'],
+        ['label' => 'store(grade)','functionname' => 'academic-store-grade'],
         ['label' => 'grade_delete','functionname' => 'academic-grade_delete'],
-        ['label' => 'delete(gread)','functionname' => 'academic-delete-gread'],
+        ['label' => 'delete(grade)','functionname' => 'academic-delete-grade'],
         ['label' => 'index(calssese-assigne-to-teacher)','functionname' => 'academic-index-calssese-assigne-to-teacher'],
         ['label' => 'saveclassdata(calssese-assigne-to-teacher)','functionname' => 'academic-saveclassdata-calssese-assigne-to-teacher'],
         ['label' => 'view(calssese-assigne-to-teacher)','functionname' => 'academic-view-calssese-assigne-to-teacher'],

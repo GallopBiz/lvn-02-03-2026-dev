@@ -32,7 +32,7 @@
             <h4>Set Grading Scheme Here :-</h4>
 
             <div class="separator-breadcrumb border-top"></div>
-            <form id="progress-form" class="p-4 progress-form" action="{{ !empty($editingGrade) ? url('store-greadingmaster') : url('save-greadingmaster') }}" method="post">
+            <form id="progress-form" class="p-4 progress-form" action="{{ !empty($editingGrade) ? url('store-gradingmaster') : url('save-gradingmaster') }}" method="post">
                 @csrf
                 @if(!empty($editingGrade))
                     <input type="hidden" value="{{ $editingGrade->id }}" name="id">
@@ -97,8 +97,8 @@
                         <button type="submit" id="submitBtn" class="btn btn-primary">Save Grade</button>
                         <button type="button" id="reset" class="btn btn-secondary" name="btn" value="Reset Form">Reset</button>
 
-                        @if(request()->route()->getName() !== 'greadingmaster')
-                            <a href="{{ url('greadingmaster') }}" class="btn btn-primary">Add New</a>
+                        @if(request()->route()->getName() !== 'gradingmaster')
+                            <a href="{{ url('gradingmaster') }}" class="btn btn-primary">Add New</a>
                         @endif
                     </div>
                 </div>
@@ -177,9 +177,9 @@
                                         <td class="uperletter">{{ $streams->grade }}</td>
                                         <td>{{ $classes ?: '-' }}</td>
                                         <td class="d-flex">
-                                            <a class="btn btn-primary m-1" href="{{ url('view-greadingmaster') . '/' . $streams->id }}">Edit</a>
+                                            <a class="btn btn-primary m-1" href="{{ url('view-gradingmaster') . '/' . $streams->id }}">Edit</a>
                                             @php $deleteKey = 'grademaster-' . $streams->id; @endphp
-                                            <a class="btn btn-raised ripple btn-danger m-1" href="{{ url('delete-greadingmaster') . '/' . $deleteKey }}" onclick="confirmDelete(event)">Delete</a>
+                                            <a class="btn btn-raised ripple btn-danger m-1" href="{{ url('delete-gradingmaster') . '/' . $deleteKey }}" onclick="confirmDelete(event)">Delete</a>
                                         </td>
                                     </tr>
                                 @empty

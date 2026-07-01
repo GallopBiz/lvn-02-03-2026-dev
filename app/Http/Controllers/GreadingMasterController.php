@@ -23,7 +23,7 @@ class GreadingMasterController extends Controller
 
     // public function create(Request $request){
     //     Grade::create($request->post());
-    //     return redirect()->route('greadingmaster')->with('success','  greading has been created successfully.');
+    //     return redirect()->route('gradingmaster')->with('success','Grading has been created successfully.');
     // }
 
 
@@ -33,7 +33,7 @@ class GreadingMasterController extends Controller
             Grade::create($payload);
         }
     
-        return redirect()->route('greadingmaster')->with('success', 'greading has been created successfully.');
+        return redirect()->route('gradingmaster')->with('success', 'Grading has been created successfully.');
     }
     
 
@@ -69,7 +69,7 @@ class GreadingMasterController extends Controller
             }
         }
     
-        return redirect()->route('greadingmaster')->with('success', 'greading has been Updated successfully.');
+        return redirect()->route('gradingmaster')->with('success', 'Grading has been updated successfully.');
     }
 
     private function gradePayloads(Request $request): array
@@ -141,7 +141,7 @@ class GreadingMasterController extends Controller
     public function delete($id){
         $stream = Grade::findOrFail($id);
         $stream->delete();
-        return redirect()->route('greadingmaster')->with('success','Deleted successfully.');
+        return redirect()->route('gradingmaster')->with('success','Deleted successfully.');
     }
 
 

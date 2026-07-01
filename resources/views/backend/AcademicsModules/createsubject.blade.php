@@ -187,6 +187,42 @@
                 <div class="card text-start">
                     <div class="card-body">
                         <!-- <h4 class="card-title mb-3 text-end"><a href="{{ url('add-student-registrations') }}"><button class="btn btn-outline-primary" type="button">Create Registration</button></a></h4> -->
+                        <form method="GET" action="{{ route('subjectmaster') }}" class="mb-3">
+                            <div class="row align-items-end">
+                                <div class="col-md-3 form-group mb-2">
+                                    <label for="filter_subject_type">Subject Type</label>
+                                    <select name="subject_type" id="filter_subject_type" class="form-control">
+                                        <option value="">All</option>
+                                        @foreach (['Academic', 'Non Academic', 'Skilled', 'Optional'] as $subjectType)
+                                            <option value="{{ $subjectType }}" {{ (($filters['subject_type'] ?? '') == $subjectType) ? 'selected' : '' }}>{{ $subjectType }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-3 form-group mb-2">
+                                    <label for="filter_evaluation">Evaluation</label>
+                                    <select name="evaluation" id="filter_evaluation" class="form-control">
+                                        <option value="">All</option>
+                                        @foreach (['Digtwise', 'Gradewise'] as $evaluationType)
+                                            <option value="{{ $evaluationType }}" {{ (($filters['evaluation'] ?? '') == $evaluationType) ? 'selected' : '' }}>{{ $evaluationType }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-3 form-group mb-2">
+                                    <label for="filter_practical">Practical Type</label>
+                                    <select name="practical" id="filter_practical" class="form-control">
+                                        <option value="">All</option>
+                                        @foreach (['Yes', 'No'] as $practicalType)
+                                            <option value="{{ $practicalType }}" {{ (($filters['practical'] ?? '') == $practicalType) ? 'selected' : '' }}>{{ $practicalType }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-3 form-group mb-2">
+                                    <button type="submit" class="btn btn-primary">Filter</button>
+                                    <a href="{{ route('subjectmaster') }}" class="btn btn-secondary">Reset</a>
+                                    <a href="{{ route('subjectmaster.exportExcel', request()->only(['subject_type', 'evaluation', 'practical'])) }}" class="btn btn-success">Export Excel</a>
+                                </div>
+                            </div>
+                        </form>
                         <div class="table-responsive">
                             <table class="display table table-striped table-bordered" id="zero_configuration_table"
                                 style="width: 100%">

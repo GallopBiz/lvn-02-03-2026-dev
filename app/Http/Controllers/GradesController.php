@@ -1,11 +1,11 @@
 <?php
 
 namespace App\Http\Controllers;
-use App\Models\CommanModel;
+
 use App\Models\Grades;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class GradesController extends Controller
 {
@@ -16,7 +16,7 @@ class GradesController extends Controller
     public function index(){
         // $stream = Grades::orderBy('id','desc')->get();
 
-        $stream = DB::table('grades')->orderBy('id','desc')->get();
+        $stream = DB::table('grades')->where('is_delete', 0)->orderBy('id','desc')->get();
 
         return view('backend.AcademicsModules.grade', compact('stream'));
     }
@@ -25,14 +25,14 @@ class GradesController extends Controller
         // Grades::create($request->post());
         Grades::create($request->post());
 
-        return redirect()->route('gread')->with('success','  Stream has been created successfully.');
+        return redirect()->route('grade')->with('success','Grade has been created successfully.');
     }
 
     public function view($id){
         $stream_master = Grades::whereId($id)->get();
         // $stream = Grades::orderBy('id','desc')->paginate(5);
 
-        $stream = DB::table('grades')->orderBy('id','desc')->paginate(5);
+        $stream = DB::table('grades')->where('is_delete', 0)->orderBy('id','desc')->paginate(5);
 
         return view('backend.AcademicsModules.grade', compact('stream_master','stream'));
     }
@@ -46,28 +46,25 @@ class GradesController extends Controller
 
         ];
         Grades::whereId($request->id)->update($data);
-        return redirect()->route('gread')->with('success','Stream has been Updated successfully.');
+        return redirect()->route('grade')->with('success','Grade has been updated successfully.');
     }
 
     public function grade_delete($id)
     {
-        // echo $id;
-        // exit;
         $a = explode('-',$id);
-        $b = $a[1];        
-        $c = $a[0];
-        $delete_resp = CommanModel::soft_delete($c,['id'=>$b]);
-        if($delete_resp=='TRUE'){
+        $gradeId = $a[1] ?? $id;
+
+        if (Grades::whereId($gradeId)->update(['is_delete' => 1])) {
             return redirect()->back()->with('success', 'Record successfully removed');
-        }elseif($delete_resp=='FALSE'){
-            return redirect()->back()->with('error', 'Record not removed');
         }
+
+        return redirect()->back()->with('error', 'Record not removed');
     }
 
     public function delete($id){
         $stream = Grades::findOrFail($id);
         $stream->delete();
-        return redirect()->route('gread')->with('success','Deleted successfully.');
+        return redirect()->route('grade')->with('success','Deleted successfully.');
     }
 
 }

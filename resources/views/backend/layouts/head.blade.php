@@ -15,7 +15,7 @@
     || Request::segment(1)=='view'  || Request::segment(1)=='selection-process' || Request::segment(1)=='filter-student-registration' 
     || Request::segment(1)=='addvehical' || Request::segment(1)=='Student-master' 
     || Request::segment(1)=='bus-stop' || Request::segment(1)=='bus-stop-view' || Request::segment(1)=='course-fees-head-orders' 
-    || Request::segment(1)=='late-fees-master' || Request::segment(1)=='fees-types-master' || Request::segment(1)=='filter-allenquiry'|| Request::segment(1)=='gread')  
+    || Request::segment(1)=='late-fees-master' || Request::segment(1)=='fees-types-master' || Request::segment(1)=='filter-allenquiry'|| Request::segment(1)=='grade')  
 <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/datatables.min.css"/>
     @endif 
 </head>

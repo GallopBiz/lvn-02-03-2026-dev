@@ -428,6 +428,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     // nature-of-work
     Route::get('subjectmaster',[SubjectController::class, 'index'])->name('subjectmaster');
+    Route::get('subjectmaster/export-excel',[SubjectController::class, 'exportExcel'])->name('subjectmaster.exportExcel');
     Route::post('save-subject',[SubjectController::class, 'create']);
     Route::get('view-subject/{id}', [SubjectController::class, 'view']);
     Route::post('store-subject', [SubjectController::class, 'store']);
@@ -454,28 +455,36 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
 
 
-    Route::get('greadingmaster',[GreadingMasterController::class, 'index'])->name('greadingmaster');
-
-    Route::get('greadingmaster',[GreadingMasterController::class, 'index'])->name('greadingmaster');
-    Route::post('save-greadingmaster',[GreadingMasterController::class, 'create']);
-    Route::get('view-greadingmaster/{id}', [GreadingMasterController::class, 'view']);
-    Route::post('store-greadingmaster', [GreadingMasterController::class, 'store']);
-    Route::get('delete-greadingmaster/{id}', [GreadingMasterController::class, 'grade_master_delete']);
+    Route::get('gradingmaster',[GreadingMasterController::class, 'index'])->name('gradingmaster');
+    Route::post('save-gradingmaster',[GreadingMasterController::class, 'create']);
+    Route::get('view-gradingmaster/{id}', [GreadingMasterController::class, 'view']);
+    Route::post('store-gradingmaster', [GreadingMasterController::class, 'store']);
+    Route::get('delete-gradingmaster/{id}', [GreadingMasterController::class, 'grade_master_delete']);
+    Route::redirect('greadingmaster', 'gradingmaster');
+    Route::post('save-greadingmaster', fn () => redirect('save-gradingmaster', 307));
+    Route::get('view-greadingmaster/{id}', fn ($id) => redirect('view-gradingmaster/' . $id));
+    Route::post('store-greadingmaster', fn () => redirect('store-gradingmaster', 307));
+    Route::get('delete-greadingmaster/{id}', fn ($id) => redirect('delete-gradingmaster/' . $id));
     Route::get('internal-assessment-master',[InternalAssessmentMasterController::class, 'index'])->name('internal-assessment-master');
     Route::post('save-internal-assessment-master',[InternalAssessmentMasterController::class, 'create']);
     Route::get('view-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'view']);
     Route::post('store-internal-assessment-master', [InternalAssessmentMasterController::class, 'store']);
     Route::get('toggle-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'toggleStatus']);
     Route::get('delete-internal-assessment-master/{id}', [InternalAssessmentMasterController::class, 'delete']);
-    // Route::get('greadingmaster',[GradesController::class, 'index'])->name('greadingmaster');
+    // Route::get('gradingmaster',[GradesController::class, 'index'])->name('gradingmaster');
 
 
 
-    Route::get('gread',[GradesController::class, 'index'])->name('gread');
-    Route::post('save-gread',[GradesController::class, 'create']);
-    Route::get('view-gread/{id}', [GradesController::class, 'view']);
-    Route::post('store-gread', [GradesController::class, 'store']);
-    Route::get('delete-gread/{id}', [GradesController::class, 'grade_delete']);
+    Route::get('grade',[GradesController::class, 'index'])->name('grade');
+    Route::post('save-grade',[GradesController::class, 'create']);
+    Route::get('view-grade/{id}', [GradesController::class, 'view']);
+    Route::post('store-grade', [GradesController::class, 'store']);
+    Route::get('delete-grade/{id}', [GradesController::class, 'grade_delete']);
+    Route::redirect('gread', 'grade');
+    Route::post('save-gread', fn () => redirect('save-grade', 307));
+    Route::get('view-gread/{id}', fn ($id) => redirect('view-grade/' . $id));
+    Route::post('store-gread', fn (Request $request) => redirect('store-grade', 307));
+    Route::get('delete-gread/{id}', fn ($id) => redirect('delete-grade/' . $id));
 
 
 

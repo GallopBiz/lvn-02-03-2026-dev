@@ -24,22 +24,22 @@ $i = 0;
 
     <div class="row">
         <div class="col-md-6 mb-4">
-            <h4>Set Grads :-</h4>
+            <h4>Set Grades :-</h4>
 
 
             <div class="separator-breadcrumb border-top"></div>
             @if(!empty($stream_master))
-            <form id="progress-form" class="p-4 progress-form" action="{{url('store-gread')}}" method="post">
+            <form id="progress-form" class="p-4 progress-form" action="{{url('store-grade')}}" method="post">
                 <input type="hidden" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value=" {{ $streammaster->id }}" @endforeach @else value="" @endif name="id">
                 @else
-                <form id="progress-form" class="p-4 progress-form" action="{{url('save-gread')}}" method="post">
+                <form id="progress-form" class="p-4 progress-form" action="{{url('save-grade')}}" method="post">
                     @endif
                     @csrf
 
                     <div class="row">
 
                         {{--<div class="col-md-3 form-group mb-3">
-                         <label for="grading_name">Greading Name</label>
+                         <label for="grading_name">Grading Name</label>
                          <input name="grading_name" class="form-control" id="grading_name" type="text"/>
                      </div> --}}
 
@@ -79,7 +79,7 @@ $i = 0;
          
          
                      <div class="col-md-3 form-group mb-3">
-                         <label for="min_per">Type Grad</label>
+                         <label for="min_per">Type Grade</label>
                          <input class="form-control" id="termigradedicipline" name="termigradedicipline" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value="{{ $streammaster->termigradedicipline }}" @endforeach @else value="" @endif placeholder="A1" />
                      </div>
          
@@ -114,8 +114,8 @@ $i = 0;
                          <button type="button" id="reset" class="btn btn-primary" name="btn" value="Reset Form">Reset</button>
          
          
-                         @if(request()->route()->getName() !== 'gread')
-                         {{-- <a href="{{ url('gread') }}" class="btn btn-primary">Add New</a> --}}
+                         @if(request()->route()->getName() !== 'grade')
+                         {{-- <a href="{{ url('grade') }}" class="btn btn-primary">Add New</a> --}}
                          @endif
          
                      </div>
@@ -142,14 +142,14 @@ $i = 0;
     $i = 0;
     @endphp
 
-    <form id="progress-form" class="p-4 progress-form" action="{{url('save-gread')}}" method="post">
+    <form id="progress-form" class="p-4 progress-form" action="{{url('save-grade')}}" method="post">
         
         @csrf
 
         <div class="row">
 
             {{--<div class="col-md-3 form-group mb-3">
-             <label for="grading_name">Greading Name</label>
+             <label for="grading_name">Grading Name</label>
              <input name="grading_name" class="form-control" id="grading_name" type="text"/>
          </div> --}}
 
@@ -185,7 +185,7 @@ $i = 0;
                                 <th>Sr.</th>
                                 <th>Min %</th>
                                 <th>Max %</th>
-                                <th>Grad</th>
+                                <th>Grade</th>
                                 <!-- <th>Term II Grade Dicipline</th> -->
                                 {{-- <th>Grade </th> --}}
                                 <th>Action </th>
@@ -206,7 +206,7 @@ $i = 0;
                                 {{-- <td class= "uperletter">{{$streams->grade}}</td> --}}
 
                                 <td class='d-flex'>
-                                    <a class="btn btn-primary m-1" href="{{ url('view-gread') .'/'.$streams->id}}">Edit</a>
+                                    <a class="btn btn-primary m-1" href="{{ url('view-grade') .'/'.$streams->id}}">Edit</a>
                                     <!-- <form id="deleteForm" method="post" action="{{url('delete-streammaster')}}">                                
                                 @csrf
                                 <input type="hidden" name="table_name" value="streams">
@@ -214,7 +214,7 @@ $i = 0;
                                 <button type="button" class="btn btn-danger m-1" onclick="confirmDelete(event)">Delete</button>
                             </form> -->
                                     <?php $a = "grades"."-".$streams->id ; ?>
-                                    <a class="btn btn-raised ripple btn-danger m-1" href="{{url('delete-gread').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
+                                    <a class="btn btn-raised ripple btn-danger m-1" href="{{url('delete-grade').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
                                 </td>
                             </tr>
                             <!-- </?php $i++; ?> -->
