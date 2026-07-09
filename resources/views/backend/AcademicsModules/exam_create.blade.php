@@ -4,6 +4,18 @@
 <div class="container">
     <h2>Exam Master</h2>
 
+    @if(session('success'))
+        <div class="alert alert-success mt-2">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger mt-2">
+            {{ session('error') }}
+        </div>
+    @endif
+
     <div class="card mb-3">
         <div class="card-body">
             <h5 class="card-title mb-2">Copy Exams from Previous Session</h5>
@@ -199,6 +211,17 @@
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Duplicate this exam in current session?');">Duplicate</button>
                             </form>
+                        @endif
+                        @if(Route::has('academic.exams.destroy'))
+                            @if(!empty($exam->is_locked))
+                                <button type="button" class="btn btn-sm btn-danger" disabled>Delete</button>
+                            @else
+                                <form action="{{ route('academic.exams.destroy', $exam->id) }}" method="POST" style="display:inline;">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this exam? This will delete the exam across all classes.');">Delete</button>
+                                </form>
+                            @endif
                         @endif
                     </td>
                 </tr>
