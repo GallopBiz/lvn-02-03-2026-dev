@@ -137,16 +137,16 @@ font-size: 0.813rem;
                         <tr>
                           <th>S.No.</th>
                           <th>Form No.</th>
-                          <th>DOB</th>
-                          <th>Class Name</th>
+                          <th>Scholar No</th>
                           <th>Student Name</th>
                           <th>Father Name</th>
+                          <th>Class Name</th>
+                          <th>Section Name</th>
+                          <th>DOB</th>
                           <th>Session Name</th>
                           <th>Mobile Number</th>
-                          <th>Scholar No</th>
                           <th>Create Date</th>
 						  <th>Reg. Date</th>
-                          <th>Updated by</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -158,8 +158,7 @@ font-size: 0.813rem;
                         <tr>
                           <td>{{$loop->iteration}}</td>
                           <td>{{$each_inq->form_number}}</td>
-                          <td>{{date('d-m-Y',strtotime($each_inq->date_of_birth))}}</td>
-                          <td>{{$each_inq->class_name}}</td>
+                          <td><?php if(!empty($each_inq->scholar_no)){ echo $each_inq->scholar_no; }?></td>
                           <td><?php if(!empty($each_inq->studentname_prefix)){ echo ucwords($each_inq->studentname_prefix).' '; } if(!empty($each_inq->student_name)){ echo ucwords($each_inq->student_name); } ?></td>
                           <td><?php  if(!empty($each_inq->fathername_prefix)){ echo ucwords($each_inq->fathername_prefix).' '; } if(!empty($notificationData1['student_father_name'])){
                             echo ucwords($notificationData1['student_father_name']);
@@ -168,6 +167,9 @@ font-size: 0.813rem;
                             echo ucwords($notificationData1['fathername']);
                           }
                           } ?> </td>
+                          <td>{{$each_inq->class_name}}</td>
+                          <td>{{ $notificationData1['section_name'] ?? '' }}</td>
+                          <td>{{date('d-m-Y',strtotime($each_inq->date_of_birth))}}</td>
                           <td>
                             <?php
                               $sessionDisplay = $each_inq->session_name;
@@ -182,10 +184,8 @@ font-size: 0.813rem;
                           <td><?php if(!empty($notificationData1['father_mobile'])){
                             echo $notificationData1['father_mobile'];
                           }else {echo $each_inq->mobile_number; }?></td>
-                          <td><?php if(!empty($each_inq->scholar_no)){ echo $each_inq->scholar_no; }?></td>
                           <td>{{ date('d-m-Y', strtotime($each_inq->created_at)) }}</td>
 						  <td>{{ date('d-m-Y', strtotime($each_inq->registration_date)) }}</td>
-                          <td>Admin</td>
                           <td>
                             <div class="dropdown">
                               <button class="btn btn-primary dropdown-toggle" id="dropdownMenuButton" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -200,22 +200,23 @@ font-size: 0.813rem;
                         </tr>
                         @endforeach
                         @else
-                        <tr><td colspan="9" class="text-center">No Data Found</td></tr>
+                        <tr><td colspan="13" class="text-center">No Data Found</td></tr>
                         @endif
                       </tbody>
                       <tfoot>
                         <tr>
                           <th>SNo.</th>
                           <th>Form No.</th>
-                          <th>DOB</th>
-                          <th>Class Name</th>
+                          <th>Scholar No</th>
                           <th>Student Name</th>
                           <th>Father Name</th>
+                          <th>Class Name</th>
+                          <th>Section Name</th>
+                          <th>DOB</th>
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Create Date</th>
 						  <th>Reg. Date</th>
-                          <th>Updated by</th>
                           <th>Status</th>
                         </tr>
                       </tfoot>
@@ -258,6 +259,24 @@ font-size: 0.813rem;
             $('#application_for').val('');
             $('#studentname').val('');
         });
+
+        function keepLatestFirst() {
+            if (!$.fn.DataTable || !$('#zero_configuration_table').length) {
+                return;
+            }
+
+            if ($.fn.DataTable.isDataTable('#zero_configuration_table')) {
+                $('#zero_configuration_table').DataTable().order([0, 'asc']).draw();
+                return;
+            }
+
+            $('#zero_configuration_table').DataTable({
+                order: [[0, 'asc']]
+            });
+        }
+
+        keepLatestFirst();
+        setTimeout(keepLatestFirst, 500);
     });
 </script>
 

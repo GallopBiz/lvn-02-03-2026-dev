@@ -150,7 +150,7 @@ public function downloadcertificate($id)
     /*List All Inquiry*/
     public function student_registrations()
     {   
-        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('status','=','r')->orderBy('id', 'desc')->get() ; 
+        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('status','=','r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get() ; 
         // return view('backend.student_registrations.index',compact('all_inquiry'));
 
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
@@ -716,9 +716,10 @@ public function downloadcertificate($id)
 		if(!empty($session_name)){
 			$records1 = DB::connection('dynamic')->table('student_registration')
 						 ->where("session_name", $session_name)
-						 ->orderBy('id', 'desc');
+						 ->orderBy('created_at', 'desc')
+                         ->orderBy('id', 'desc');
 		} else {
-			$records1 = DB::connection('dynamic')->table('student_registration')->orderBy('id', 'desc');
+			$records1 = DB::connection('dynamic')->table('student_registration')->orderBy('created_at', 'desc')->orderBy('id', 'desc');
 		}
 
 		if(!empty($form_number)){

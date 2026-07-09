@@ -102,72 +102,126 @@ class CSVController extends Controller
     }
 
     public function export_registrations(Request $request)
-{
-    $query = DB::table('student_registration')
-        ->where('status', 'r');
+    {
+        $query = DB::table('student_registration')
+            ->where('status', 'r')
+            ->orderBy('id', 'desc');
 
-    // Apply filters from request if provided
-    if ($request->filled('form_number')) {
-        $query->where('form_number', $request->form_number);
-    }
-    if ($request->filled('serial_number')) {
-        $query->where('serial_number', $request->serial_number);
-    }
-    if ($request->filled('class_name')) {
-        $query->where('class_name', $request->class_name);
-    }
-    if ($request->filled('application_for')) {
-        $query->where('application_for', $request->application_for);
-    }
-    if ($request->filled('student_name')) {
-        $query->where('student_name', 'like', '%' . $request->student_name . '%');
-    }
-    if ($request->filled('session_name')) {
-        $query->where('session_name', $request->session_name);
-    }
+        // Apply filters from request if provided
+        if ($request->filled('form_number')) {
+            $query->where('form_number', $request->form_number);
+        }
+        if ($request->filled('serial_number')) {
+            $query->where('form_number', $request->serial_number);
+        }
+        if ($request->filled('class_name')) {
+            $query->where('class_name', $request->class_name);
+        }
+        if ($request->filled('application_for')) {
+            $query->where('application_for', $request->application_for);
+        }
+        if ($request->filled('student_name')) {
+            $query->where('student_name', 'like', '%' . $request->student_name . '%');
+        }
+        if ($request->filled('session_name')) {
+            $query->where('session_name', $request->session_name);
+        }
 
-    $data = $query->get();
+        $data = $query->get();
+        $jsonRows = [];
 
-    $csv = Writer::createFromFileObject(new \SplTempFileObject());
+        foreach ($data as $item) {
+            $jsonData = !empty($item->json_str) ? json_decode($item->json_str, true) : [];
+            $jsonData = is_array($jsonData) ? $jsonData : [];
+            $jsonRows[$item->id] = $jsonData;
+        }
 
-    // CSV Header
-    $column_list = [
-        'Sr no',
-        'Form number',
-        'DOB',
-        'Class Name',
-        'Student Name',
-        'Session Name',
-        'Mobile Number',
-        'Scholar No',
-        'Registration Date',
-    ];
-    $csv->insertOne($column_list);
-
-    $sr = 1;
-    foreach ($data as $item) {
-        $formattedDate = date('d-m-Y', strtotime($item->created_at));
-        $jsonData = !empty($item->json_str) ? json_decode($item->json_str, true) : [];
+        $csv = Writer::createFromFileObject(new \SplTempFileObject());
 
         $csv->insertOne([
-            $sr++,
-            $item->form_number,
-            $item->date_of_birth,
-            $item->class_name,
-            $item->student_name,
-            $item->session_name,
-            $jsonData['mobile_number'] ?? '',
-            $item->scholar_no,
-            $formattedDate,
+            'Sr no',
+            'Form No.',
+            'Scholar No',
+            'DOB',
+            'Class Name',
+            'Section Name',
+            'Student Name',
+            'Father Name',
+            'Session Name',
+            'Mobile Number',
+            'Gender',
+            'Present Address',
+            'Phone Number',
+            'SSSMID',
+            'Family SSSMID',
+            'Is Staff Applied For Admission',
+            'Aadhar No.',
+            'Bank Name',
+            'Branch Name',
+            'Account Number',
+            'Ifsc Code',
+            'Create Date',
+            'Registration Date',
+        ]);
+
+        foreach ($data as $index => $item) {
+            $jsonData = $jsonRows[$item->id] ?? [];
+            $studentName = trim(($jsonData['studentname_prefix'] ?? '') . ' ' . ($item->student_name ?? $jsonData['studentname'] ?? ''));
+            $fatherName = trim(($jsonData['fathername_prefix'] ?? '') . ' ' . ($jsonData['student_father_name'] ?? $jsonData['fathername'] ?? ''));
+            $sessionName = $jsonData['batch'] ?? $jsonData['intended_session'] ?? $item->session_name ?? '';
+            $mobileNumber = $jsonData['father_mobile'] ?? $jsonData['mobile_number'] ?? $item->mobile_number ?? '';
+            $sectionName = $jsonData['section_name'] ?? '';
+
+            $csv->insertOne([
+                $index + 1,
+                $item->form_number ?? '',
+                $item->scholar_no ?? '',
+                $this->formatCsvDate($item->date_of_birth ?? null),
+                $item->class_name ?? '',
+                $sectionName,
+                $studentName,
+                $fatherName,
+                $sessionName,
+                $mobileNumber,
+                $this->formatCsvValue($jsonData['gender'] ?? ''),
+                $this->formatCsvValue($jsonData['present_address'] ?? ''),
+                $this->formatCsvValue($jsonData['phone_number'] ?? $item->phone_number ?? ''),
+                $this->formatCsvValue($jsonData['SSSMID'] ?? ''),
+                $this->formatCsvValue($jsonData['family_SSSMID'] ?? ''),
+                $this->formatCsvValue($jsonData['is_staff_applied_for_admission'] ?? ''),
+                $this->formatCsvValue($jsonData['AadharNo'] ?? ''),
+                $this->formatCsvValue($jsonData['bankName'] ?? ''),
+                $this->formatCsvValue($jsonData['branchName'] ?? ''),
+                $this->formatCsvValue($jsonData['account_number'] ?? ''),
+                $this->formatCsvValue($jsonData['ifsc_code'] ?? ''),
+                $this->formatCsvDate($item->created_at ?? null),
+                $this->formatCsvDate($item->registration_date ?? null),
+            ]);
+        }
+
+        return response($csv->getContent(), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename=Registered_Students_Detail_Report.csv',
         ]);
     }
 
-    // Response
-    return response($csv->getContent(), 200, [
-        'Content-Type' => 'text/csv',
-        'Content-Disposition' => 'attachment; filename=Registered_Students_List.csv',
-    ]);
-}
+    private function formatCsvDate($date)
+    {
+        if (empty($date) || strtotime($date) === false) {
+            return '';
+        }
+
+        return date('d-m-Y', strtotime($date));
+    }
+
+    private function formatCsvValue($value)
+    {
+        if (is_array($value) || is_object($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
+
+        return $value;
+    }
     public function exportCsvenquiry()
     {
         $all_inquiry = Inquiry_registration::select('session_name', 'student_name', 'class_name', 'json_str',)->get(); // Make sure to replace this with the actual data you want to export
