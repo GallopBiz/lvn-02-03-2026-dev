@@ -130,7 +130,7 @@
                                         <th>Aryabhatta</th>
                                         <th>Kautilya</th>
                                         <th>Ramanujan</th>
-                                        <th>N/A</th>
+                                        <th>Total</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -142,7 +142,7 @@
                                                 <td> Students: {{ $sections['Aryabhatta'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Aryabhatta'}}">Edit</a></td>
                                                 <td> Students: {{ $sections['Kautilya'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Kautilya'}}">Edit</a></td>
                                                 <td> Students: {{ $sections['Ramanujan'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Ramanujan'}}">Edit</a></td>
-                                                <td> Students: {{ $sections['Uknown'] ?? "0" }} </td>
+                                                <td><strong>{{ $sections->sum() }}</strong></td>
                                                 @foreach ($sections as $section => $count)
 
                                                     {{-- echo "  Section: $section → Students: $count\n"; --}}

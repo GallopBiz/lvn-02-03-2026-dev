@@ -303,12 +303,7 @@ class SeatingArrangementController extends Controller
                 ->first();
         }
 
-        $students = DB::connection('dynamic')->table('student_registration')
-            ->where('class_name', $className)
-            ->where('section_name', $sectionName)
-            ->where('session_name', $sessionName)
-            ->orderBy('student_name')
-            ->get();
+        $students = $this->getClassSectionStudents($className, $sectionName, $sessionName);
 
         $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
 
@@ -393,12 +388,7 @@ class SeatingArrangementController extends Controller
         $sessionName = $this->resolveActiveSessionName();
         $examId = $request->query('exam_id');
 
-        $students = DB::connection('dynamic')->table('student_registration')
-            ->where('class_name', $className)
-            ->where('section_name', $sectionName)
-            ->where('session_name', $sessionName)
-            ->orderBy('student_name')
-            ->get();
+        $students = $this->getClassSectionStudents($className, $sectionName, $sessionName);
 
         $rollMap = StudentRollNo::query()
             ->where('class_id', $className)
@@ -566,8 +556,8 @@ class SeatingArrangementController extends Controller
     {
         $normalized = strtoupper(trim($sectionName));
         $map = [
-            'KAUTILYA' => '1',
-            'ARYABHATTA' => '2',
+            'ARYABHATTA' => '1',
+            'KAUTILYA' => '2',
             'RAMANUJAN' => '3',
         ];
 
@@ -582,10 +572,22 @@ class SeatingArrangementController extends Controller
     {
         $query = DB::connection('dynamic')
             ->table('student_registration as sr')
-            ->join('classes as c', 'c.id', '=', 'sr.class_id')
-            ->where('c.class_name', $className)
-            ->where('c.section_name', $sectionName)
+            ->leftJoin('classes as c', 'c.id', '=', 'sr.class_id')
             ->where('sr.session_name', $sessionName)
+            ->where(function ($q) use ($className, $sectionName) {
+                // Match class/section either via joined classes table or direct columns/json fields
+                $q->where(function ($q2) use ($className, $sectionName) {
+                    $q2->where('c.class_name', $className)
+                       ->where('c.section_name', $sectionName);
+                })
+                ->orWhere(function ($q2) use ($className, $sectionName) {
+                    $q2->where('sr.class_name', $className)
+                       ->where(function ($q3) use ($sectionName) {
+                           $q3->where('sr.section_name', $sectionName)
+                              ->orWhereJsonContains('sr.json_str->section_name', $sectionName);
+                       });
+                });
+            })
             ->select('sr.*')
             ->orderBy('sr.student_name');
 
