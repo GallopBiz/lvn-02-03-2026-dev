@@ -33,6 +33,8 @@ class SalariesController extends Controller
 
     public function create(Request $request)
     {
+        $this->trimSalaryInputs($request);
+
         // Start a transaction
     DB::beginTransaction();
     try {
@@ -220,6 +222,8 @@ class SalariesController extends Controller
 
     public function store(Request $request)
     {
+        $this->trimSalaryInputs($request);
+
         try {
             $validator = Validator::make($request->all(), [
                 'employee_id' => [
@@ -330,6 +334,44 @@ class SalariesController extends Controller
         } catch (\Exception $e) {
             \Log::error($e->getMessage());
             return redirect()->back()->with('error', $e->getMessage());
+        }
+    }
+
+    private function trimSalaryInputs(Request $request)
+    {
+        $childRows = collect($request->child_select ?? [])
+            ->map(function ($childId, $index) use ($request) {
+                return [
+                    'child_select' => is_string($childId) ? trim($childId) : $childId,
+                    'child_amount' => is_string($request->child_amount[$index] ?? null)
+                        ? trim($request->child_amount[$index])
+                        : ($request->child_amount[$index] ?? null),
+                    'emi_amount' => is_string($request->emi_amount[$index] ?? null)
+                        ? trim($request->emi_amount[$index])
+                        : ($request->emi_amount[$index] ?? null),
+                ];
+            })
+            ->filter(function ($row) {
+                return $row['child_select'] !== null
+                    && $row['child_select'] !== ''
+                    && $row['child_amount'] !== null
+                    && $row['child_amount'] !== ''
+                    && $row['emi_amount'] !== null
+                    && $row['emi_amount'] !== '';
+            })
+            ->values();
+
+        $request->merge([
+            'id' => is_string($request->id) ? trim($request->id) : $request->id,
+            'basic_salary' => is_string($request->basic_salary) ? trim($request->basic_salary) : $request->basic_salary,
+            'effective_date' => is_string($request->effective_date) ? trim($request->effective_date) : $request->effective_date,
+            'child_select' => $childRows->pluck('child_select')->all(),
+            'child_amount' => $childRows->pluck('child_amount')->all(),
+            'emi_amount' => $childRows->pluck('emi_amount')->all(),
+        ]);
+
+        if ($childRows->isEmpty()) {
+            $request->request->remove('has_children');
         }
     }
 

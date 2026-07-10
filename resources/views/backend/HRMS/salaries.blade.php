@@ -42,7 +42,7 @@
             @if (!empty($stream_master))
                 <form id="progress-form" class="p-4 progress-form" action="{{ url('store-salaries') }}" method="post">
                     <input type="hidden"
-                        @if (!empty($stream_master)) value=" {{ $stream_master->id }}"
+                        @if (!empty($stream_master)) value="{{ $stream_master->id }}"
                         @else
                             value="" @endif
                         name="id">
@@ -79,21 +79,24 @@
                 <div class="col-md-3 form-group mb-3">
                     <label for="basic_salary">Gross Salary Amount</label>
                     <input required class="form-control" id="basic_salary" name="basic_salary" type="text"
-                        onchange="validateAmount(this,'basic_salary')"
-                        @if (!empty($stream_master)) value=" {{ $stream_master->basic_salary }}"
+                        onchange="validateAmount(this,'basic_salary_error')"
+                        @if (!empty($stream_master)) value="{{ old('basic_salary', $stream_master->basic_salary) }}"
                     
                   @else
-                    value="" @endif
+                    value="{{ old('basic_salary') }}" @endif
                         placeholder="Gross Salary" />
-                    <span class="text-danger" id="basic_salary"></span>
+                    <span class="text-danger" id="basic_salary_error"></span>
+                    @error('basic_salary')
+                        <div class="alert alert-danger">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="col-md-3 form-group mb-3">
                     <label for="effective_date">Effective Date</label>
                     <input required class="form-control" id="effective_date" name="effective_date" type="date"
-                        @if (!empty($stream_master)) value="{{ $stream_master->effective_date }}"
+                        @if (!empty($stream_master)) value="{{ old('effective_date', $stream_master->effective_date) }}"
                   @else
-                    value="" @endif
+                    value="{{ old('effective_date') }}" @endif
                         placeholder="effective_date" />
                     @error('effective_date')
                         <div class="alert alert-danger">{{ $message }}</div>
