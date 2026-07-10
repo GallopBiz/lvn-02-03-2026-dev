@@ -259,10 +259,17 @@ class CourseFeesStructureMaster extends Controller
         }
 
         if ($existingAmount < $allowedAmount){
+            if (!\Illuminate\Support\Facades\Schema::connection('dynamic')->hasColumn('totalnextyear', 'payment_date')) {
+                \Illuminate\Support\Facades\Schema::connection('dynamic')->table('totalnextyear', function ($table) {
+                    $table->string('payment_date', 155)->nullable()->after('due_date');
+                });
+            }
+
             foreach ($request->data1 as $data) {
                 $insertArr = [
                     'fees_date' => $request->fees_date_str,
                     'due_date' => $request->due_date_str,
+                    'payment_date' => $request->payment_date_str,
                     'totalnextyear' => $request->totalnextyear,
                     'account_name' => $data['account_name_str'],
                     'fees' => $data['fees_str'],

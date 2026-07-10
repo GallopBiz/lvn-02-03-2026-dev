@@ -1082,6 +1082,12 @@ class InquiryEntryController extends Controller
 				->unique()
 				->values();
 
+			if (!\Illuminate\Support\Facades\Schema::connection('dynamic')->hasColumn('totalnextyear', 'payment_date')) {
+				\Illuminate\Support\Facades\Schema::connection('dynamic')->table('totalnextyear', function ($table) {
+					$table->string('payment_date', 155)->nullable()->after('due_date');
+				});
+			}
+
 			$data['next_year_fee_rows'][$scholar_no] = DB::connection('dynamic')
 				->table('totalnextyear')
 				->where('scholar_no', $scholar_no)
@@ -1089,6 +1095,7 @@ class InquiryEntryController extends Controller
 				->get([
 					'fees_date',
 					'due_date',
+					'payment_date',
 					'account_name',
 					'fees',
 					'totalnextyear',

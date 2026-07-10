@@ -1482,6 +1482,12 @@
                         </div>
                         <div class="col-md-2">
                             <div class="form-group">
+                                <label class="col-form-label">Payment Date:</label>
+                                <input name="payment_date_str" class="form-control payment_date_str" type="date" value="{{ date('Y-m-d') }}" />
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group">
                                 <label class="col-form-label">Payment Mode:</label>
                                 <select id="received_amount" class="form-control" onchange='checkIfYes()' name="received_amount" autocomplete="">
                                     <option value="" disabled selected>Please select</option>
@@ -1563,10 +1569,10 @@ function checkIfYes() {
 $('.save_row_btn').click(function(e){
     
    e.preventDefault();
-    var data1 = [];
-    var fees_date_str = $('.fees_date_str').val();
-    var due_date_str = $('.due_date_str').val();
-    var reference_number = $('#desc').val();
+    var data1 = [];     var fees_date_str = $('.fees_date_str').val();
+     var due_date_str = $('.due_date_str').val();
+     var payment_date_str = $('.payment_date_str').val();
+     var reference_number = $('#desc').val();
     var received_amount = $('#received_amount').val();
     //var term_str = $('select[name="term_str"]').val();
     var scholar_no = $('#scholar_no').val();
@@ -1585,16 +1591,17 @@ $('.save_row_btn').click(function(e){
        $.ajax({
            url: '{{url("save-next-year-fees")}}',
            type: "POST",
-           data: { 
-               "_token": "{{ csrf_token() }}",
-               fees_date_str : fees_date_str,
-               due_date_str : due_date_str,
-               totalnextyear : fees_total,
-               scholar_no : scholar_no,
-               data1 : data1,
-               received_amount : received_amount,
-               reference_number : reference_number,
-           },
+                data: { 
+                "_token": "{{ csrf_token() }}",
+                fees_date_str : fees_date_str,
+                due_date_str : due_date_str,
+                payment_date_str : payment_date_str,
+                totalnextyear : fees_total,
+                scholar_no : scholar_no,
+                data1 : data1,
+                received_amount : received_amount,
+                reference_number : reference_number,
+            },
            success: function (res) {
             // alert(res);
                 if(res.error!=null){
@@ -1617,6 +1624,7 @@ $('.save_row_btn').click(function(e){
                             return {
                                 fees_date: fees_date_str,
                                 due_date: due_date_str,
+                                payment_date: payment_date_str,
                                 account_name: row.account_name_str,
                                 fees: row.fees_str,
                                 totalnextyear: fees_total,
@@ -1723,6 +1731,7 @@ function addNewRow(accountName, fees) {
       var firstRow = existingNextYearFeeRows[0] || {};
       $('.fees_date_str').val(normalizeDateForInput(firstRow.fees_date));
       $('.due_date_str').val(normalizeDateForInput(firstRow.due_date));
+      $('.payment_date_str').val(normalizeDateForInput(firstRow.payment_date));
       $('#received_amount').val(firstRow.received_type || '');
       $('#desc').val(firstRow.reference_number || '');
       $('#totalnextyear').val(firstRow.totalnextyear || '');
