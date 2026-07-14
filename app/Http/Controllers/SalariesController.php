@@ -83,7 +83,7 @@ class SalariesController extends Controller
                 $basicDeductionData = [
                     'employee_id' => $request->employee_id,
                     'basic_deduction_id' => $basicDeduction,
-                    'manual_amount'=> $request->manual_deductions[$basicDeduction] ?? null,
+                    'manual_amount'=> $this->getDeductionAmount($basicDeduction, $request->manual_deductions[$basicDeduction] ?? null),
                     'employee_salary_id' => $salaryId->id
                 ];
                 HrmsEmployeeDeduction::create($basicDeductionData);
@@ -274,7 +274,7 @@ class SalariesController extends Controller
                     $basicDeductionData = [
                         'employee_id' => $request->employee_id,
                         'employee_salary_id' => $salary->id,
-                        'manual_amount' => $request->manual_deductions[$basicDeduction] ?? null,
+                        'manual_amount' => $this->getDeductionAmount($basicDeduction, $request->manual_deductions[$basicDeduction] ?? null),
                         'basic_deduction_id' => $basicDeduction
                     ];
                     HrmsEmployeeDeduction::create($basicDeductionData);
@@ -375,6 +375,15 @@ class SalariesController extends Controller
         }
     }
 
+    private function getDeductionAmount($basicDeductionId, $manualAmount)
+    {
+        if ($manualAmount !== null && $manualAmount !== '') {
+            return $manualAmount;
+        }
+
+        return HrmsBasicDeduction::where('id', $basicDeductionId)->value('amount') ?? 0;
+    }
+
     public function delete($id)
     {
         $stream = HrmsSalary::findOrFail($id);
@@ -456,7 +465,7 @@ class SalariesController extends Controller
                         $deductions[] = [
                             'employee_id' => $mappedRow['employee_id'],
                             'basic_deduction_id' => $value,
-                            'manual_amount' => $mappedRow[$manualAmountKey] ?? null,
+                            'manual_amount' => $this->getDeductionAmount($value, $mappedRow[$manualAmountKey] ?? null),
                             'employee_salary_id' => $salary->id
                         ];
                     }
