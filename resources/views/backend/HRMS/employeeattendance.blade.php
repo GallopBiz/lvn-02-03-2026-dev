@@ -19,14 +19,37 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* Freeze first column (Employee Name) */
-        table.table-bordered th:first-child,
-        table.table-bordered td:first-child {
+        #attendanceTable .table-responsive {
+            max-height: 70vh;
+            overflow: auto;
+        }
+        #attendanceTable table {
+            min-width: max-content;
+        }
+        #attendanceTable th,
+        #attendanceTable td {
+            white-space: nowrap;
+        }
+        #attendanceTable th:first-child,
+        #attendanceTable td:first-child {
             position: sticky;
             left: 0;
             background-color: white;
             z-index: 5;
             border-right: 2px solid #dee2e6;
+            min-width: 180px;
+            max-width: 280px;
+            white-space: normal;
+        }
+        #attendanceTable thead th {
+            position: sticky;
+            top: 0;
+            z-index: 7;
+            background-color: #afa4a4;
+        }
+        #attendanceTable th:first-child {
+            background-color: #e5e5e5;
+            z-index: 8;
         }
     </style>
 
@@ -139,8 +162,12 @@
                             </tr>
                         @else
                             @foreach ($attendanceData as $employeeId => $records)
+                                @php
+                                    $employee = $employees->firstWhere('id', $employeeId);
+                                    $employeeName = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                                @endphp
                                 <tr>
-                                    <td>{{ optional($employees->firstWhere('id', $employeeId))->first_name ?? '--' }}</td>
+                                    <td>{{ $employeeName ?: '--' }}</td>
                                     @foreach (Carbon\CarbonPeriod::create($startDate, $endDate) as $date)
                                         @php
                                             $record = $records->firstWhere('log_date', $date->toDateString());

@@ -266,10 +266,8 @@ class SalariesController extends Controller
             ]);
 
             // Update deductions
+            HrmsEmployeeDeduction::where('employee_salary_id', $salary->id)->delete();
             if (isset($request->deductions_ids)) {
-                HrmsEmployeeDeduction::where('employee_salary_id', $salary->id)->delete();
-
-                // Add new deductions
                 foreach ($request->deductions_ids as $basicDeduction) {
                     $basicDeductionData = [
                         'employee_id' => $request->employee_id,
@@ -329,6 +327,11 @@ class SalariesController extends Controller
                     }
 
                 }
+            }
+            if (!$request->has('has_children')) {
+                $childIds = HrmsEmployeeChild::where('employee_salary_id', $salary->id)->pluck('id');
+                HrmsEmployeeFeeEMI::whereIn('employee_child_id', $childIds)->delete();
+                HrmsEmployeeChild::where('employee_salary_id', $salary->id)->delete();
             }
             return redirect()->route('salaries')->with('success', 'salaries has been Updated successfully.');
         } catch (\Exception $e) {
