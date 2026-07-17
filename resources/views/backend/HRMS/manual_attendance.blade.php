@@ -64,8 +64,11 @@
 @php
     $today = now();
     $attendanceMonth = Carbon::create($year, $month)->startOfMonth();
-    $lockDate = $attendanceMonth->copy()->addMonth()->day(12)->endOfDay();
-    $lockEditing = $today->greaterThan($lockDate);
+    // Temporarily disabled: manual attendance was locked after the 12th of the next month.
+    // $lockDate = $attendanceMonth->copy()->addMonth()->day(12)->endOfDay();
+    // $lockEditing = $today->greaterThan($lockDate);
+    $lockDate = null;
+    $lockEditing = false;
 @endphp
 
 <form method="POST" action="{{ route('manual.attendance.update') }}">
