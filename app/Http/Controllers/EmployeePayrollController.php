@@ -32,6 +32,8 @@ use App\Models\HrmsStatutoryInformation;
 use App\Models\HrmsPosition;
 use App\Models\HrmsEmployeeLeaveBalance;
 use App\Models\PayrollAttendanceConfiguration;
+use App\Models\PayrollStaffAttendanceConfiguration;
+use App\Models\PayrollDepartmentAttendanceConfiguration;
 use App\Services\Hrms\ShiftResolver;
 
 
@@ -43,16 +45,53 @@ class EmployeePayrollController extends Controller
 	{
 		$monthConfiguration = PayrollAttendanceConfiguration::where('month_number', (int) $month)->first();
 
-		if (!$monthConfiguration) {
+		// Default to true if no month configuration exists
+		$monthBiometricRequired = $monthConfiguration ? (bool) $monthConfiguration->biometric_required : true;
+
+		if ($monthBiometricRequired) {
+			// If biometric is required for the month, it is required for everyone.
 			return true;
 		}
 
-		return (bool) $monthConfiguration->biometric_required;
+		// If disabled for the month generally, check if it's required for the specific staff type or department
+		if ($staffTypeId) {
+			$staffConfig = PayrollStaffAttendanceConfiguration::where('staff_type_id', $staffTypeId)->first();
+			if ($staffConfig && $staffConfig->biometric_required) {
+				return true;
+			}
+		}
+
+		if ($departmentId) {
+			$deptConfig = PayrollDepartmentAttendanceConfiguration::where('department_id', $departmentId)->first();
+			if ($deptConfig && $deptConfig->biometric_required) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function selectedEmployeesRequireBiometric($employeeIds, $month)
 	{
-		return $this->isBiometricRequiredForPayrollMonth($month);
+		// If biometric is required for the month generally, return true.
+		if ($this->isBiometricRequiredForPayrollMonth($month)) {
+			return true;
+		}
+
+		// If disabled for the month generally, check if ANY of the selected employees
+		// require biometric based on their staff type or department rules.
+		if (empty($employeeIds)) {
+			return false;
+		}
+
+		$employees = HrmsEmployee::whereIn('id', $employeeIds)->get(['staff_type_id', 'department_id']);
+		foreach ($employees as $employee) {
+			if ($this->isBiometricRequiredForPayrollMonth($month, $employee->staff_type_id, $employee->department_id)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	public function GenerateJson(Request $request)
