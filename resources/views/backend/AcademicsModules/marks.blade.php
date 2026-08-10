@@ -105,6 +105,16 @@
                             </div>
 
                             <div class="form-group mb-3">
+                                <label for="subject_type">Subject Type:</label>
+                                <select name="subject_type" class="form-control" id="subject_type" @if (!empty($stream_master)) disabled @endif>
+                                    <option value="">-- All Types --</option>
+                                    @foreach(['Academic', 'Non Academic', 'Skilled', 'Optional'] as $subjectType)
+                                        <option value="{{ $subjectType }}" {{ (!empty($stream_master) && ($stream_master->Subject->subject_type ?? '') === $subjectType) ? 'selected' : '' }}>{{ $subjectType }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="form-group mb-3">
                                 <label for="subject_name">Subject:</label>
                                 <select required name="subject_name" class="form-control" id="subject_name" @if (!empty($stream_master)) disabled @endif>
                                     <option value="">-- Please select --</option>
@@ -520,9 +530,32 @@
         return $('#subject_name option:selected').data('subject-type') || '';
     }
 
+    function normalizeSubjectType(subjectType) {
+        return String(subjectType || '').trim().toLowerCase();
+    }
+
+    function selectedSubjectTypeFilter() {
+        return $('#subject_type').val() || '';
+    }
+
+    function filterSubjectDropdownByType() {
+        const selectedType = normalizeSubjectType(selectedSubjectTypeFilter());
+        $('#subject_name option').each(function () {
+            const optionType = normalizeSubjectType($(this).data('subject-type') || '');
+            const isPlaceholder = $(this).val() === '';
+            const shouldShow = isPlaceholder || !selectedType || optionType === selectedType;
+            $(this).toggle(shouldShow);
+        });
+
+        const selectedOption = $('#subject_name option:selected');
+        if (selectedOption.length && !selectedOption.is(':visible')) {
+            $('#subject_name').val('');
+        }
+    }
+
     function gradeFromMaster(marks) {
         const className = selectedClassName();
-        const subjectType = String(selectedSubjectType()).trim().toLowerCase();
+        const subjectType = normalizeSubjectType(selectedSubjectType());
         if (!subjectType) {
             return '';
         }
@@ -536,7 +569,7 @@
             }
 
             const classMatches = classes.length === 0 || classes.includes(className);
-            const subjectMatches = String(range.subject_type || '').trim().toLowerCase() === subjectType;
+            const subjectMatches = normalizeSubjectType(range.subject_type) === subjectType;
             const from = Number(range.min_per || 0);
             const to = Number(range.max_per || 0);
 
@@ -712,6 +745,7 @@
                         var subjectType = data['subjects'][i].subject.subject_type || '';
                         $('#subject_name').append('<option value="' + subject_id + '" data-subject-type="' + subjectType + '">' + subjectName + '</option>');
                     }
+                    filterSubjectDropdownByType();
                     $('#section_name').html('<option value=""> -- Select All -- </option>');
                 },
                 error: function(xhr, status, error) {
@@ -721,6 +755,7 @@
         });
         function loadTeacherClassAssignments(classId, subjectId = '') {
             const teacher = $("#teacher_name").val();
+            const currentSection = $("#section_name").val();
             let token = document.getElementsByName("_token")[0].value;
 
             $('#subject_name').html('<option value=""> -- Select All -- </option>');
@@ -748,6 +783,10 @@
                         $('#section_name').append('<option value="' + sectionName + '">' + sectionName + '</option>');
                     }
 
+                    if (currentSection) {
+                        $('#section_name').val(currentSection);
+                    }
+
                     for (var i = 0; i < data['subjects'].length; i++) {
                         if (!data['subjects'][i].subject) {
                             continue;
@@ -758,6 +797,7 @@
                         var selected = subjectId == $("#subject_name").data('selected-subject') ? ' selected' : '';
                         $('#subject_name').append('<option value="' + subjectId + '" data-subject-type="' + subjectType + '"' + selected + '>' + subjectName + '</option>');
                     }
+                    filterSubjectDropdownByType();
                 },
                 error: function(xhr, status, error) {
                     console.error(error);
@@ -939,23 +979,24 @@
             }
         });
         $('#subject_name').on('change', function() {
-            const classId = $("#class_name").val();
             const subjectId = $(this).val();
             $("#subject_name").data('selected-subject', subjectId);
-            if (classId) {
-                loadTeacherClassAssignments(classId, subjectId);
-            }
             $('.student-row').each(function () {
                 recalculateStudentTotal($(this));
             });
             checkMarksEntryStatus();
         });
         $('#teacher_name, #section_name').on('change', checkMarksEntryStatus);
+        $('#subject_type').on('change', function () {
+            filterSubjectDropdownByType();
+            checkMarksEntryStatus();
+        });
         $('#internal_assessment_toggle').on('change', toggleInternalAssessmentColumns);
         $('#practical_marks_toggle').on('change', togglePracticalColumns);
         toggleInternalAssessmentColumns();
         togglePracticalColumns();
         applyMarksEntryLockState();
+        filterSubjectDropdownByType();
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })
@@ -1148,7 +1189,6 @@
         });
     }
 </script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 
 
