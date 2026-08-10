@@ -4,9 +4,16 @@
     <div class="container">
         <div class="row">
             <div class="col-md-12">
-                <h1>Shifts</h1>
-                <a href="{{ route('shifts.create') }}" class="btn btn-primary">Create Shift</a>
-                <a href="{{ route('shifts.history') }}" class="btn btn-outline-secondary">Shift History</a>
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                    <h1 class="m-0">Shifts</h1>
+                    <a href="{{ route('shifts.create') }}" class="btn btn-primary">Create Shift</a>
+                    <a href="{{ route('shifts.history') }}" class="btn btn-outline-secondary">Shift History</a>
+                    <form action="{{ route('shifts.index') }}" method="GET" class="d-flex align-items-center ms-auto">
+                        <input type="search" name="search" id="searchInput" class="form-control me-2" placeholder="Search shift types" value="{{ request('search') }}">
+                        <button type="submit" class="btn btn-outline-primary me-2">Search</button>
+                        <a href="{{ route('shifts.index') }}" class="btn btn-secondary">Reset</a>
+                    </form>
+                </div>
                 <table class="table">
                     <thead>
                         <tr>
@@ -21,7 +28,7 @@
                     <tbody>
                         @foreach ($shifts as $shift)
                             <tr>
-                                <td>{{ $loop->index+1 }}</td>
+                                <td>{{ $shifts->firstItem() + $loop->index }}</td>
                                 <td>
                                     @if($shift->shiftType)
                                         {{ $shift->shiftType->shift_type_name }}
@@ -46,6 +53,9 @@
                         @endforeach
                     </tbody>
                 </table>
+                <div class="d-flex justify-content-center">
+                    {!! $shifts->links('pagination::bootstrap-4') !!}
+                </div>
             </div>
         </div>
     </div>

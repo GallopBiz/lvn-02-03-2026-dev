@@ -56,9 +56,9 @@ class LeaverequestsController extends Controller
             $leaveTypes = HrmsLeaveType::all();
             return view('backend.HRMS.leaverequests_staff', compact('stream','employees','leaveTypes'));
         } else {
-            // Admin panel: show all
+            // Admin panel: paginate all leave requests
             $user = auth()->user();
-            $stream = HrmsLeaveRequest::all();
+            $stream = HrmsLeaveRequest::orderByDesc('id')->paginate(20);
             $employees = HrmsEmployee::all();
             $leaveTypes = HrmsLeaveType::all();
             return view('backend.HRMS.leaverequests', compact('stream','employees','leaveTypes'));

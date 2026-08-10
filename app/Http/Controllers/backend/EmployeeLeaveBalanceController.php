@@ -5,6 +5,7 @@ namespace App\Http\Controllers\backend;
 use App\Http\Controllers\Controller;
 use App\Models\HrmsEmployee;
 use App\Models\HrmsEmployeeLeaveBalance;
+use App\Models\HrmsLeaveResetHistory;
 use App\Models\HrmsLeaveType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,12 +69,14 @@ class EmployeeLeaveBalanceController extends Controller
 
         $employees = array_values($employees); // reindex array
 
+        $resetHistories = HrmsLeaveResetHistory::orderByDesc('created_at')->limit(5)->get();
+
         // ✅ Handle AJAX vs normal view
         if ($request->ajax()) {
             return view('backend.HRMS.employee_leave_balance_table', compact('employees', 'leaveTypes'))->render();
         }
 
-        return view('backend.HRMS.employee_leave_balance', compact('employees', 'leaveTypes'));
+        return view('backend.HRMS.employee_leave_balance', compact('employees', 'leaveTypes', 'resetHistories'));
     }
 
     public function update(Request $request)
@@ -234,18 +237,17 @@ class EmployeeLeaveBalanceController extends Controller
             Artisan::call('leave:reset');
             $output = trim(Artisan::output());
 
-            if ($request->ajax()) {
-                return response()->json(['success' => true, 'message' => $output ?: 'Employee leave balances reset successfully.']);
-            }
+            HrmsLeaveResetHistory::create([
+                'created_by' => auth()->id(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'message' => $output ?: 'Employee leave balances reset successfully.',
+            ]);
 
             return redirect()
                 ->route('employee.leave.balances')
                 ->with('success', $output ?: 'Employee leave balances reset successfully.');
         } catch (\Exception $e) {
-            if ($request->ajax()) {
-                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
-            }
-
             return redirect()->back()->with('error', $e->getMessage());
         }
     }

@@ -203,6 +203,9 @@
 
                         </table>
                     </div>
+                    <div class="d-flex justify-content-center mt-3">
+                        {!! $stream->appends(request()->except('page'))->links('pagination::bootstrap-4') !!}
+                    </div>
                 </div>
             </div>
         </div>

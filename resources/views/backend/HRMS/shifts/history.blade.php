@@ -75,6 +75,19 @@
                 </div>
             </div>
 
+            <form method="GET" action="{{ route('shifts.history') }}" class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h5 class="card-title mb-0">Employees</h5>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <input type="hidden" name="department_id" value="{{ request('department_id') }}">
+                    <input type="hidden" name="position_id" value="{{ request('position_id') }}">
+                    <input type="hidden" name="staff_type_id" value="{{ request('staff_type_id') }}">
+                    <input type="hidden" name="employee_status" value="{{ request('employee_status') }}">
+                    <input type="search" name="employee_search" class="form-control" placeholder="Search employees" value="{{ request('employee_search') }}">
+                    <button type="submit" class="btn btn-outline-primary">Search</button>
+                    <a href="{{ route('shifts.history', request()->except(['employee_search', 'employees_page', 'histories_page'])) }}" class="btn btn-secondary">Reset</a>
+                </div>
+            </form>
+
             <form method="POST" action="{{ route('shifts.history.store') }}">
                 @csrf
                 <input type="hidden" name="department_id" value="{{ request('department_id') }}">
@@ -122,9 +135,11 @@
                     <div class="col-md-8 mb-4">
                         <div class="card text-start">
                             <div class="card-body">
-                                <h5 class="card-title mb-3">Employees</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                                    <h5 class="card-title mb-0">Employees</h5>
+                                </div>
                                 <div class="table-responsive">
-                                    <table class="table table-bordered table-striped">
+                                    <table id="employeeTable" class="table table-bordered table-striped">
                                         <thead>
                                             <tr>
                                                 <th><input type="checkbox" id="select_all_shift_employees"></th>
@@ -154,6 +169,9 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                <div class="d-flex justify-content-center mt-3">
+                                    {!! $employees->withQueryString()->links('pagination::bootstrap-4') !!}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -162,7 +180,18 @@
 
             <div class="card text-start">
                 <div class="card-body">
-                    <h5 class="card-title mb-3">Recent Shift Assignments</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">Recent Shift Assignments</h5>
+                        <form method="GET" action="{{ route('shifts.history') }}" class="d-flex gap-2">
+                            <input type="hidden" name="department_id" value="{{ request('department_id') }}">
+                            <input type="hidden" name="position_id" value="{{ request('position_id') }}">
+                            <input type="hidden" name="staff_type_id" value="{{ request('staff_type_id') }}">
+                            <input type="hidden" name="employee_status" value="{{ request('employee_status') }}">
+                            <input type="hidden" name="employee_search" value="{{ request('employee_search') }}">
+                            <input type="text" name="recent_search" class="form-control" placeholder="Search assignments" value="{{ request('recent_search') }}">
+                            <button type="submit" class="btn btn-outline-primary">Search</button>
+                        </form>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped">
                             <thead>
@@ -202,6 +231,9 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="d-flex justify-content-center mt-3">
+                        {!! $recentHistories->withQueryString()->links('pagination::bootstrap-4') !!}
+                    </div>
                 </div>
             </div>
 
@@ -223,5 +255,7 @@
                 event.preventDefault();
             }
         }
+
+        // No client-side employee search script needed; search is handled server-side via GET form submission.
     </script>
 @endsection

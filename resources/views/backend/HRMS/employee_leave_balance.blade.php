@@ -62,16 +62,78 @@
                         <div class="d-flex gap-2 justify-content-md-end">
                             <a href="{{ route('employee.leave.balances.sample') }}" class="btn btn-secondary">Download Sample CSV</a>
                             <button type="submit" class="btn btn-warning">Import CSV</button>
-                            <button id="runCommandBtn" type="button" class="btn btn-warning">Reset Employee Leave Balances</button>
                         </div>
                     </div>
                 </div>
+            </form>
+
+            <form id="resetLeaveBalancesForm" method="POST" action="{{ route('employee.leave.reset') }}" class="mb-3">
+                @csrf
+                <button id="runCommandBtn" type="button" class="btn btn-warning">Reset Employee Leave Balances</button>
             </form>
 
             {{-- Table --}}
             <div id="leave-balance-table">
                 @include('backend.HRMS.employee_leave_balance_table')
             </div>
+
+            @if(isset($resetHistories))
+                <style>
+                    /* Reset history: sticky header + scroll */
+                    .reset-history-container {
+                        max-height: 300px;
+                        overflow-x: auto;
+                        overflow-y: auto;
+                        border: 1px solid #e9ecef;
+                        padding: 6px;
+                        background: #fff;
+                    }
+                    .reset-history-table {
+                        min-width: 700px;
+        		border-collapse: collapse;
+                    }
+                    .reset-history-table thead th {
+                        position: sticky;
+                        top: 0;
+                        background-color: #343a40 !important;
+                        color: #ffffff !important;
+                        z-index: 3;
+                    }
+                    .reset-history-table th, .reset-history-table td { white-space: nowrap; }
+                </style>
+
+                <div class="card text-start mt-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Leave Reset History</h5>
+                        @if($resetHistories->isNotEmpty())
+                            <div class="reset-history-container">
+                                <table class="table table-bordered reset-history-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>User</th>
+                                            <th>IP Address</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($resetHistories as $history)
+                                            <tr>
+                                                <td>{{ $history->created_at->format('d-m-Y H:i:s') }}</td>
+                                                <td>{{ optional($history->createdBy)->name ?? 'System' }}</td>
+                                                <td>{{ $history->ip_address }}</td>
+                                                <td>{{ $history->message }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @else
+                            <p class="mb-0 text-muted">No leave reset history found.</p>
+                        @endif
+                    </div>
+                </div>
+            @endif
 
         </div>
     </div>
@@ -84,35 +146,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const btn = document.getElementById('runCommandBtn');
     if (btn) {
         btn.addEventListener('click', function () {
-            if (!confirm('Are you sure you want to reset all employee leave balances?')) return;
+            if (!confirm('Are you sure you want to reset all employee leave balances? This action cannot be undone.')) return;
+
+            const resetForm = document.getElementById('resetLeaveBalancesForm');
+            if (!resetForm) {
+                alert('Reset form not found. Please refresh the page and try again.');
+                return;
+            }
 
             btn.disabled = true;
-            btn.textContent = 'Running...';
-
-            fetch("{{ route('employee.leave.reset') }}", {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})
-            }).then(async (res) => {
-                btn.disabled = false;
-                btn.textContent = 'Reset Employee Leave Balances';
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    alert(err.message || 'Reset failed');
-                    return;
-                }
-                const data = await res.json();
-                alert(data.message || 'Reset completed');
-                location.reload();
-            }).catch((err) => {
-                btn.disabled = false;
-                btn.textContent = 'Reset Employee Leave Balances';
-                alert('Error: ' + err.message);
-            });
+            btn.textContent = 'Resetting...';
+            resetForm.submit();
         });
     }
 

@@ -15,9 +15,24 @@ use App\Rules\ValidTimeRange;
 
 class ShiftController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $shifts = HrmsShift::with('shiftType')->get();
+        $query = HrmsShift::with('shiftType');
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('shiftType', function ($q2) use ($search) {
+                    $q2->where('shift_type_name', 'like', "%{$search}%");
+                })
+                ->orWhere('start_time', 'like', "%{$search}%")
+                ->orWhere('end_time', 'like', "%{$search}%")
+                ->orWhere('late_coming_threshold', 'like', "%{$search}%");
+            });
+        }
+
+        $shifts = $query->orderByDesc('id')->paginate(20)->appends($request->only('search'));
+
         return view('backend.HRMS.shifts.index', compact('shifts'));
     }
 
@@ -28,20 +43,45 @@ class ShiftController extends Controller
         $staffTypes = HrmsStaffType::orderBy('staff_type_name')->get();
         $shifts = HrmsShift::with('shiftType')->get();
 
-        $employees = HrmsEmployee::with(['department', 'position', 'staffType', 'shiftHistories.shift.shiftType'])
+        $employeesQuery = HrmsEmployee::with(['department', 'position', 'staffType', 'shiftHistories.shift.shiftType'])
             ->where(fn($q) => $q->where('employee_status', 'active')->orWhereNull('employee_status'))
             ->when($request->filled('department_id'), fn($q) => $q->where('department_id', $request->department_id))
             ->when($request->filled('position_id'), fn($q) => $q->where('position_id', $request->position_id))
             ->when($request->filled('staff_type_id'), fn($q) => $q->where('staff_type_id', $request->staff_type_id))
             ->when($request->filled('employee_status'), fn($q) => $q->where('employee_status', $request->employee_status))
-            ->orderBy('first_name')
-            ->get();
+            ->when($request->filled('employee_search'), function ($q) use ($request) {
+                $search = $request->employee_search;
+                $q->where(function ($q2) use ($search) {
+                    $q2->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%");
+                });
+            });
 
-        $recentHistories = HrmsEmployeeShiftHistory::with(['employee', 'shift.shiftType'])
+        $employees = $employeesQuery
+            ->orderBy('first_name')
+            ->paginate(20, ['*'], 'employees_page')
+            ->appends($request->only(['department_id', 'position_id', 'staff_type_id', 'employee_status', 'employee_search', 'recent_search']));
+
+        $recentHistoriesQuery = HrmsEmployeeShiftHistory::with(['employee', 'shift.shiftType'])
+            ->when($request->filled('recent_search'), function ($q) use ($request) {
+                $search = $request->recent_search;
+                $q->where(function ($q2) use ($search) {
+                    $q2->whereHas('employee', function ($q3) use ($search) {
+                        $q3->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('shift.shiftType', function ($q3) use ($search) {
+                        $q3->where('shift_type_name', 'like', "%{$search}%");
+                    })
+                    ->orWhere('remarks', 'like', "%{$search}%");
+                });
+            });
+
+        $recentHistories = $recentHistoriesQuery
             ->orderByDesc('effective_from')
             ->orderByDesc('id')
-            ->limit(50)
-            ->get();
+            ->paginate(20, ['*'], 'histories_page')
+            ->appends($request->only(['department_id', 'position_id', 'staff_type_id', 'employee_status', 'recent_search']));
 
         return view('backend.HRMS.shifts.history', compact(
             'departments',

@@ -52,6 +52,14 @@
 
                 <div class="card text-start">
                     <div class="card-body">
+                        <div class="row mb-3 align-items-center">
+                            <div class="col-md-4">
+                                <input type="text" id="searchInput" class="form-control" placeholder="Search shift types">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" id="searchReset" class="btn btn-secondary">Reset</button>
+                            </div>
+                        </div>
                         <div class="table-responsive">
                             <table class="display table table-striped table-bordered" id="deafult_ordering_table_wrapper"
                                 style="width: 100%">
@@ -116,9 +124,49 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            $("#reset").on("click", function() {
-                $("#Type").val("");
-            });
+            var resetButton = document.getElementById('reset');
+            if (resetButton) {
+                resetButton.addEventListener('click', function() {
+                    var typeInput = document.getElementById('Type');
+                    if (typeInput) {
+                        typeInput.value = '';
+                    }
+                });
+            }
+
+            var searchInput = document.getElementById('searchInput');
+            var searchReset = document.getElementById('searchReset');
+
+            function filterTable() {
+                if (!searchInput) {
+                    return;
+                }
+                var searchValue = searchInput.value.toLowerCase();
+                var rows = document.querySelectorAll('#deafult_ordering_table_wrapper tbody tr');
+
+                rows.forEach(function(row) {
+                    var cell = row.querySelector('td:nth-child(2)');
+                    if (!cell) {
+                        row.style.display = '';
+                        return;
+                    }
+                    var cellText = cell.innerText.toLowerCase();
+                    row.style.display = cellText.includes(searchValue) ? '' : 'none';
+                });
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('keyup', filterTable);
+            }
+
+            if (searchReset) {
+                searchReset.addEventListener('click', function() {
+                    if (searchInput) {
+                        searchInput.value = '';
+                        filterTable();
+                    }
+                });
+            }
         });
     </script>
 

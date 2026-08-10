@@ -1,11 +1,34 @@
 @if(count($employees) > 0)
+<style>
+    /* Leave balance table: sticky header + horizontal and vertical scrolling */
+    .leave-table-container {
+        max-height: 520px;
+        overflow-x: auto;
+        overflow-y: auto;
+        border: 1px solid #e9ecef;
+    }
+    .leave-table {
+        min-width: 100%;
+        border-collapse: collapse;
+    }
+    .leave-table thead th {
+        position: sticky;
+        top: 0;
+        background-color: #343a40 !important; /* dark header */
+        color: #ffffff !important; /* light text */
+        z-index: 3;
+    }
+    .leave-table th, .leave-table td { white-space: nowrap; }
+</style>
+
 <form method="POST" action="{{ route('employee.leave.balances.update') }}">
     @csrf
     @if(request('search'))
         <input type="hidden" name="search" value="{{ request('search') }}">
     @endif
-<div class="table-responsive">
-    <table class="table table-bordered">
+
+    <div class="leave-table-container">
+        <table class="table table-bordered leave-table">
         <thead class="table-dark">
             <tr>
                 <th>Sr.</th>
