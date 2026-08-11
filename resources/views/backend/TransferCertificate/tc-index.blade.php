@@ -2,8 +2,11 @@
 
 @section('main-container')
 <div class="main-content">
-    <div class="breadcrumb">
+    <div class="breadcrumb d-flex justify-content-between align-items-center">
         <h1>Transfer Certificate Reports</h1>
+        <div>
+            <a href="{{ route('transfercertificate.create') }}" class="btn btn-success"># Create Transfer Certificate</a>
+        </div>
     </div>
     <div class="separator-breadcrumb border-top"></div>
 

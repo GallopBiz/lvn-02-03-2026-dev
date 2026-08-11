@@ -134,7 +134,7 @@
 <style>
     @page {
         size: A4 portrait;
-        margin: 0;
+        margin: 8mm;
     }
 
     html,
@@ -143,85 +143,110 @@
         padding: 0;
     }
 
+    /* Place the visible border inside the printable area.
+       @page margin is 8mm, so keep the wrapper smaller by 16mm total. */
     .tc-page-wrap {
         background: #fff;
         padding: 0;
-        width: 210mm;
-        height: {{ $isPdf ? '297mm' : 'auto' }};
-        overflow: hidden;
+        width: calc(210mm - 16mm); /* 210mm minus left+right page margins */
+        min-height: calc(297mm - 16mm);
+        overflow: visible;
+        margin: 8mm auto; /* sit inside @page margins */
+        box-sizing: border-box;
     }
 
     .tc-a4 {
-        width: {{ $isPdf ? '180mm' : '210mm' }};
-        height: {{ $isPdf ? '277mm' : '297mm' }};
-        min-height: 0;
+        width: 200mm; /* inner width adjusted for smaller page margin */
+        min-height: calc(265mm - 16mm);
         margin: 0 auto;
-        padding: {{ $isPdf ? '12mm 15mm 8mm' : '15mm 17mm 12mm' }};
+        padding: {{ $isPdf ? '8mm' : '10mm' }};
         background: #fff;
         color: #111;
-        font-family: Arial, Helvetica, "DejaVu Sans", sans-serif;
-        font-size: {{ $isPdf ? '10.8px' : '11.5px' }};
-        line-height: {{ $isPdf ? '1.12' : '1.16' }};
+        font-family: "DejaVu Sans", Arial, Helvetica, sans-serif;
+        font-size: {{ $isPdf ? '10.5px' : '11px' }};
+        line-height: {{ $isPdf ? '1.04' : '1.12' }};
         position: relative;
         box-sizing: border-box;
-        overflow: hidden;
+        overflow: visible;
     }
 
     .tc-a4 * {
         box-sizing: border-box;
     }
 
+    /* ===== Reserved blank space for pre-printed letterhead ===== */
+    /* This paper already has the logo, school name, address and
+       "School Leaving Certificate" title printed on it, so we just
+       leave blank vertical space instead of rendering that header.
+       Adjust the height below to match your letterhead's printed area. */
+    .tc-letterhead-space {
+        height: {{ $isPdf ? '30mm' : '28mm' }};
+    }
+
+    .tc-tcno-line {
+        font-size: {{ $isPdf ? '10px' : '11px' }};
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+    /* ===== End header ===== */
+
     .tc-top-line {
         border-top: 1px solid #111;
-        margin-bottom: {{ $isPdf ? '7px' : '10px' }};
+        margin-bottom: {{ $isPdf ? '4px' : '6px' }};
     }
 
     .tc-meta {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: {{ $isPdf ? '6px' : '8px' }};
-        font-size: {{ $isPdf ? '10.8px' : '11.5px' }};
+        margin-bottom: {{ $isPdf ? '4px' : '8px' }};
+        font-size: {{ $isPdf ? '11px' : '12px' }};
         table-layout: fixed;
     }
 
     .tc-meta td {
-        padding: 0 2px 3px 0;
+        padding: 0 4px 2px 4px;
         vertical-align: bottom;
         white-space: nowrap;
     }
 
-    .tc-meta-label {
-        width: 82px;
+    .tc-meta-label,
+    .tc-meta-book-label,
+    .tc-meta-scholar-label {
+        width: 78px;
         font-weight: 700;
+        text-align: right;
+        padding-right: 6px;
     }
 
     .tc-meta-colon {
-        width: 10px;
+        width: 8px;
         text-align: center;
         font-weight: 700;
+        padding: 0 4px;
     }
 
     .tc-meta-value {
-        width: 120px;
         font-weight: 700;
+        text-align: left;
+        padding-left: 4px;
     }
 
     .tc-meta-spacer {
-        width: 18px;
+        width: 12px;
     }
 
     .tc-meta-book-label {
-        width: 58px;
+        width: 50px;
         font-weight: 700;
     }
 
     .tc-meta-book-value {
-        width: 92px;
+        width: 78px;
         font-weight: 700;
     }
 
     .tc-meta-scholar-label {
-        width: 70px;
+        width: 62px;
         font-weight: 700;
     }
 
@@ -231,44 +256,52 @@
     }
 
     .tc-list td {
-        padding: {{ $isPdf ? '2.15px 0' : '3px 0' }};
+        padding: {{ $isPdf ? '4px' : '5px 5px' }};
         vertical-align: top;
     }
 
-    .tc-no {
-        width: 20px;
-        padding-right: 4px !important;
-        text-align: right;
-        font-weight: 700;
+    .tc-list tr {
+        page-break-inside: avoid;
     }
 
     .tc-label {
-        width: 320px;
+        width: 58%;
+        font-weight: 700;
+        padding-right: 6px;
+    }
+
+    .tc-colon {
+        width: 4%;
+        text-align: center;
+        font-weight: 700;
+        padding-right: 6px;
+    }
+
+    .tc-value {
+        font-weight: 600;
+        text-transform: uppercase;
+        word-break: break-word;
+        word-wrap: break-word;
+        white-space: normal;
+        padding-left: 4px;
+    }
+
+    .tc-no {
+        width: 4%;
+        padding-right: 6px !important;
+        text-align: right;
         font-weight: 700;
     }
 
     .tc-label-note {
         display: block;
-        margin-top: 2px;
-    }
-
-    .tc-colon {
-        width: 14px;
-        text-align: center;
-        font-weight: 700;
-    }
-
-    .tc-value {
-        font-weight: 700;
-        text-transform: uppercase;
-        word-break: break-word;
-        word-wrap: break-word;
-        white-space: normal;
+        margin-top: 1px;
+        font-size: {{ $isPdf ? '9px' : '10px' }};
     }
 
     .tc-subjects-value {
         text-align: left;
-        line-height: 1.22;
+        line-height: 1.14;
         word-spacing: normal;
         overflow-wrap: break-word;
         word-break: normal;
@@ -289,11 +322,11 @@
 
     .tc-split-main-label {
         font-weight: 700;
-        padding-right: 8px !important;
+        padding-right: 6px !important;
     }
 
     .tc-split-sub-label {
-        width: 96px;
+        width: 84px;
         font-weight: 700;
         text-transform: none;
         text-align: left;
@@ -328,42 +361,55 @@
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: {{ $isPdf ? '10.8px' : '11.5px' }};
-        margin-top: {{ $isPdf ? '5mm' : '9mm' }};
+        font-size: {{ $isPdf ? '10.5px' : '11px' }};
+        margin-top: {{ $isPdf ? '5mm' : '6mm' }};
+    }
+
+    .tc-signatures td {
+        padding: 0 8px;
+        vertical-align: bottom;
+        box-sizing: border-box;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
     }
 
     .tc-sign {
-        width: 33.33%;
+        width: 33.333%;
+        max-width: 33.333%;
         vertical-align: bottom;
         font-weight: 400;
-        padding: 0;
+        padding: 6px 0;
+        white-space: normal;
     }
 
     .tc-sign-center {
         text-align: center;
     }
-
     .tc-sign-right {
         text-align: right;
+        padding-right: 8px;
     }
-
     .tc-sign small {
         display: block;
-        font-size: 10.5px;
-        margin-top: 3px;
+        font-size: 10px;
+        margin-top: 6px;
+        font-weight: 400;
     }
 
     @if(!$isPdf)
         @media screen {
             .tc-page-wrap {
-                background: #e9edf3;
-                padding: 18px 0;
+                background: transparent;
+                padding: 12px 0;
                 height: auto;
                 overflow: visible;
             }
 
             .tc-a4 {
-                height: 297mm;
+                height: 200mm;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
             }
         }
 
@@ -376,31 +422,44 @@
                 background: #fff !important;
             }
 
-            body * {
-                visibility: hidden;
-            }
-
+            .main-content,
             .tc-page-wrap,
             .tc-page-wrap * {
-                visibility: visible;
+                visibility: visible !important;
+            }
+
+            .main-content {
+                width: 210mm;
+                margin: 0;
+                padding: 0;
             }
 
             .tc-page-wrap {
                 position: absolute;
-                left: 0;
-                top: 0;
-                width: 210mm;
-                height: 297mm;
+                /* position inside the page margins to avoid printer clipping
+                   Use left/right insets instead of fixed width to prevent rounding/scale clipping */
+                left: 8mm;
+                right: 8mm;
+                top: 8mm;
+                bottom: 8mm;
                 padding: 0;
                 background: #fff;
-                overflow: hidden;
+                overflow: visible;
+                box-sizing: border-box;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                page-break-inside: avoid;
             }
 
             .tc-a4 {
-                width: 210mm;
-                height: 297mm;
+                width: 100%;
+                min-height: calc(100% - 20mm);
                 margin: 0;
+                padding: 10mm;
                 box-shadow: none;
+                page-break-after: avoid;
+                page-break-before: avoid;
+                page-break-inside: avoid;
             }
 
             .btn,
@@ -423,15 +482,16 @@
         @endif
 
         <div class="tc-content">
+
+            {{-- Blank space reserved for the pre-printed letterhead
+                 (logo, school name, address, title, affiliation line) --}}
+            <div class="tc-letterhead-space"></div>
+
             <table class="tc-meta">
                 <tr>
                     <td class="tc-meta-label">TC No./ Date</td>
                     <td class="tc-meta-colon">:</td>
                     <td class="tc-meta-value">{{ $certificate->certificate_no }}{{ $issueDate ? '/' . $issueDate : '' }}</td>
-                    <td class="tc-meta-spacer"></td>
-                    <td class="tc-meta-book-label">Book No.</td>
-                    <td class="tc-meta-colon">:</td>
-                    <td class="tc-meta-book-value">{{ $value('book_no') }}</td>
                     <td class="tc-meta-spacer"></td>
                     <td class="tc-meta-scholar-label">Scholar No.</td>
                     <td class="tc-meta-colon">:</td>
@@ -513,7 +573,7 @@
                     Prepared &amp; Checked by
                     <small>(Full Name &amp; Designation)</small>
                 </td>
-                <td class="tc-sign tc-sign-right">Principal's Signature with Seal</td>
+                <td class="tc-sign tc-sign-center">Principal's Signature with Seal</td>
             </tr>
         </table>
     </div>

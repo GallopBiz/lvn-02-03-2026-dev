@@ -24,8 +24,11 @@
 </style>
 
 <div class="main-content">
-    <div class="breadcrumb">
+    <div class="breadcrumb d-flex justify-content-between align-items-center">
         <h1>{{ $certificate ? 'Edit Transfer Certificate' : 'Create Transfer Certificate' }}</h1>
+        <div>
+            <a href="{{ route('transfercertificate.index') }}" class="btn btn-info">T.C. Reports</a>
+        </div>
     </div>
     <div class="separator-breadcrumb border-top"></div>
 
