@@ -73,8 +73,13 @@ class TransferCertificateController extends Controller
                 ->unique('class_name')
                 ->pluck('id', 'class_name')
             : collect();
+        $studentIdsByScholarNo = Schema::connection('dynamic')->hasTable('student_registration')
+            ? DB::connection('dynamic')->table('student_registration')
+                ->whereIn('scholar_no', $certificates->getCollection()->pluck('scholar_no')->filter()->unique()->values())
+                ->pluck('id', 'scholar_no')
+            : collect();
 
-        return view('backend.TransferCertificate.tc-index', compact('certificates', 'classes', 'classIdsByName'));
+        return view('backend.TransferCertificate.tc-index', compact('certificates', 'classes', 'classIdsByName', 'studentIdsByScholarNo'));
     }
 
     public function create(Request $request)

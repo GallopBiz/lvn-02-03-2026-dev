@@ -108,17 +108,16 @@
                         @forelse($certificates as $index => $certificate)
                             @php
                                 $classId = $classIdsByName->get($certificate->class_name);
-                                $recordParams = ['session_name' => $certificate->session_name];
+                                $oldRecordStudentId = $studentIdsByScholarNo->get($certificate->scholar_no)
+                                    ?? data_get($certificate->snapshot, 'student.id')
+                                    ?? $certificate->student_id;
                                 $attendanceParams = array_filter([
-                                    'session_name' => $certificate->session_name,
-                                    'academic_session' => $certificate->session_name,
                                     'class_id' => $classId,
                                     'section_name' => $certificate->section_name,
-                                    'student_id' => $certificate->student_id,
+                                    'student_id' => $oldRecordStudentId,
                                     'student_search' => $certificate->scholar_no,
                                 ], fn ($value) => filled($value));
                                 $marksheetParams = array_filter([
-                                    'session_name' => $certificate->session_name,
                                     'class_id' => $classId,
                                     'generated_class_id' => $classId,
                                     'generated_search' => $certificate->scholar_no,
@@ -143,12 +142,12 @@
                                             Old Records
                                         </button>
                                         <div class="dropdown-menu dropdown-menu-end" aria-labelledby="oldRecordsDropdown{{ $certificate->id }}">
-                                            <a class="dropdown-item" href="{{ route('registrationviewlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Student Registration View</a>
-                                            <a class="dropdown-item" href="{{ route('registrationeditlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Edit Student Registration</a>
-                                            <a class="dropdown-item" href="{{ route('feesmasterviewlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Fees Master View</a>
-                                            <a class="dropdown-item" href="{{ route('view-student-ledger', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Student Ledger</a>
-                                            <a class="dropdown-item" href="{{ route('fees_payments', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Fees Payment</a>
-                                            <a class="dropdown-item" href="{{ route('scholarbusassign', $recordParams + ['student_id' => $certificate->student_id, 'student_search' => $certificate->scholar_no]) }}">Bus Assignment</a>
+                                            <a class="dropdown-item" href="{{ route('registrationviewlist', $oldRecordStudentId) }}">Student Registration View</a>
+                                            <a class="dropdown-item" href="{{ route('registrationeditlist', $oldRecordStudentId) }}">Edit Student Registration</a>
+                                            <a class="dropdown-item" href="{{ route('feesmasterviewlist', $oldRecordStudentId) }}">Fees Master View</a>
+                                            <a class="dropdown-item" href="{{ route('view-student-ledger', $oldRecordStudentId) }}">Student Ledger</a>
+                                            <a class="dropdown-item" href="{{ route('fees_payments', $oldRecordStudentId) }}">Fees Payment</a>
+                                            <a class="dropdown-item" href="{{ route('scholarbusassign', ['student_id' => $oldRecordStudentId, 'student_search' => $certificate->scholar_no]) }}">Bus Assignment</a>
                                             <a class="dropdown-item" href="{{ route('student-attandence-report', $attendanceParams) }}">Attendance Report</a>
                                             <a class="dropdown-item" href="{{ route('marksheet', $marksheetParams) }}">Marksheet</a>
                                         </div>
