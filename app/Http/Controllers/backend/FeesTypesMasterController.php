@@ -504,10 +504,39 @@ class FeesTypesMasterController extends Controller
          echo"<pre>";
          print_r($request->all());
     }
-    public function view_student_ledger($id){
-        
-        return view('backend.FeesTypeMaster.view_student_ledger');
+    public function view_student_ledger($id)
+    {
+        $student_id = $id;
+        $student_data = DB::connection('dynamic')->table('student_registration')->where('id', $student_id)->first();
 
+        if (!$student_data) {
+            return redirect()->route('student_ledger')->with('error', 'Student ledger record not found.');
+        }
+
+        $totalnextyear = DB::connection('dynamic')->table('totalnextyear')->where('scholar_no', $student_data->scholar_no)->get();
+        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $student_id)->get();
+        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', 'scholar_no')->get();
+
+        $course_fees_data = DB::connection('dynamic')->table('generate_duechartstatus')
+            ->where('student_id', $student_id)
+            ->get();
+
+        $decoded_course_fees_data = [];
+        foreach ($course_fees_data as $course_data) {
+            $json_data = json_decode($course_data->json_str, true);
+            if (!empty($json_data[0]['json_str'])) {
+                $json_data_main = json_decode($json_data[0]['json_str'], true);
+                if (is_array($json_data_main)) {
+                    $decoded_course_fees_data[] = $json_data_main;
+                }
+            }
+        }
+
+        $mergedRowsNew = $this->mergeLedger($decoded_course_fees_data, $challan_data, $student_data, $totalnextyear);
+        $total_tuition_fees = $mergedRowsNew['total_tuition_fees'];
+        $mergedRows = $mergedRowsNew['mergedRows'];
+
+        return view('backend.FeesTypeMaster.ledgershow', compact('mergedRows', 'data_student_name', 'challan_data', 'student_data', 'student_id', 'totalnextyear', 'decoded_course_fees_data', 'total_tuition_fees'));
     }
 
 

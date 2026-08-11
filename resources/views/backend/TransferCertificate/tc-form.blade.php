@@ -252,7 +252,11 @@
                         <label>Leaving Date</label>
                         <input type="date" name="leaving_date" class="form-control" value="{{ old('leaving_date', optional($certificate?->leaving_date)->format('Y-m-d')) }}">
                     </div>
-                    <div class="form-group tc-wide">
+                    <div class="form-group">
+                        <label>PEN No. / APAAR ID</label>
+                        <input type="text" name="tc_form_data[pen_apaar_id]" id="tc_pen_apaar_id" class="form-control" value="{{ $pick('pen_apaar_id', trim($pick('pen_no') . ($pick('apaar_id') ? ' / ' . $pick('apaar_id') : ''))) }}">
+                    </div>
+                    <div class="form-group">
                         <label>Reason for Leaving</label>
                         <textarea name="reason_for_leaving" class="form-control" rows="2">{{ old('reason_for_leaving', $certificate->reason_for_leaving ?? '') }}</textarea>
                     </div>
@@ -321,6 +325,7 @@ function loadStudentDetails() {
             fillValue('tc_date_of_birth_words', data.date_of_birth_words || dateInWords(data.date_of_birth));
             fillValue('tc_class_studying', data.class_name);
             fillValue('tc_subjects_studied', data.subjects_studied);
+            fillValue('tc_pen_apaar_id', data.pen_apaar_id);
             fillValue('tc_working_days_present', data.working_days_present);
             fillValue('tc_total_working_days', data.total_working_days);
         })

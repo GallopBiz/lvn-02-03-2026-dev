@@ -95,6 +95,7 @@
     $schoolDuesDate = $formatDate($value('school_dues_paid_upto'));
     $applicationDate = $formatDate($value('application_date'));
     $issueDate = $formatDate($certificate->issue_date);
+    $penApaarId = $value('pen_apaar_id') ?: trim($value('pen_no') . ($value('apaar_id') ? ' / ' . $value('apaar_id') : ''));
 
     $rows = [
         ['label' => 'Name of Student', 'value' => $studentName],
@@ -126,6 +127,7 @@
         ['label' => 'General conduct', 'value' => $certificate->conduct],
         ['label' => 'Date of application for certificate', 'value' => $applicationDate],
         ['label' => 'Date of issue of certificate', 'value' => $issueDate],
+        ['label' => 'PEN No. / APAAR ID', 'value' => $penApaarId ?: '--'],
         ['label' => 'Reason for leaving the school', 'value' => $certificate->reason_for_leaving],
         ['label' => 'Any other remarks', 'value' => $certificate->remarks],
     ];

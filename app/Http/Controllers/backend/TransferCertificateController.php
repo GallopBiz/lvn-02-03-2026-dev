@@ -65,8 +65,16 @@ class TransferCertificateController extends Controller
         $classes = Schema::connection('dynamic')->hasTable('class_name')
             ? Classname::on('dynamic')->orderBy('class_name')->get()
             : collect();
+        $classIdsByName = Schema::connection('dynamic')->hasTable('classes')
+            ? DB::connection('dynamic')->table('classes')
+                ->select('id', 'class_name')
+                ->orderBy('id')
+                ->get()
+                ->unique('class_name')
+                ->pluck('id', 'class_name')
+            : collect();
 
-        return view('backend.TransferCertificate.tc-index', compact('certificates', 'classes'));
+        return view('backend.TransferCertificate.tc-index', compact('certificates', 'classes', 'classIdsByName'));
     }
 
     public function create(Request $request)
@@ -77,23 +85,12 @@ class TransferCertificateController extends Controller
 
         $students = DB::connection('dynamic')
             ->table('student_registration')
-            ->when(
-                Schema::connection('dynamic')->hasTable('academic_attendance_collective_details')
-                && Schema::connection('dynamic')->hasTable('academic_attendance_collectives'),
-                function ($query) use ($sessionName) {
-                    $query->whereExists(function ($exists) use ($sessionName) {
-                        $exists->select(DB::raw(1))
-                            ->from('academic_attendance_collective_details as acd')
-                            ->join('academic_attendance_collectives as ac', 'ac.id', '=', 'acd.collective_id')
-                            ->whereColumn('acd.student_id', 'student_registration.id');
-
-                        $this->applyAnnualExamFilter($exists, $sessionName, 'ac');
-                    });
-                }
-            )
             ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'status'), function ($query) {
+                $query->where('status', 'r');
+            })
+            ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status'), function ($query) {
                 $query->where(function ($q) {
-                    $q->whereNull('status')->orWhere('status', '!=', 't');
+                    $q->whereNull('transfer_status')->orWhere('transfer_status', '!=', 'transferred');
                 });
             })
             ->orderBy('student_name')
@@ -101,7 +98,7 @@ class TransferCertificateController extends Controller
             ->limit(500)
             ->get();
 
-        $suggestedTcNo = (string) (TransferCertificate::where('session_name', $sessionName)->count() + 1);
+        $suggestedTcNo = $this->nextAvailableCertificateNo($sessionName);
         $classes = $this->classesForForm();
 
         return view('backend.TransferCertificate.tc-form', [
@@ -178,11 +175,27 @@ class TransferCertificateController extends Controller
 
         $certificate = TransferCertificate::findOrFail($id);
         $oldValues = $certificate->toArray();
-        $certificate->update(['status' => 'cancelled']);
 
-        $this->service->writeAudit($certificate, null, 'cancelled', $request, $oldValues, $certificate->fresh()->toArray());
+        DB::connection('dynamic')->transaction(function () use ($certificate, $oldValues, $request) {
+            $statusRecord = DB::connection('dynamic')
+                ->table('tc_student_session_statuses')
+                ->where('certificate_id', $certificate->id)
+                ->first();
 
-        return redirect()->route('transfercertificate.index')->with('success', 'Transfer Certificate cancelled.');
+            $this->restoreStudentAfterTcDelete($certificate);
+            $this->restoreNextSessionStudentAfterTcDelete($certificate, $statusRecord?->inactive_from_session);
+
+            DB::connection('dynamic')
+                ->table('tc_student_session_statuses')
+                ->where('certificate_id', $certificate->id)
+                ->delete();
+
+            $this->service->writeAudit($certificate, null, 'deleted_and_student_restored', $request, $oldValues, null);
+
+            $certificate->delete();
+        });
+
+        return redirect()->route('transfercertificate.index')->with('success', 'Transfer Certificate deleted and student restored as regular.');
     }
 
     public function print(Request $request, int $id)
@@ -302,6 +315,17 @@ class TransferCertificateController extends Controller
             'date_of_birth' => $dateOfBirth,
             'date_of_birth_words' => $this->dateInWords($dateOfBirth),
             'subjects_studied' => $this->displayValue($subjects->implode(', ')),
+            'pen_apaar_id' => $this->displayValue(
+                $json['pen_apaar_id']
+                ?? $json['pen_no_apaar_id']
+                ?? $json['pen_no']
+                ?? $json['pen_number']
+                ?? $json['pen']
+                ?? $json['apaar_id']
+                ?? $json['apaar']
+                ?? $json['APAAR']
+                ?? null
+            ),
             'working_days_present' => $attendance['present_days'],
             'total_working_days' => $attendance['working_days'],
         ]);
@@ -505,6 +529,91 @@ class TransferCertificateController extends Controller
         $value = is_string($value) ? trim($value) : $value;
 
         return empty($value) ? '--' : (string) $value;
+    }
+
+    private function nextAvailableCertificateNo(?string $sessionName): string
+    {
+        $sessionPart = $sessionName ?: now()->format('Y');
+        $prefix = 'TC/' . str_replace('_', '-', $sessionPart) . '/';
+        $nextNumber = TransferCertificate::where('session_name', $sessionName)->count() + 1;
+
+        do {
+            $certificateNo = $prefix . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
+            $nextNumber++;
+        } while (TransferCertificate::where('certificate_no', $certificateNo)->exists());
+
+        return $certificateNo;
+    }
+
+    private function restoreStudentAfterTcDelete(TransferCertificate $certificate): void
+    {
+        if (!Schema::connection('dynamic')->hasTable('student_registration')) {
+            return;
+        }
+
+        $updates = ['updated_at' => now()];
+
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'status')) {
+            $updates['status'] = 'r';
+        }
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status')) {
+            $updates['transfer_status'] = 'active';
+        }
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'transferred_at')) {
+            $updates['transferred_at'] = null;
+        }
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'tc_certificate_id')) {
+            $updates['tc_certificate_id'] = null;
+        }
+
+        DB::connection('dynamic')
+            ->table('student_registration')
+            ->where('id', $certificate->student_id)
+            ->orWhere('scholar_no', $certificate->scholar_no)
+            ->update($updates);
+    }
+
+    private function restoreNextSessionStudentAfterTcDelete(TransferCertificate $certificate, ?string $nextSession): void
+    {
+        if (!$nextSession || !preg_match('/^\d{4}_\d{4}$/', $nextSession)) {
+            return;
+        }
+
+        Config::set('database.connections.next_session_db.database', $nextSession);
+        DB::purge('next_session_db');
+        DB::reconnect('next_session_db');
+
+        if (!Schema::connection('next_session_db')->hasTable('student_registration')) {
+            return;
+        }
+
+        $updates = ['updated_at' => now()];
+
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'status')) {
+            $updates['status'] = 'r';
+        }
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'transfer_status')) {
+            $updates['transfer_status'] = 'active';
+        }
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'transferred_at')) {
+            $updates['transferred_at'] = null;
+        }
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'tc_certificate_id')) {
+            $updates['tc_certificate_id'] = null;
+        }
+
+        $query = DB::connection('next_session_db')
+            ->table('student_registration')
+            ->where('scholar_no', $certificate->scholar_no);
+
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'tc_certificate_id')) {
+            $query->where(function ($q) use ($certificate) {
+                $q->where('tc_certificate_id', $certificate->id)
+                    ->orWhereNull('tc_certificate_id');
+            });
+        }
+
+        $query->update($updates);
     }
 
     private function applySessionDatabaseBindings(Request $request): void

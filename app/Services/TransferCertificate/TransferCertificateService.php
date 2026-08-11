@@ -27,8 +27,13 @@ class TransferCertificateService
             throw ValidationException::withMessages(['student_id' => 'Selected student was not found.']);
         }
 
-        $existing = TransferCertificate::where('student_id', $student->id)
-            ->orWhere('scholar_no', $student->scholar_no)
+        $certificateSessionName = $data['session_name'] ?? $student->session_name;
+
+        $existing = TransferCertificate::where('session_name', $certificateSessionName)
+            ->where(function ($query) use ($student) {
+                $query->where('student_id', $student->id)
+                    ->orWhere('scholar_no', $student->scholar_no);
+            })
             ->first();
 
         if ($existing && empty($data['reissue_reason'])) {
@@ -37,7 +42,7 @@ class TransferCertificateService
             ]);
         }
 
-        return DB::connection('dynamic')->transaction(function () use ($data, $student, $existing, $request) {
+        return DB::connection('dynamic')->transaction(function () use ($data, $student, $existing, $request, $certificateSessionName) {
             $snapshot = $this->buildStudentSnapshot($student);
             $userId = $this->currentUserId();
 
@@ -55,7 +60,7 @@ class TransferCertificateService
                     'certificate_no' => !empty($data['certificate_no']) ? $data['certificate_no'] : $this->nextCertificateNo($data['session_name'] ?? $student->session_name),
                     'student_id' => $student->id,
                     'scholar_no' => $student->scholar_no,
-                    'session_name' => $data['session_name'] ?? $student->session_name,
+                    'session_name' => $certificateSessionName,
                     'class_name' => $student->class_name,
                     'section_name' => $this->valueFromJson($student->json_str, 'section_name') ?? $student->section_name,
                     'student_name' => $student->student_name,
@@ -223,9 +228,15 @@ class TransferCertificateService
     private function nextCertificateNo(?string $sessionName): string
     {
         $sessionPart = $sessionName ?: now()->format('Y');
-        $count = TransferCertificate::where('session_name', $sessionName)->count() + 1;
+        $prefix = 'TC/' . str_replace('_', '-', $sessionPart) . '/';
+        $nextNumber = TransferCertificate::where('session_name', $sessionName)->count() + 1;
 
-        return 'TC/' . str_replace('_', '-', $sessionPart) . '/' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+        do {
+            $certificateNo = $prefix . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
+            $nextNumber++;
+        } while (TransferCertificate::where('certificate_no', $certificateNo)->exists());
+
+        return $certificateNo;
     }
 
     private function nextSessionName(?string $sessionName): ?string

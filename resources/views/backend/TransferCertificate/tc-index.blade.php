@@ -1,6 +1,31 @@
 @extends('backend.layouts.main')
 
 @section('main-container')
+<style>
+    .tc-table-responsive {
+        overflow: visible;
+    }
+
+    .tc-old-records-dropdown .dropdown-menu {
+        z-index: 1055;
+        min-width: 230px;
+        padding: 6px 0;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .tc-old-records-dropdown .dropdown-item {
+        white-space: normal;
+        line-height: 1.25;
+        padding: 8px 14px;
+    }
+
+    @media (max-width: 767.98px) {
+        .tc-table-responsive {
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+    }
+</style>
 <div class="main-content">
     <div class="breadcrumb d-flex justify-content-between align-items-center">
         <h1>Transfer Certificate Reports</h1>
@@ -64,7 +89,7 @@
 
     <div class="card">
         <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-responsive tc-table-responsive">
                 <table class="table table-bordered table-hover">
                     <thead>
                         <tr>
@@ -81,6 +106,24 @@
                     </thead>
                     <tbody>
                         @forelse($certificates as $index => $certificate)
+                            @php
+                                $classId = $classIdsByName->get($certificate->class_name);
+                                $recordParams = ['session_name' => $certificate->session_name];
+                                $attendanceParams = array_filter([
+                                    'session_name' => $certificate->session_name,
+                                    'academic_session' => $certificate->session_name,
+                                    'class_id' => $classId,
+                                    'section_name' => $certificate->section_name,
+                                    'student_id' => $certificate->student_id,
+                                    'student_search' => $certificate->scholar_no,
+                                ], fn ($value) => filled($value));
+                                $marksheetParams = array_filter([
+                                    'session_name' => $certificate->session_name,
+                                    'class_id' => $classId,
+                                    'generated_class_id' => $classId,
+                                    'generated_search' => $certificate->scholar_no,
+                                ], fn ($value) => filled($value));
+                            @endphp
                             <tr>
                                 <td>{{ $certificates->firstItem() + $index }}</td>
                                 <td>{{ $certificate->certificate_no }}</td>
@@ -95,6 +138,26 @@
                                     <a href="{{ route('transfercertificate.print', [$certificate->id, 'download' => 'pdf']) }}" class="btn btn-sm btn-outline-info">PDF</a>
                                     <a href="{{ route('transfercertificate.duplicate', $certificate->id) }}" class="btn btn-sm btn-warning">Duplicate</a>
                                     <a href="{{ route('transfercertificate.edit', $certificate->id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                                    <div class="dropdown d-inline-block tc-old-records-dropdown">
+                                        <button type="button" class="btn btn-sm btn-primary dropdown-toggle" id="oldRecordsDropdown{{ $certificate->id }}" data-toggle="dropdown" data-bs-toggle="dropdown" data-display="static" data-bs-display="static" data-boundary="viewport" data-bs-boundary="viewport" aria-haspopup="true" aria-expanded="false">
+                                            Old Records
+                                        </button>
+                                        <div class="dropdown-menu dropdown-menu-end" aria-labelledby="oldRecordsDropdown{{ $certificate->id }}">
+                                            <a class="dropdown-item" href="{{ route('registrationviewlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Student Registration View</a>
+                                            <a class="dropdown-item" href="{{ route('registrationeditlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Edit Student Registration</a>
+                                            <a class="dropdown-item" href="{{ route('feesmasterviewlist', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Fees Master View</a>
+                                            <a class="dropdown-item" href="{{ route('view-student-ledger', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Student Ledger</a>
+                                            <a class="dropdown-item" href="{{ route('fees_payments', array_merge(['id' => $certificate->student_id], $recordParams)) }}">Fees Payment</a>
+                                            <a class="dropdown-item" href="{{ route('scholarbusassign', $recordParams + ['student_id' => $certificate->student_id, 'student_search' => $certificate->scholar_no]) }}">Bus Assignment</a>
+                                            <a class="dropdown-item" href="{{ route('student-attandence-report', $attendanceParams) }}">Attendance Report</a>
+                                            <a class="dropdown-item" href="{{ route('marksheet', $marksheetParams) }}">Marksheet</a>
+                                        </div>
+                                    </div>
+                                    <form method="POST" action="{{ route('transfercertificate.delete', $certificate->id) }}" class="d-inline" onsubmit="return confirm('Delete this Transfer Certificate and restore the student as regular?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         @empty

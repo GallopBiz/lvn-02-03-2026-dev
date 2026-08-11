@@ -1403,7 +1403,7 @@ Route::prefix('transfer-certificate')->group(function () {
     Route::post('/store', [App\Http\Controllers\backend\TransferCertificateController::class, 'store'])->name('transfercertificate.store');
     Route::get('/edit/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'edit'])->name('transfercertificate.edit');
     Route::post('/update/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'update'])->name('transfercertificate.update');
-    Route::get('/delete/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'destroy'])->name('transfercertificate.delete');
+    Route::delete('/delete/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'destroy'])->name('transfercertificate.delete');
     Route::get('/print/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'print'])->name('transfercertificate.print');
     Route::get('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate');
     Route::post('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate.store');

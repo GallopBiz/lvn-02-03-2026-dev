@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Student_registration;
 use App\Models\Classname;
 use App\Models\NextYearStudent;
@@ -28,9 +29,11 @@ class StudentTransferController extends Controller
 
 		$transferredScholarNos = NextYearStudent::pluck('scholar_no')->toArray();
 
-        $students = Student_registration::on('dynamic')->where('class_name', $request->class_id)
-		->whereNotIn('scholar_no', $transferredScholarNos)
-		->get();
+        $studentQuery = Student_registration::on('dynamic')->where('class_name', $request->class_id)
+            ->whereNotIn('scholar_no', $transferredScholarNos);
+        $this->applyActiveStudentFilters($studentQuery);
+
+        $students = $studentQuery->get();
 			//echo $students->toSql();die;
 		
 		$students = $students->map(function ($student) {
@@ -62,7 +65,10 @@ class StudentTransferController extends Controller
         [$startYear, $endYear] = explode('_', $currentSession);
         $nextSession = ($startYear + 1) . '_' . ($endYear + 1);
 
-        $students = Student_registration::on('dynamic')->whereIn('id', $selectedStudents)->get();
+        $studentQuery = Student_registration::on('dynamic')->whereIn('id', $selectedStudents);
+        $this->applyActiveStudentFilters($studentQuery);
+
+        $students = $studentQuery->get();
 
         // Step 1: Fetch inquiry data for all selected students
         $formNumbers = $students->pluck('form_number')->toArray();
@@ -93,6 +99,10 @@ class StudentTransferController extends Controller
 
             $student->json_str = json_encode($data);
             $student->save();
+
+            if ($newClassName === null) {
+                continue;
+            }
 
 			NextYearStudent::create([
                 'id'              => $student->id,
@@ -141,11 +151,26 @@ class StudentTransferController extends Controller
 		// If it's numeric (01 to 12), increment the number
 		if (preg_match('/^\d+$/', $currentClass)) {
 			$newClass = str_pad((int)$currentClass + 1, 2, '0', STR_PAD_LEFT); // Keep 2-digit format
-			return $newClass <= 12 ? $newClass : 'Graduated'; // 12th class students graduate
+			return $newClass <= 12 ? $newClass : null; // Class 12 students should not get a Class 13 enrollment.
 		}
 
 		return $currentClass; // Default: No change if class doesn't match
 	}
+
+    private function applyActiveStudentFilters($query): void
+    {
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'status')) {
+            $query->where(function ($q) {
+                $q->whereNull('status')->orWhere('status', '!=', 't');
+            });
+        }
+
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status')) {
+            $query->where(function ($q) {
+                $q->whereNull('transfer_status')->orWhere('transfer_status', '!=', 'transferred');
+            });
+        }
+    }
 
     private function applySessionDatabaseBindings(Request $request): void
     {
