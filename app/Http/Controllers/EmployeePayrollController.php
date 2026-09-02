@@ -94,6 +94,32 @@ class EmployeePayrollController extends Controller
 		return false;
 	}
 
+	private function getApprovedHalfDayDates(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
+	{
+		return $employee->leaveRequest
+			->filter(function ($leaveRequest) use ($startDate, $endDate) {
+				$status = strtolower(trim((string) $leaveRequest->status));
+				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+
+				if ($status !== 'approved' || !$isHalfDay) {
+					return false;
+				}
+
+				$leaveStart = Carbon::parse($leaveRequest->start_date);
+				$leaveEnd = Carbon::parse($leaveRequest->end_date);
+				return ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+					|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+					|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
+			})
+			->flatMap(function ($leaveRequest) {
+				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
+				return collect($period)->map(fn ($day) => $day->format('Y-m-d'));
+			})
+			->unique()
+			->values()
+			->toArray();
+	}
+
 	public function GenerateJson(Request $request)
 	{
 		try {
@@ -112,7 +138,7 @@ class EmployeePayrollController extends Controller
 
 			// Check for pending leave requests
 			$pendingLeaves = HrmsLeaveRequest::whereIn('employee_id', $employeeIds)
-				->where('status', 'pending')
+				->where('status', 'Pending')
 				->with('employee')
 				->get();
 
@@ -197,11 +223,12 @@ class EmployeePayrollController extends Controller
 							$holidayDates[] = $day->format('Y-m-d');
 						}
 					}
+					$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 					$lateComingCount = 0;
 					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
 							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-							if (in_array($logDate, $holidayDates)) continue;
+							if (in_array($logDate, $holidayDates) || in_array($logDate, $approvedHalfDayDates)) continue;
 							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
 							if (!$employeeShift) continue;
 							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
@@ -444,7 +471,7 @@ class EmployeePayrollController extends Controller
 
 			// Check for pending leave requests
 			$pendingLeaves = HrmsLeaveRequest::whereIn('employee_id', $employeeIds)
-				->where('status', 'pending')
+				->where('status', 'Pending')
 				->with('employee')
 				->get();
 
@@ -545,34 +572,31 @@ class EmployeePayrollController extends Controller
 						}
 					}
 
-					$lateComingCount = 0;
+				$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
+				$lateComingCount = 0;
 
-					if ($biometricRequired) {
-						foreach ($EmpAttandanceLog as $log) {
-							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-							if (in_array($logDate, $holidayDates)) continue;
-							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
-							if (!$employeeShift) continue;
+				if ($biometricRequired) {
+					foreach ($EmpAttandanceLog as $log) {
+						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
+						if (in_array($logDate, $holidayDates) || in_array($logDate, $approvedHalfDayDates)) continue;
+						$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
+						if (!$employeeShift) continue;
 
-							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-							$inTime = strtotime($logDate . ' ' . $log->in_time);
-							if ($inTime > $shiftStart) {
-								$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
-								if ($lateMinutes > $employeeShift->late_coming_threshold) {
-									$lateComingCount++;
-									\Log::info("Late Entry on $logDate: $lateMinutes minutes.");
-								}
+						$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
+						$inTime = strtotime($logDate . ' ' . $log->in_time);
+						if ($inTime > $shiftStart) {
+							$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
+							if ($lateMinutes > $employeeShift->late_coming_threshold) {
+								$lateComingCount++;
+								\Log::info("Late Entry on $logDate: $lateMinutes minutes.");
 							}
 						}
 					}
-
+				}
 					if (!$skipLateComing && $lateComingCount >= 3) {
 						\Log::info("Late Coming Count: $lateComingCount, LWP added: " . floor($lateComingCount / 3));
 						$lwp += floor($lateComingCount / 3);
 					}
-
-
-					// Remove approve/reject logic. Only collect all leave dates (regardless of approval status)
 					$unApplyLeave = 0;
 					$workingDays = [];
 					$currentDate = $startDate->copy();
@@ -696,7 +720,7 @@ class EmployeePayrollController extends Controller
 									$date = Carbon::parse($bd)->startOfDay();
 									$isApproved = HrmsLeaveRequest::where('employee_id', $employee->id)
 										->where('leave_type_id', 5)
-										->where('status', 'approved')
+										->whereRaw('LOWER(status) = ?', ['approved'])
 										->whereDate('start_date', '<=', $date)
 										->whereDate('end_date', '>=', $date)
 										->exists();
@@ -705,7 +729,6 @@ class EmployeePayrollController extends Controller
 										break;
 									}
 								}
-
 								if ($allDaysApproved) {
 									\Log::info("All sandwich days ($sandwichDays) are already approved for employee {$employee->id}. No CL deduction needed.");
 									$sandwichCoveredDays += $sandwichDays;
@@ -723,7 +746,7 @@ class EmployeePayrollController extends Controller
 										->where('leave_type_id', 5)
 										->where('start_date', $clStartDate)
 										->where('end_date', $clEndDate)
-										->where('status', 'approved')
+										->whereRaw('LOWER(status) = ?', ['approved'])
 										->first();
                                     
 									if (!$existingApprovedLeave) {
@@ -732,14 +755,13 @@ class EmployeePayrollController extends Controller
 											'leave_type_id' => 5, // CL (Casual Leave)
 											'start_date' => $clStartDate,
 											'end_date' => $clEndDate,
-											'status' => 'approved',
+											'status' => 'Approved',
 											'reason' => 'Sandwich Rule Applied - Auto Approved'
 										]);
 										\Log::info("Created approved leave request for CL from {$clStartDate->format('Y-m-d')} to {$clEndDate->format('Y-m-d')} (Temporary Staff)");
 									} else {
 										\Log::info("Approved leave request already exists for CL from {$clStartDate->format('Y-m-d')} to {$clEndDate->format('Y-m-d')}. Skipping creation.");
 									}
-                                
 								} else {
 									$sandwichApplied = true;
 									\Log::info("CL balance ($clBalance) is INSUFFICIENT for sandwich days ($sandwichDays). All become LWP.");
