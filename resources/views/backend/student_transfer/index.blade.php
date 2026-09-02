@@ -92,7 +92,17 @@
             },
             body: JSON.stringify({ class_id: classId })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().catch(() => {
+                    throw new Error('Unable to fetch students. Please check the server logs.');
+                }).then(errorData => {
+                    throw new Error(errorData.message || 'Unable to fetch students.');
+                });
+            }
+
+            return response.json();
+        })
         .then(data => {
             let studentList = document.getElementById('studentList');
             studentList.innerHTML = "";

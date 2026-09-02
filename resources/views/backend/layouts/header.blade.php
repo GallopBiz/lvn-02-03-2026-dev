@@ -46,7 +46,7 @@
         <div class="col-md-3 align-items-center ">         
           <!-- Mega menu -->
           <label for="lastName1">Please Select Scholar:</label>
-          <select id="inq-form-nomenu" class="form-control uperletter " onchange="getValAndAssign(event);" name="inq_form_selection" required>
+          <select id="inq-form-nomenu" class="form-control uperletter select2" onchange="getValAndAssign(event);" name="inq_form_selection" required>
                 <option selected></option>
                 <?php $student_data = app('global_areas');
                 // print_r($student_data);              
@@ -222,24 +222,3 @@
           </div>
         </div>
       </div>
-      {{-- <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script> --}}
-      <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-      
-<script>
-    // $(document).ready(function () {
-
-      jQuery(document).ready(function($){
-// standard on load code goes here with $ prefix
-// note: the $ is setup inside the anonymous function of the ready command
-
-// document.addEventListener('DOMContentLoaded', ()=>{
-  
-  
-  $('#inq-form-nomenu').select2();
-  
-  // Capitalize the text in the search box
-  $('.select2-search__field').css('text-transform', 'capitalize');
-});
-      // }, false);
-    // });
-</script>

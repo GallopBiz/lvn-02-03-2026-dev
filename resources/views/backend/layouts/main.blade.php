@@ -76,6 +76,10 @@
          <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
          <script>
             $(document).ready(function() {
+               if (!$.fn.select2) {
+                  return;
+               }
+
                $('select.select2, select.deductions').each(function() {
                   var select = $(this);
                   var isMultiple = select.prop('multiple');
@@ -153,12 +157,20 @@
 
 <script>
     $(document).ready(function() {
+        if (!$.fn.select2 || !$('#classes').length) {
+            return;
+        }
+
         $('#classes').select2({
             tags: false,
             width: 'resolve'
         });
     });
     $(document).ready(function() {
+        if (!$.fn.select2 || !$('#stream').length) {
+            return;
+        }
+
         $('#stream').select2({
             tags: false,
             width: 'resolve'

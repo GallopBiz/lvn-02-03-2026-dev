@@ -61,22 +61,26 @@
                 }
             });
 </script>
-{{-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> --}}
 <script type="text/javascript">
-    // $.noConflict();
-    jQuery(document).ready(function($) {
-        // $("#inq-form-nomenu").select2();
-        $("#inq-form-nomenu").select2().on('change', function (e) {
-          var id = $("#inq-form-nomenu").val();
-          // window.open(`{{url('/registrationviewlist')}}/${id}`);
-          window.location.href=(`{{url('/registrationviewlist')}}/${id}`);
-        })
+    document.addEventListener('DOMContentLoaded', function() {
+        var scholarSelect = document.getElementById('inq-form-nomenu');
+        if (scholarSelect) {
+            scholarSelect.addEventListener('change', function () {
+                if (this.value) {
+                    window.location.href = `{{url('/registrationviewlist')}}/${this.value}`;
+                }
+            });
+        }
 
-        $("#sibling_name").select2();
+        if (window.jQuery && jQuery.fn.select2) {
+            jQuery('#sibling_name').select2();
+        }
 
         setTimeout(function() {
-            var year = $("#year").val()
-            $("#session_name").val(year);
+            if (window.jQuery) {
+                var year = jQuery("#year").val();
+                jQuery("#session_name").val(year);
+            }
         }, 1000);
     });
 </script>

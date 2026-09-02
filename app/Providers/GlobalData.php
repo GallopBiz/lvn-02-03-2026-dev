@@ -6,18 +6,21 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Config;
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class GlobalData extends ServiceProvider
 {
 
     public function register()
     {
-        
-        $inqArr = DB::connection('dynamic')->table('student_registration')->get();
-        $this->app->bind('global_areas', function () use ($inqArr) {
-            return $inqArr;
+        $this->app->bind('global_areas', function () {
+            try {
+                return DB::connection('dynamic')->table('student_registration')->get();
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return collect();
+            }
         });
     }
 }
-

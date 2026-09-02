@@ -25,24 +25,35 @@ class StudentTransferController extends Controller
 
     public function fetchStudents(Request $request)
     {
-		$this->applySessionDatabaseBindings($request);
+        try {
+            $this->applySessionDatabaseBindings($request);
 
-		$transferredScholarNos = NextYearStudent::pluck('scholar_no')->toArray();
+            $transferredScholarNos = [];
+            if ($this->nextSessionStudentTableExists()) {
+                $transferredScholarNos = NextYearStudent::pluck('scholar_no')->toArray();
+            }
 
-        $studentQuery = Student_registration::on('dynamic')->where('class_name', $request->class_id)
-            ->whereNotIn('scholar_no', $transferredScholarNos);
-        $this->applyActiveStudentFilters($studentQuery);
+            $studentQuery = Student_registration::on('dynamic')->where('class_name', $request->class_id)
+                ->whereNotIn('scholar_no', $transferredScholarNos);
+            $this->applyActiveStudentFilters($studentQuery);
 
-        $students = $studentQuery->get();
-			//echo $students->toSql();die;
+            $students = $studentQuery->get();
+            //echo $students->toSql();die;
 		
-		$students = $students->map(function ($student) {
-        $jsonData = json_decode($student->json_str, true);
-        $student->section_name = $jsonData['section_name'] ?? 'N/A'; // Default if not found
-        return $student;
-    })->sortBy('section_name')->values(); // Sorting by section name
+            $students = $students->map(function ($student) {
+                $jsonData = json_decode($student->json_str, true);
+                $student->section_name = $jsonData['section_name'] ?? 'N/A'; // Default if not found
+                return $student;
+            })->sortBy('section_name')->values(); // Sorting by section name
 
-        return response()->json($students);
+            return response()->json($students);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Unable to fetch students for the selected class.',
+            ], 500);
+        }
     }
 
    public function promote(Request $request)
@@ -64,6 +75,10 @@ class StudentTransferController extends Controller
 
         [$startYear, $endYear] = explode('_', $currentSession);
         $nextSession = ($startYear + 1) . '_' . ($endYear + 1);
+
+        if (!$this->nextSessionStudentTableExists()) {
+            return redirect()->back()->with('error', 'Next session database is not available.');
+        }
 
         $studentQuery = Student_registration::on('dynamic')->whereIn('id', $selectedStudents);
         $this->applyActiveStudentFilters($studentQuery);
@@ -190,7 +205,22 @@ class StudentTransferController extends Controller
 
         Config::set('database.connections.next_session_db.database', $nextSession);
         DB::purge('next_session_db');
-        DB::reconnect('next_session_db');
+        try {
+            DB::reconnect('next_session_db');
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    private function nextSessionStudentTableExists(): bool
+    {
+        try {
+            return Schema::connection('next_session_db')->hasTable('student_registration');
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return false;
+        }
     }
 
     private function resolveSelectedSessionYear(Request $request): ?string
