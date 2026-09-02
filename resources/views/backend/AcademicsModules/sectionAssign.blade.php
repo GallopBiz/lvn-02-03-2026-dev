@@ -267,7 +267,7 @@
                     //alert("Assigned successfully");
                 },
                 error: function (xhr) {
-                    toastr.error("Assignment failed: " + xhr.responseJSON?.message || "Unknown error");
+                    toastr.error("Assignment failed: " + (xhr.responseJSON?.message || "Unknown error"));
                     //alert("Assignment failed: " + xhr.responseJSON?.message || "Unknown error");
                 }
             });
@@ -302,7 +302,7 @@
                     //alert("Assigned successfully");
                 },
                 error: function (xhr) {
-                    toastr.error("Assignment failed: " + xhr.responseJSON?.message || "Unknown error");
+                    toastr.error("Assignment failed: " + (xhr.responseJSON?.message || "Unknown error"));
                     //alert("Assignment failed: " + xhr.responseJSON?.message || "Unknown error");
                 }
             });
@@ -367,7 +367,7 @@
                             setTimeout(() => location.reload(), 1500);
                         },
                         error: function (xhr) {
-                            toastr.error("Bulk assignment failed: " + xhr.responseJSON?.message || "Unknown error");
+                            toastr.error("Bulk assignment failed: " + (xhr.responseJSON?.message || "Unknown error"));
                         }
                     });
                 }

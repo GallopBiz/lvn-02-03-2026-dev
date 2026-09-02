@@ -103,10 +103,16 @@ class SectionController extends Controller
             foreach($request->assignments as $assign){
                 $class = Classes::where('class_name', $assign['studentclass'])->where('section_name', $assign['section'])->first();
                 if(empty($class)){
-                    return response()->json(['error' => 'Class section not found.'], 404);
+                    return response()->json(['message' => 'Class section not found.'], 404);
                 }
                 $student = Student_registration::where('class_name', $assign['studentclass'])->where('id',  $assign['student_id'])->first();
+                if(empty($student)){
+                    return response()->json(['message' => 'Student not found.'], 404);
+                }
                 $data = json_decode($student->json_str, true);
+                if (!is_array($data)) {
+                    $data = [];
+                }
                 $data['section_name'] = $assign['section'];
                 $student->json_str = json_encode($data, JSON_UNESCAPED_UNICODE);
                 $student->class_id = $class->id;
@@ -117,10 +123,16 @@ class SectionController extends Controller
         }else{
             $class = Classes::where('class_name', $request->studentclass)->where('section_name', $request->section)->first();
             if(empty($class)){
-                return response()->json(['error' => 'Class section not found.'], 404);
+                return response()->json(['message' => 'Class section not found.'], 404);
             }
             $student = Student_registration::where('class_name',  $request->studentclass)->where('id',  $request->student_id)->first();
+            if(empty($student)){
+                return response()->json(['message' => 'Student not found.'], 404);
+            }
             $data = json_decode($student->json_str, true);
+            if (!is_array($data)) {
+                $data = [];
+            }
             $data['section_name'] = $request->section;
             $student->json_str = json_encode($data, JSON_UNESCAPED_UNICODE);
             $student->class_id = $class->id;

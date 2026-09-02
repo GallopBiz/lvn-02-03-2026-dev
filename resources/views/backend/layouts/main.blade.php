@@ -52,6 +52,7 @@
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/datatables.min.css"/>
    @endif
    <body class="text-start">
+      <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
       <div class="app-admin-wrap layout-sidebar-large">
          @include('backend.layouts.header')
          @include('backend.layouts.sidebar')
@@ -63,7 +64,6 @@
       </div>
          @include('backend.layouts.headerSearchBar')
          <!-- script js -->
-         <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
          <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
          <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
          <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
