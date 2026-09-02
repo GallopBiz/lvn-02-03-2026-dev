@@ -93,7 +93,7 @@ class LeaverequestsController extends Controller
         // Validation rules
         $rules = [
             'start_date' => 'required|date',
-            'end_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
             'leave_type_id' => 'required|integer|exists:hrms_leave_types,id',
             'reason' => 'required|string',
             'half_day_type' => 'nullable|in:first,second',
@@ -121,6 +121,18 @@ class LeaverequestsController extends Controller
         Carbon::setWeekendDays([Carbon::SUNDAY]);
         $startDate = Carbon::parse($request->input('start_date'));
         $endDate = Carbon::parse($request->input('end_date'));
+
+        if ($this->hasDuplicateLeaveRequest($employeeId, $startDate, $endDate)) {
+            Log::warning('Duplicate leave request prevented.', [
+                'employee_id' => $employeeId,
+                'start_date' => $startDate->toDateString(),
+                'end_date' => $endDate->toDateString(),
+            ]);
+
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Leave request already exists for this employee on the selected date.');
+        }
 
         $employee = HrmsEmployee::find($employeeId);
 
@@ -248,7 +260,7 @@ class LeaverequestsController extends Controller
 
         $validator = Validator::make($request->all(), [
             'start_date' => 'required|date',
-            'end_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
             'leave_type_id' => 'required|integer|exists:hrms_leave_types,id',
             'reason' => 'required',
         ]);
@@ -265,6 +277,12 @@ class LeaverequestsController extends Controller
         Carbon::setWeekendDays([Carbon::SUNDAY]);
         $startDate = Carbon::parse($request->input('start_date'));
         $endDate = Carbon::parse($request->input('end_date'));
+
+        if ($this->hasDuplicateLeaveRequest($employeeId, $startDate, $endDate, $leaveRequest->id)) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Leave request already exists for this employee on the selected date.');
+        }
 
         $employee = HrmsEmployee::find($employeeId);
 
@@ -336,6 +354,18 @@ class LeaverequestsController extends Controller
         Mail::to($leaveDetails['employee_email'])->send(new LeaveAppliedNotification($leaveDetails));
 
         return redirect()->route('leaverequests')->with('success', 'Leave request updated successfully.');
+    }
+
+    private function hasDuplicateLeaveRequest(int $employeeId, Carbon $startDate, Carbon $endDate, ?int $ignoreRequestId = null): bool
+    {
+        return HrmsLeaveRequest::where('employee_id', $employeeId)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->when($ignoreRequestId, function ($query) use ($ignoreRequestId) {
+                $query->where('id', '!=', $ignoreRequestId);
+            })
+            ->whereDate('start_date', '<=', $endDate->toDateString())
+            ->whereDate('end_date', '>=', $startDate->toDateString())
+            ->exists();
     }
 
     public function leaverequests_delete($id)
