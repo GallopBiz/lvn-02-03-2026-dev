@@ -105,6 +105,10 @@ class CSVController extends Controller
     {
         $query = DB::table('student_registration')
             ->where('status', 'r')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)
+                    ->orWhereNull('is_archived');
+            })
             ->orderBy('id', 'desc');
 
         // Apply filters from request if provided

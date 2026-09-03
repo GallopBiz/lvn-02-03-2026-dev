@@ -12,6 +12,7 @@
             <div class="card text-start">
                 <div class="card-body">
                     <h4 class="card-title mb-3 text-end">
+                        <a href="{{ route('student-registrations') }}"><button class="btn btn-outline-secondary" type="button">Registration List</button></a>
                         <a href="{{ route('student-registrations') }}"><button class="btn btn-outline-primary" type="button">Active Students</button></a>
                     </h4>
 
