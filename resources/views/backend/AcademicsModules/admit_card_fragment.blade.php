@@ -1,21 +1,33 @@
 <style>
-    @page { size: A4 landscape; margin: 4mm; }
+    @page { size: A4 landscape; margin: 5mm; }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 13px; color: #000; }
 
-    .page { width: 100%; page-break-inside: avoid; }
+    .page {
+        width: 100%;
+        height: 200mm;
+        page-break-inside: avoid;
+    }
 
     /* Dompdf-safe 2x2 landscape layout (tables render reliably) */
-    .bulk-table { width: 100%; border-collapse: separate; border-spacing: 5mm; table-layout: fixed; page-break-inside: avoid; }
+    .bulk-table {
+        width: 100%;
+        height: 100%;
+        border-collapse: separate;
+        border-spacing: 5mm;
+        table-layout: fixed;
+        page-break-inside: avoid;
+    }
     .bulk-table tr,
     .bulk-td { page-break-inside: avoid; }
-    .bulk-td { width: 50%; vertical-align: top; }
+    .bulk-table tr { height: 50%; }
+    .bulk-td { width: 50%; height: 50%; vertical-align: top; }
 
     .admit-card { border: 2px solid #000; padding: 8px 10px; position: relative; overflow: hidden; page-break-inside: avoid; }
     .admit-card:before { content: ''; position: absolute; inset: 4px; border: 1px solid #000; pointer-events: none; }
     .admit-card-inner { position: relative; z-index: 1; }
 
-    .admit-card.bulk-card { height: 86mm; padding: 8px 10px; }
+    .admit-card.bulk-card { height: 100%; padding: 8px 10px; }
     .admit-card.single-card { width: 50%; height: 86mm; padding: 8px 10px; margin: 0 auto; }
 
     .school-logo { display: block; width: 82%; max-width: 330px; height: auto; margin: 0 auto 3px auto; }

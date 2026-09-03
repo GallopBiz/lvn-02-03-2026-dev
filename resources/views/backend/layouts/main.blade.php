@@ -16,7 +16,7 @@
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/toastr.css" />
    <link rel="stylesheet"  href="{{url('assets/backend')}}/css/plugins/perfect-scrollbar.min.css" />
 
-   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
+   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
    <meta name="csrf-token" content="{{ csrf_token() }}">
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_arrows.min.css" />
@@ -29,7 +29,7 @@
 @endif
    @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='users' ||
    Request::segment(1)=='fees-type-master' || Request::segment(1)=='bus-fees-master'
-   || Request::segment(1)=='view'  || Request::segment(1)=='selection-process' || Request::segment(1)=='student-registrations' || Request::segment(1)=='employee'  || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll'
+   || Request::segment(1)=='view'  || Request::segment(1)=='selection-process' || Request::segment(1)=='student-registrations' || Request::segment(1)=='employee'  || Request::segment(1)=='payroll'
    ||  Request::segment(1)=='filter-student-registration' || Request::segment(1)=='addvehical'|| Request::segment(1)=='bus-attandence-list' ||
    Request::segment(1)=='bus-stop' || Request::segment(1)=='admin-enquiryform' || Request::segment(1)=='followupdate'
    || Request::segment(1)=='NatureOfWork' || Request::segment(1) == 'maintenance-head-master' ||
@@ -47,12 +47,11 @@
       || Request::segment(1)=='admin-pre-enquiryform'|| Request::segment(1)=='fees-master-student'|| Request::segment(1)=='permission'||
       Request::segment(1)=='duestuamount'|| Request::segment(1)=='filter-duestuamount' || Request::segment(1)=='enquiry-data'||
       Request::segment(1)=='filter-enquiry-list' || Request::segment(1)=='grade' ||
-      Request::segment(1)=='show_report_markss' || Request::segment(1)=='show_report_marks' || Request::segment(1)=='exammaster'
+	  Request::segment(1)=='show_report_markss' || Request::segment(1)=='show_report_marks' || Request::segment(1)=='exammaster'
       || Request::segment(1)=='internal-assessment-master')
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/datatables.min.css"/>
    @endif
    <body class="text-start">
-      <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
       <div class="app-admin-wrap layout-sidebar-large">
          @include('backend.layouts.header')
          @include('backend.layouts.sidebar')
@@ -64,6 +63,7 @@
       </div>
          @include('backend.layouts.headerSearchBar')
          <!-- script js -->
+         <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
          <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
          <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
          <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
@@ -76,10 +76,6 @@
          <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
          <script>
             $(document).ready(function() {
-               if (!$.fn.select2) {
-                  return;
-               }
-
                $('select.select2, select.deductions').each(function() {
                   var select = $(this);
                   var isMultiple = select.prop('multiple');
@@ -103,7 +99,7 @@
                });
             });
          </script>
-      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
+      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
       <script src="{{url('assets/backend')}}/js/scripts/tooltip.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/script_2.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/feather.min.js"></script>
@@ -116,7 +112,7 @@
 
     @if(Request::segment(1)=='inquiry-data-show' || Request::segment(1)=='users' || Request::segment(1)=='fees-type-master'
     || Request::segment(1)=='bus-fees-master' || Request::segment(1)=='view' || Request::segment(1)=='selection-process' || Request::segment(1)=='adminenquirylist' || Request::segment(1)=='followupdate' || Request::segment(1)=='bus-fees-master' || Request::segment(1)=='view' || Request::segment(1)=='selection-process' ||
-    Request::segment(1)=='student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='view-employee' || Request::segment(1)=='payroll'  || Request::segment(1)=='filter-student-registration'
+    Request::segment(1)=='student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll'  || Request::segment(1)=='filter-student-registration'
     || Request::segment(1)=='addvehical'|| Request::segment(1)=='bus-attandence-list' || Request::segment(1)=='bus-stop' || Request::segment(1)=='bus-stop-view'
     || Request::segment(1)=='NatureOfWork' || Request::segment(1) == 'maintenance-head-master' ||
     Request::segment(1) == 'editg-maintenance-group-master' || Request::segment(1) == 'view-maintenance-head-master'
@@ -157,20 +153,12 @@
 
 <script>
     $(document).ready(function() {
-        if (!$.fn.select2 || !$('#classes').length) {
-            return;
-        }
-
         $('#classes').select2({
             tags: false,
             width: 'resolve'
         });
     });
     $(document).ready(function() {
-        if (!$.fn.select2 || !$('#stream').length) {
-            return;
-        }
-
         $('#stream').select2({
             tags: false,
             width: 'resolve'
