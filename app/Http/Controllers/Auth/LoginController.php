@@ -38,6 +38,12 @@ class LoginController extends Controller
      * @return void
      */
     protected $db_name;
+
+    public function username()
+    {
+        return 'scholar_no';
+    }
+
     public function __construct(Request $request)
     {
         if (!empty($request->year)){

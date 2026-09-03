@@ -176,7 +176,8 @@ Route::post('/search-scholer-payments', [Fees_Onlyparents_Controller::class, 'ge
 
 
 Auth::routes();
-Route::get('/', [LoginController::class, 'login']);
+
+Route::get('/', [LoginController::class, 'show'])->name('login.show');
 
 Route::group(['namespace' => 'App\Http\Controllers'], function()
 {
@@ -191,10 +192,6 @@ Route::group(['namespace' => 'App\Http\Controllers'], function()
         Route::get('/register', 'RegisterController@show')->name('register.show');
         Route::post('/register', 'RegisterController@register')->name('register.perform');
 
-        /*Login Routes*/
-        Route::get('/', 'LoginController@show')->name('login.show');
-        Route::post('/login', 'LoginController@login')->name('login.perform');
-
     });
 
     Route::group(['middleware' => ['auth']], function() {
@@ -204,7 +201,7 @@ Route::group(['namespace' => 'App\Http\Controllers'], function()
     });
 });
 
-Auth::routes();Route::get('/home', [HomeController::class, 'index'])->name('home');
+Route::get('/home', [HomeController::class, 'index'])->name('home');
 
 Route::middleware(['auth:web,staff'])->group(function () {
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
