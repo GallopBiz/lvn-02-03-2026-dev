@@ -40,7 +40,7 @@ class EmployeeLeavesController extends Controller
 
 		// From date
 		if ($request->filled('from_date')) {
-			$query->whereDate('start_date', '>=', $request->from_date);
+            $query->whereDate('start_date', '>=', $request->from_date);
 		}
 
 		// To date
@@ -89,6 +89,69 @@ class EmployeeLeavesController extends Controller
 			compact('stream', 'employees', 'leaveTypes')
 		);
 	}
+
+    public function export(Request $request)
+    {
+        $query = HrmsLeaveRequest::with(['employee', 'leaveType']);
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('from_date')) {
+            $query->whereDate('start_date', '>=', $request->from_date);
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('end_date', '<=', $request->to_date);
+        }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('employee', function ($qq) use ($search) {
+                    $qq->where('first_name', 'like', "%$search%")
+                       ->orWhere('last_name', 'like', "%$search%");
+                })
+                ->orWhere('reason', 'like', "%$search%");
+            });
+        }
+
+        $leaveRequests = $query->orderBy('id', 'desc')->get();
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename=Employee_Leave_Requests.csv',
+        ];
+
+        return response()->stream(function () use ($leaveRequests) {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, [
+                'Sr.', 'Employee Name', 'Start Date', 'End Date', 'Total Leaves',
+                'Leave Type', 'Half Day Type', 'Reason', 'Status',
+            ]);
+
+            foreach ($leaveRequests as $index => $leaveRequest) {
+                $totalLeaves = $leaveRequest->is_half_day
+                    ? 0.5
+                    : Carbon::parse($leaveRequest->start_date)->diffInDays(Carbon::parse($leaveRequest->end_date)) + 1;
+                $employeeName = trim(($leaveRequest->employee->first_name ?? '') . ' ' . ($leaveRequest->employee->last_name ?? ''));
+
+                fputcsv($output, [
+                    $index + 1,
+                    $employeeName,
+                    $leaveRequest->start_date,
+                    $leaveRequest->end_date,
+                    $totalLeaves,
+                    $leaveRequest->leaveType->name ?? 'N/A',
+                    $leaveRequest->is_half_day ? ucfirst($leaveRequest->half_day_type) . ' Half' : '-',
+                    $leaveRequest->reason,
+                    $leaveRequest->status,
+                ]);
+            }
+
+            fclose($output);
+        }, 200, $headers);
+    }
 
 
     public function getLeaveTypesByEmployee(Request $request) {

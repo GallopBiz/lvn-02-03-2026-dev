@@ -66,6 +66,10 @@
 							<a href="{{ url()->current() }}" class="btn btn-outline-secondary w-100">
 								Reset
 							</a>
+
+                            <a href="{{ route('employeeleaves.export', request()->query()) }}" class="btn btn-success w-100">
+                                Export CSV
+                        </a>
 						</div>
 					</form>
 
