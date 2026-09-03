@@ -47,7 +47,7 @@ class FeesreceiptchallanController extends Controller
     }
 
     public function index(){
-        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('status','r')->get();
+        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('is_archived', 0)->where('status','r')->get();
         $course_fees_head_orders_list_arr = DB::connection('dynamic')->table('course_fees_head_master')->orderBy('order','ASC')->get();
         // echo"<pre>";print_r($$course_fees_head_orders_list_arr);exit;
         $late_fees_master = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first();
@@ -66,7 +66,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
     }
 
     public function fees_receipt_challan_new(){
-        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('status','r')->get();
+        $data_student_name = DB::connection('dynamic')->table('student_registration')->select('id','student_name','form_number','scholar_no')->where('is_archived', 0)->where('status','r')->get();
         $course_fees_head_orders_list_arr = DB::connection('dynamic')->table('course_fees_head_master')->orderBy('order','ASC')->get();
         // echo"<pre>";print_r($$course_fees_head_orders_list_arr);exit;
         $late_fees_master = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first();
@@ -83,7 +83,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
     }
 
     public function get_student_info(Request $request){
-        $result = DB::connection('dynamic')->table('student_registration')->where('id',$request->post('student_id'))->first();//Student_registration::where('id',$request->post('student_id'))->first();
+        $result = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id',$request->post('student_id'))->first();//Student_registration::where('id',$request->post('student_id'))->first();
         $due_chart_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id',$request->post('student_id'))->first();//Feesreceiptchallan::select('str_json')->where('student_id',$request->post('student_id'))->first();
 
         $due_dates = DB::connection('dynamic')->table('course_fees_structure_master')->select('json_str')->where('class_name','=',$result->class_name)->first();
@@ -168,7 +168,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
         $user = auth()->user();
         $sessionId = Auth::user()->id;
         $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $sessionId)->get();
-        $student_data = DB::connection('dynamic')->table('student_registration')->where('id', $sessionId)->first();
+        $student_data = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id', $sessionId)->first();
         return view('backend.student_panel.studentledgershow',compact('challan_data','student_data')); 
         // print_r($data);exit;
 
@@ -621,7 +621,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
         DB::reconnect('dynamic');
 
         $TotelTermAmount = $request->post('TotelTermAmount');
-        $student_id = DB::connection('dynamic')->table('student_registration')->where('scholar_no','=',$request->post('student_id'))->first();
+        $student_id = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('scholar_no','=',$request->post('student_id'))->first();
         $json_array_student = json_decode($student_id->json_str);
         $data_amount = $request->post('data_amount');
         // print_r($request->post());die();
@@ -886,7 +886,7 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
 public function fetchStudentData(Request $request)
 {
     $scholarNo = $request->input('scholar_no');
-    $student = DB::table('student_registration')->where('scholar_no', $scholarNo)->first();
+    $student = DB::table('student_registration')->where('is_archived', 0)->where('scholar_no', $scholarNo)->first();
     $feesData = DB::table('feesreceiptchallan')->where('scholar_no', $scholarNo)->first();
 
     if ($student) {
@@ -911,7 +911,7 @@ public function updateStudentData(Request $request)
     $isChecked = $request->input('isChecked');
 
     // Fetch the student
-    $student = DB::table('student_registration')->where('scholar_no', $scholarNo)->first();
+    $student = DB::table('student_registration')->where('is_archived', 0)->where('scholar_no', $scholarNo)->first();
     if ($checkboxName == 'siblings') {
         $feesData = DB::table('feesreceiptchallan')->where('scholar_no', $scholarNo)->first();
         if(!$feesData){

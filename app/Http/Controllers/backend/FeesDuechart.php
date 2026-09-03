@@ -64,6 +64,7 @@ class FeesDuechart extends Controller
         $data['datas'] = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         // Fetch all students in the selected class
         $students = DB::connection('dynamic')->table('student_registration')
+            ->where('is_archived', 0)
             ->where('class_name', $classname)
             ->get();
         $generatedCharts = DB::connection('dynamic')->table('generate_duechartstatus')
@@ -125,10 +126,13 @@ class FeesDuechart extends Controller
         // Section is no longer used in the form or query
         foreach ($sid as $id) {
             // $name = DB::table('student_registration')->select('id','student_name')->where('id','=',$id['student_id'])->first();
-            $admission_type = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.admission_type") = "RTE" as admission_type'))->where('id', '=', $id)->first();
+            $admission_type = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.admission_type") = "RTE" as admission_type'))->where('is_archived', 0)->where('id', '=', $id)->first();
             // $admission_type = DB::connection('dynamic')->table('student_registration')->select('id as admission_type','id','student_name')->where('application_for','=','RTE')->where('id', '=', $id)->first();
-            $school_trasnport = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.required_school_transport") = "1" as required_school_transport'))->where('id', '=', $id)->first();
-            $session_name = DB::connection('dynamic')->table('student_registration')->select(DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.batch") as session_name'))->where('id', '=', $id)->first();
+            $school_trasnport = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.required_school_transport") = "1" as required_school_transport'))->where('is_archived', 0)->where('id', '=', $id)->first();
+            $session_name = DB::connection('dynamic')->table('student_registration')->select(DB::connection('dynamic')->raw('JSON_EXTRACT(json_str, "$.batch") as session_name'))->where('is_archived', 0)->where('id', '=', $id)->first();
+            if (!$admission_type || !$school_trasnport || !$session_name) {
+                continue;
+            }
             // print_r($session_name);die();
 		
             if ($school_trasnport !== null && $school_trasnport->required_school_transport != 1){

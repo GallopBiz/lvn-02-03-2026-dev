@@ -112,7 +112,7 @@ class FeesMasterStudentController extends Controller
     public function student_feesmaster()
     {   
         //$all_inquiry = CommanModel::fetchDataArr('student_registration');
-        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('status','=','r')->orderBy('id', 'desc')->get() ; 
+        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('status','=','r')->orderBy('id', 'desc')->get() ; 
         // return view('backend.student_registrations.index',compact('all_inquiry'));
         $schedulemasters = Schedulemaster::where('is_delete', 0)->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
@@ -288,12 +288,12 @@ class FeesMasterStudentController extends Controller
         $inqArr = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','=','Form Selected')->where('status','=','i')->get();
 
         // $inqArr = CommanModel::fetchDataWhere('student_registration',['status'=>'r']);
-        $stutdentsArr = DB::connection('dynamic')->table('student_registration')->get(); //CommanModel::fetchDataArr('student_registration');
+        $stutdentsArr = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->get(); //CommanModel::fetchDataArr('student_registration');
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
         // print_r($drivername);exit;
         // return view('backend.student_registrations.add',compact('inqArr','stutdentsArr'));
-     $uid = DB::connection('dynamic')->table('student_registration')->get()->last()->id;
+     $uid = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->get()->last()->id;
         $uid = $uid +1;
         return view('backend.student_registrations.add', compact('inqArr','drivername','stutdentsArr','classlist','uid'));
     }
@@ -304,7 +304,7 @@ class FeesMasterStudentController extends Controller
         
          $totalPending = Inquiry_registration::select('*')->where("status","=", "i")->whereJsonContains('json_str->folloupdate_status',"Pending")->get();
          $totalCancel = Inquiry_registration::select('*')->where("status","=", "i")->whereJsonContains('json_str->folloupdate_status',"Cancel")->get();
-         $totaladmission = DB::connection('dynamic')->table('student_registration')->where("status","=", "r")->get();
+         $totaladmission = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where("status","=", "r")->get();
         return view('backend.student_registrations.selection_process',compact('all_inquiry','totalPending','totalCancel','totaladmission'));
     }
 
@@ -448,7 +448,7 @@ class FeesMasterStudentController extends Controller
         ];
     
         // Initialize $records1
-        $records1 = DB::connection('dynamic')->table('student_registration')->orderBy('id', 'desc');
+        $records1 = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->orderBy('id', 'desc');
     
         // Add custom filter conditions
         if(!empty($session_name)){

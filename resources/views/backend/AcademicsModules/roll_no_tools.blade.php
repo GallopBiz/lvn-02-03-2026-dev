@@ -23,7 +23,7 @@
             </div>
             <div class="col-md-3">
                 <label>Section Name</label>
-                <select name="section_name" class="form-control" required>
+                <select name="section_name" class="form-control" onchange="this.form.submit()" required>
                     <option value="">Select Section</option>
                     @foreach($sectionList as $section)
                         <option value="{{ $section }}" {{ $sectionName === $section ? 'selected' : '' }}>{{ $section }}</option>
@@ -32,7 +32,7 @@
             </div>
             <div class="col-md-3">
                 <label>Exam <span class="text-danger">*</span></label>
-                <select name="exam_id" class="form-control" required>
+                <select name="exam_id" class="form-control" onchange="this.form.submit()" required>
                     <option value="">Select Exam</option>
                     @foreach($exams as $exam)
                         <option value="{{ $exam->id }}" {{ (string) $selectedExamId === (string) $exam->id ? 'selected' : '' }}>

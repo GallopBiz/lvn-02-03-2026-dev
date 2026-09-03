@@ -29,6 +29,7 @@ class DefaultersListController extends Controller
 
         $student_ids = DB::table('generate_duechartstatus')
         ->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')
+        ->where('student_registration.is_archived', 0)
         ->select('generate_duechartstatus.student_id', 'student_registration.student_name')
         ->get();
 
@@ -45,6 +46,7 @@ class DefaultersListController extends Controller
     public function exportPdf(){        
         $teachersubjects = DB::table('defaulters_lists')
         ->join('student_registration', 'defaulters_lists.student_id', '=', 'student_registration.id')        
+        ->where('student_registration.is_archived', 0)
         ->select('defaulters_lists.*', 'student_registration.student_name')
         ->get();
 
@@ -71,6 +73,7 @@ class DefaultersListController extends Controller
         // print_r($columnNames);exit;
         $data = DB::table('defaulters_lists')
         ->join('student_registration', 'defaulters_lists.student_id', '=', 'student_registration.id')        
+        ->where('student_registration.is_archived', 0)
         ->select('defaulters_lists.*', 'student_registration.student_name')
         ->get();
         
@@ -145,7 +148,7 @@ class DefaultersListController extends Controller
         $studentname = Student_registration::where('id',$student_id)->get('student_name');
         $studentclasses = Student_registration::select('class_name')->distinct()->get();
         $headss = Course_fees_head_master::select('ac_head_name')->distinct()->get();
-        $student_ids = DB::table('generate_duechartstatus')->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')->select('generate_duechartstatus.student_id','student_registration.student_name',DB::raw("JSON_UNQUOTE(JSON_EXTRACT(student_registration.json_str, '$.father_mobile')) as father_mobile"),DB::raw("JSON_UNQUOTE(JSON_EXTRACT(student_registration.json_str, '$.mobile_number')) as mobile_number"))->get();
+        $student_ids = DB::table('generate_duechartstatus')->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')->where('student_registration.is_archived', 0)->select('generate_duechartstatus.student_id','student_registration.student_name',DB::raw("JSON_UNQUOTE(JSON_EXTRACT(student_registration.json_str, '$.father_mobile')) as father_mobile"),DB::raw("JSON_UNQUOTE(JSON_EXTRACT(student_registration.json_str, '$.mobile_number')) as mobile_number"))->get();
         // $student_id = Generate_duechartstatus::select('student_id', 'student_name')->distinct()->get();
 
         $studentsession = Student_registration::select('session_name')->distinct()->get();

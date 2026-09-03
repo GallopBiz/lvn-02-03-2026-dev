@@ -8,6 +8,7 @@ use Hash;
 use DataTables;
 use App\Http\Requests\StoreFileRequest;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
 
 class StudentRegistrationController extends Controller
 {
@@ -39,6 +40,16 @@ class StudentRegistrationController extends Controller
         Config::set('database.connections.dynamic', $dynamicConfig);
         DB::reconnect('dynamic');
 
+    }
+
+    private function activeStudentRegistrationQuery()
+    {
+        return DB::connection('dynamic')
+            ->table('student_registration')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)
+                    ->orWhereNull('is_archived');
+            });
     }
 
     public function index(Request $request)
@@ -150,7 +161,7 @@ public function downloadcertificate($id)
     /*List All Inquiry*/
     public function student_registrations()
     {   
-        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('status','=','r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get() ; 
+        $all_inquiry = $this->activeStudentRegistrationQuery()->where('status','=','r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get() ; 
         // return view('backend.student_registrations.index',compact('all_inquiry'));
 
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
@@ -162,10 +173,43 @@ public function downloadcertificate($id)
     public function curren_year_student_registrations(){
         $currentSchoolYear = session('db_names');
 		// print_r($currentSchoolYear);die;
-        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('status','=','r')->where('session_name', $currentSchoolYear)->get(); 
+        $all_inquiry = $this->activeStudentRegistrationQuery()->where('status','=','r')->where('session_name', $currentSchoolYear)->get(); 
         return view('backend.student_registrations.currentsessionregistration', compact('all_inquiry'));
 
     } 
+
+    public function archived_students()
+    {
+        $all_inquiry = DB::connection('dynamic')
+            ->table('student_registration')
+            ->where('is_archived', 1)
+            ->orderBy('updated_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+
+        return view('backend.student_registrations.archived', compact('all_inquiry', 'classlist'));
+    }
+
+    public function archive_student($id)
+    {
+        DB::connection('dynamic')
+            ->table('student_registration')
+            ->where('id', $id)
+            ->update(['is_archived' => 1, 'updated_at' => now()]);
+
+        return redirect()->route('student-registrations')->with('success', 'Student archived successfully.');
+    }
+
+    public function restore_student($id)
+    {
+        DB::connection('dynamic')
+            ->table('student_registration')
+            ->where('id', $id)
+            ->update(['is_archived' => 0, 'updated_at' => now()]);
+
+        return redirect()->route('archived-students')->with('success', 'Student restored successfully.');
+    }
 
     /*List All Inquiry*/
     public function save_student_registration(Request $request){   //thisone....
@@ -499,6 +543,7 @@ public function downloadcertificate($id)
             // 'json_str' => $jsonStr 
             'json_str'=>json_encode($postData),
 			'registration_date'=>$request->registration_date,
+            'is_archived'=>0,
         ];
         DB::connection('dynamic')->table('student_registration')->insert($insertArr); 
 		
@@ -615,12 +660,16 @@ public function downloadcertificate($id)
         /*r status for registration*/
         $inqArr = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','=','Form Selected')->where('status','=','i')->where('is_delete','=','0')->get();
 
-        $stutdentsArr = DB::connection('dynamic')->table('student_registration')->get(); 
+        $stutdentsArr = $this->activeStudentRegistrationQuery()->get(); 
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
         $caste = DB::connection('dynamic')->table('caste_name')->get();
         $uid = DB::connection('dynamic')
         ->table('student_registration')
+        ->where(function ($query) {
+            $query->where('is_archived', 0)
+                ->orWhereNull('is_archived');
+        })
         ->whereRaw('scholar_no REGEXP "^[0-9]+$"')
         ->max('scholar_no');
     
@@ -699,7 +748,7 @@ public function downloadcertificate($id)
 		$session_name = $request->post('session_name');
 		$form_number = $request->post('form_number');
 		$save_status = $request->post('save_status');
-		$class_name = $request->post('class');
+		$class_name = $request->post('classname');
 		$studentname = $request->post('student_name');
 		$application_for = $request->post('application_for'); // <-- new
 
@@ -714,12 +763,12 @@ public function downloadcertificate($id)
 
 		// Start query builder
 		if(!empty($session_name)){
-			$records1 = DB::connection('dynamic')->table('student_registration')
+			$records1 = $this->activeStudentRegistrationQuery()
 						 ->where("session_name", $session_name)
 						 ->orderBy('created_at', 'desc')
                          ->orderBy('id', 'desc');
 		} else {
-			$records1 = DB::connection('dynamic')->table('student_registration')->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+			$records1 = $this->activeStudentRegistrationQuery()->orderBy('created_at', 'desc')->orderBy('id', 'desc');
 		}
 
 		if(!empty($form_number)){

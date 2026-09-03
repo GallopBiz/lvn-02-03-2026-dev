@@ -17,14 +17,11 @@
    <link rel="stylesheet"  href="{{url('assets/backend')}}/css/plugins/perfect-scrollbar.min.css" />
 
    @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
-   <meta name="csrf-token" content="{{ csrf_token() }}">
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_arrows.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_circles.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_dots.min.css" />
    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/css/bootstrap-datepicker.css" rel="stylesheet">
-   <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.js"></script>
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/js/bootstrap-datepicker.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 @endif
    @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='users' ||
@@ -48,10 +45,11 @@
       Request::segment(1)=='duestuamount'|| Request::segment(1)=='filter-duestuamount' || Request::segment(1)=='enquiry-data'||
       Request::segment(1)=='filter-enquiry-list' || Request::segment(1)=='grade' ||
 	  Request::segment(1)=='show_report_markss' || Request::segment(1)=='show_report_marks' || Request::segment(1)=='exammaster'
-      || Request::segment(1)=='internal-assessment-master')
+      || Request::segment(1)=='internal-assessment-master' || Request::segment(1)=='sectionAssign' || Request::segment(1)=='view-AssignSection')
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/datatables.min.css"/>
    @endif
    <body class="text-start">
+         <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
       <div class="app-admin-wrap layout-sidebar-large">
          @include('backend.layouts.header')
          @include('backend.layouts.sidebar')
@@ -63,7 +61,20 @@
       </div>
          @include('backend.layouts.headerSearchBar')
          <!-- script js -->
-         <script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
+         @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
+         <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/js/bootstrap-datepicker.js"></script>
+         @endif
+         <script>
+            window.addEventListener('pageshow', function(event) {
+               if (event.persisted) {
+                  window.location.reload();
+               }
+            });
+
+            if (window.jQuery && typeof window.$ !== 'function') {
+               window.$ = window.jQuery;
+            }
+         </script>
          <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
          <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
          <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
@@ -129,7 +140,7 @@
       || Request::segment(1)=='teachersubject'|| Request::segment(1)=='calssese-assigne-to-teacher'
 
       || Request::segment(1)=='subjectcombination'|| Request::segment(1)=='subjectcombinatiomaster'
-      || Request::segment(1)=='sectionAssign' || Request::segment(1)=='exammaster'
+      || Request::segment(1)=='sectionAssign' || Request::segment(1)=='view-AssignSection' || Request::segment(1)=='exammaster'
 
       || Request::segment(1)=='admin-pre-enquiryform'|| Request::segment(1)=='fees-master-student' ||
       Request::segment(1)=='permission'|| Request::segment(1)=='duestuamount'||

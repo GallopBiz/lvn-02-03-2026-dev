@@ -153,6 +153,7 @@ class MarksController extends Controller
         }
 
         $studentsQuery = DB::connection('dynamic')->table('student_registration')
+            ->where('is_archived', 0)
             ->where(function ($query) use ($classId, $className) {
                 $query->where('class_id', $classId)
                     ->orWhere('class_name', $className);
@@ -235,6 +236,7 @@ class MarksController extends Controller
         $marksData = DB::connection('dynamic')->table($studentMarksTable)
             ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
             ->where($studentMarksTable . '.marks_id', $stream_master->id)
+            ->where('student_registration.is_archived', 0)
             ->select($studentMarksTable . '.*', 'student_registration.*') // Add fields as needed
             ->get();
         $rollMap = $this->studentRollMap($classlist->class_name ?? '', $stream_master->section_name ?? '', $stream_master->exam_id ?? null);
@@ -401,9 +403,11 @@ class MarksController extends Controller
         $studentmarkss = DB::connection('dynamic')
                 ->table('previosly_saved_marks_entry')
                 ->join($this->studentMarksTable(), 'previosly_saved_marks_entry.id', '=', $this->studentMarksTable() . '.marks_id')
+                ->join('student_registration', $this->studentMarksTable() . '.student_id', '=', 'student_registration.id')
                 ->where('previosly_saved_marks_entry.class_name', '=', $class_name)
-                ->where('section_name', '=', $section_name)
-                ->Where('exam_name', '=', $term_name)
+                ->where('previosly_saved_marks_entry.section_name', '=', $section_name)
+                ->Where('previosly_saved_marks_entry.exam_name', '=', $term_name)
+                ->where('student_registration.is_archived', 0)
                 ->get();
         $class_teacher = DB::connection('dynamic')->table('teacher_subjects')->select('teacher_name')
         ->where('class_name','=',$class_name)

@@ -68,11 +68,11 @@ class FeesPaymentController extends Controller
         $data['fees_types'] = DB::connection('dynamic')->table('fees_types_master')->select('fees_type')->where('is_delete',0)->get();
         $data['terms'] = DB::connection('dynamic')->table('terms')->where('is_delete',0)->get();
         $data['states'] = DB::connection('dynamic')->table('states');//State::get(["name", "id"]);
-        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get();//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
+        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id',$id)->get();//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
         $data['Vehicallist'] = DB::connection('dynamic')->table('generate_duechartstatus')->select('*')->where('student_id',$id)->get();
         $data['late_fees_master'] = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first(); //Late_fees_master::where('id',1)->first();
         $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
-        $data['checkBus'] = DB::connection('dynamic')->table('student_registration')->select('json_str')->where('id',$id)->get();
+        $data['checkBus'] = DB::connection('dynamic')->table('student_registration')->select('json_str')->where('is_archived', 0)->where('id',$id)->get();
         
         $student_id = 1;
         $class_name = 01;
@@ -233,11 +233,11 @@ class FeesPaymentController extends Controller
         $data['fees_types'] = DB::connection('dynamic')->table('fees_types_master')->select('fees_type')->where('is_delete',0)->get();
         $data['terms'] = DB::connection('dynamic')->table('terms')->where('is_delete',0)->get();
         $data['states'] = DB::connection('dynamic')->table('states');//State::get(["name", "id"]);
-        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get();//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
+        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id',$id)->get();//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
         $data['Vehicallist'] = DB::connection('dynamic')->table('generate_duechartstatus')->select('*')->where('student_id',$id)->get();
         $data['late_fees_master'] = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first(); //Late_fees_master::where('id',1)->first();
         $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
-        $data['checkBus'] = DB::connection('dynamic')->table('student_registration')->select('json_str')->where('id',$id)->get();
+        $data['checkBus'] = DB::connection('dynamic')->table('student_registration')->select('json_str')->where('is_archived', 0)->where('id',$id)->get();
 
         // return $data['all_inquiry'];
         // $student_id = 1;
@@ -264,7 +264,7 @@ class FeesPaymentController extends Controller
     public function search_student_name(Request $request){
         
         $form_number = $request->post('form_number');        
-        $student = DB::connection('dynamic')->table('student_registration')->where("form_number","=", $form_number)->get();                
+        $student = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where("form_number","=", $form_number)->get();                
         // print_r($student);die();
         $student_id = $student[0]->id;
         $due_chart_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id',$student_id)->get();

@@ -67,6 +67,7 @@ class ScholarbusassignController extends Controller
         $stor_data = [];
         $datas = DB::connection('dynamic')->table('student_registration')
         ->select('student_name', 'id', 'form_number', 'scholar_no' ,'json_str')
+        ->where('is_archived', 0)
         ->where('class_name', $class_name)
         ->where('json_str->required_school_transport', 1)
         ->get();
@@ -128,7 +129,7 @@ class ScholarbusassignController extends Controller
         // echo"<pre>";print_r($stor_data);exit;
         $schedulemasters = Schedulemaster::where('is_delete', 0)->get();
         // print_r($schedulemasters);exit;
-        $datas = DB::connection('dynamic')->table('student_registration')->select('class_name')->distinct()->get();
+        $datas = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->select('class_name')->distinct()->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         return view('backend.Transport.Scholarbusassign', compact('schedulemasters', 'datas', 'class_name', 'classlist', 'stor_data', 'fdate'));
         // return json_encode($stor_data);

@@ -78,6 +78,10 @@ $staffUser = Auth::guard('staff')->user();
 				return $filtered;
 			}
 			function menuItemUrl($item) {
+				if (!empty($item['children'])) {
+					return '#';
+				}
+
 				$route = Auth::guard('staff')->check() && isset($item['staff_route'])
 					? $item['staff_route']
 					: ($item['route'] ?? '#');

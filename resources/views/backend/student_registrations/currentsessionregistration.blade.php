@@ -140,6 +140,7 @@ font-size: 0.813rem;
                   
                 <h4 class="card-title mb-3 text-end"><a href="{{url('add-student-registrations')}}"><button class="btn btn-outline-primary" type="button">Create Registration</button></a>
                   <a href="{{url('curren-year-student-registrations')}}"><button class="btn btn-outline-primary" type="button">Current Year Registration</button></a>
+                  <a href="{{route('archived-students')}}"><button class="btn btn-outline-secondary" type="button">Archived Students</button></a>
                   <!-- <a href="{{url('add-student-registrations')}}"><button class="btn btn-warning m-3">Export</button></a> -->
                 </h4>
                   
@@ -191,6 +192,10 @@ font-size: 0.813rem;
                               </button>
                               <div class="dropdown-menu btn btn-danger " aria-labelledby="dropdownMenuButton"> <a class="dropdown-item " href="{{ route('registrationviewlist',$each_inq->id) }}">View</a>
                                  <a class="dropdown-item" href="{{ route('registrationeditlist',$each_inq->id) }}">Edit</a>
+                                 <form method="POST" action="{{ route('archive-student', $each_inq->id) }}" onsubmit="return confirm('Are you sure you want to archive this student? This student will no longer appear in the active ERP records.');">
+                                    @csrf
+                                    <button type="submit" class="dropdown-item">Archive Student</button>
+                                 </form>
                               <!-- <div class="dropdown-menu" aria-labelledby="dropdownMenuButton"><a class="dropdown-item" href="{{url('inquiry-edit')}}/{{$each_inq->id}}">Edit</a>
                               </div> -->
                             </div>
@@ -252,4 +257,3 @@ font-size: 0.813rem;
         </script> 
 
 @endsection 
-

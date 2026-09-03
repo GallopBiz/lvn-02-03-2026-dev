@@ -491,6 +491,7 @@ class MarksheetController extends Controller
 
         return DB::connection('dynamic')
             ->table('student_registration')
+            ->where('is_archived', 0)
             ->when($classId, function ($q) use ($classId, $class) {
                 $q->where(function ($inner) use ($classId, $class) {
                     $inner->where('class_id', (string) $classId);
@@ -510,7 +511,7 @@ class MarksheetController extends Controller
             return null;
         }
 
-        return DB::connection('dynamic')->table('student_registration')->where('id', $studentId)->first();
+        return DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id', $studentId)->first();
     }
 
     private function subjectsFor(?int $classId, ?int $studentId)
@@ -751,7 +752,7 @@ class MarksheetController extends Controller
             return '';
         }
 
-        $student = DB::connection('dynamic')->table('student_registration')->where('id', $studentId)->first();
+        $student = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id', $studentId)->first();
 
         return (string) ($student->roll_no ?? $student->roll_number ?? '');
     }

@@ -33,7 +33,9 @@
                     <div class="card">
                         <div class="card-body">
                             <div class="row">
-                                <a href="{{url('student-registrations')}}"><button style="float:right" class="btn btn-primary" type="button">Registration List</button></a>
+                                <div class="w-100 text-end">
+                                    <a href="{{url('student-registrations')}}"><button class="btn btn-primary" type="button">Registration List</button></a>
+                                </div>
                                 <div class="separator-breadcrumb"></div>
                                 @if(!empty($all_inquiry))
                                 <?php $i = 1; ?>
@@ -93,6 +95,22 @@
                                                             <td> <button class="btn btn-primary" id="resetpassword" value="{{$each_inq->id}}"> Reset </button>
                                                                 <br>
                                                                 <div class="text text-success" id="success"></div>
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <th>Archive Status</th>
+                                                            <td>
+                                                                @if(!empty($each_inq->is_archived))
+                                                                    <form method="POST" action="{{ route('restore-student', $each_inq->id) }}">
+                                                                        @csrf
+                                                                        <button type="submit" class="btn btn-success">Restore Student</button>
+                                                                    </form>
+                                                                @else
+                                                                    <form method="POST" action="{{ route('archive-student', $each_inq->id) }}" onsubmit="return confirm('Are you sure you want to archive this student? This student will no longer appear in the active ERP records.');">
+                                                                        @csrf
+                                                                        <button type="submit" class="btn btn-warning">Archive Student</button>
+                                                                    </form>
+                                                                @endif
                                                             </td>
                                                         </tr>
                                                     </tbody>

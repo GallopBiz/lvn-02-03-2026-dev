@@ -12,7 +12,7 @@
                         <h1 class="me-2">Section Assign to Student</h1>
                     </div>
                     <div class="separator-breadcrumb border-top"></div>
-                    @if(empty($student))
+                    @if(empty($students))
                         <form id="progress-form" class="p-4 progress-form" action="{{ url('save-AssignSubject') }}" novalidate method="post">
                         @csrf
                         <div class="row">

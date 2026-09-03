@@ -161,7 +161,9 @@ class SeatingArrangementController extends Controller
         $student = DB::connection('dynamic')->table('student_registration as sr')
             ->join('classes as c', 'c.id', '=', 'sr.class_id')
             ->where('sr.id', $studentId)
-            ->where('sr.session_name', $sessionName)
+            ->where(function ($query) {
+                $query->where('sr.is_archived', 0)->orWhereNull('sr.is_archived');
+            })
             ->select('sr.*', 'c.class_name as mapped_class_name', 'c.section_name as mapped_section_name')
             ->first();
 
@@ -330,7 +332,9 @@ class SeatingArrangementController extends Controller
         $student = DB::connection('dynamic')->table('student_registration as sr')
             ->join('classes as c', 'c.id', '=', 'sr.class_id')
             ->where('sr.id', $studentId)
-            ->where('sr.session_name', $sessionName)
+            ->where(function ($query) {
+                $query->where('sr.is_archived', 0)->orWhereNull('sr.is_archived');
+            })
             ->select('sr.*', 'c.class_name as class_name', 'c.section_name as section_name')
             ->first();
 
@@ -528,6 +532,9 @@ class SeatingArrangementController extends Controller
         }
 
         return DB::connection('dynamic')->table('student_registration')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)->orWhereNull('is_archived');
+            })
             ->whereNotNull('session_name')
             ->orderByDesc('session_name')
             ->value('session_name');
@@ -573,7 +580,9 @@ class SeatingArrangementController extends Controller
         $query = DB::connection('dynamic')
             ->table('student_registration as sr')
             ->leftJoin('classes as c', 'c.id', '=', 'sr.class_id')
-            ->where('sr.session_name', $sessionName)
+            ->where(function ($query) {
+                $query->where('sr.is_archived', 0)->orWhereNull('sr.is_archived');
+            })
             ->where(function ($q) use ($className, $sectionName) {
                 // Match class/section either via joined classes table or direct columns/json fields
                 $q->where(function ($q2) use ($className, $sectionName) {

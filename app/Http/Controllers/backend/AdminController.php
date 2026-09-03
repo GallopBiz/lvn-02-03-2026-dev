@@ -78,6 +78,7 @@ class AdminController extends Controller
 			
 		 $totalRegistrations = DB::connection('dynamic')
 			->table('student_registration')
+            ->where('is_archived', 0)
 			->where('status', 'r')
 			->where('session_name', $currentSchoolYear)
 			->count();	

@@ -298,6 +298,9 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('student-registrations', [StudentRegistrationController::class,'student_registrations'])->name('student-registrations');
     Route::get('add-student-registrations',[StudentRegistrationController::class,'add_student_registrations'])->name('add-student-registrations');
     Route::get('curren-year-student-registrations',[StudentRegistrationController::class,'curren_year_student_registrations'])->name('curren-year-student-registrations');
+    Route::get('archived-students', [StudentRegistrationController::class,'archived_students'])->name('archived-students');
+    Route::post('archive-student/{id}', [StudentRegistrationController::class,'archive_student'])->name('archive-student');
+    Route::post('restore-student/{id}', [StudentRegistrationController::class,'restore_student'])->name('restore-student');
     Route::post('save-student-registration', [StudentRegistrationController::class, 'save_student_registration']);
     Route::post('getDataByFormNumber', [StudentRegistrationController::class, 'getDataByFormNumber']);
     Route::post('getDataByFormNumberstudent_registration', [StudentRegistrationController::class, 'getDataByFormNumberstudent_registration']);

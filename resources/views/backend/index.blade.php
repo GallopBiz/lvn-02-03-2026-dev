@@ -1,7 +1,5 @@
 @extends('backend.layouts.main')
 @section('main-container')
-  <script type="text/javascript">jQuery.noConflict();</script> 
-
     <div class="main-content">
 		<div class="breadcrumb">
 			@role('Student')
