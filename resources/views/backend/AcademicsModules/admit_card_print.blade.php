@@ -52,6 +52,13 @@
             margin: 0 !important;
             padding: 0 !important;
         }
+        #printme .exam-title { font-size: 20px !important; }
+        #printme .sub-title { font-size: 17px !important; }
+        #printme .details p { font-size: 15px !important; }
+        #printme .room-box { font-size: 18px !important; }
+        #printme .installment-row { font-size: 14px !important; }
+        #printme .installment-grid td { font-size: 14px !important; }
+        #printme .sign-row { font-size: 12px !important; }
     }
 </style>
 

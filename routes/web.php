@@ -1138,7 +1138,6 @@ Route::get('delete-leaverequests/{id}', [LeaverequestsController::class, 'leaver
 Route::post('/get-leave-types', [LeaverequestsController::class, 'getLeaveTypesByEmployee'])->name('getLeaveTypes');
 
 Route::get('employeeleaves',[EmployeeLeavesController::class, 'index'])->name('employeeleaves');
-Route::get('employeeleaves/export', [EmployeeLeavesController::class, 'export'])->name('employeeleaves.export');
 Route::post('/employeeleaves/{id}/update', [EmployeeLeavesController::class, 'updateLeaveStatus'])->name('employeeleaves.update');
 Route::get(
     'employee-leave-report',
