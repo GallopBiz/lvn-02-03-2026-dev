@@ -19,6 +19,17 @@
                         required
                     >
                 </div>
+                <div class="form-group mt-2">
+                    <label for="exam_title">Exam Title</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="exam_title"
+                        name="exam_title"
+                        value="{{ old('exam_title', $exam->exam_title) }}"
+                        maxlength="150"
+                    >
+                </div>
                 @if(!empty($currentSessionYear))
                     <p class="text-muted small mb-2">Session year: <strong>{{ $currentSessionYear }}</strong></p>
                 @endif

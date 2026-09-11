@@ -37,6 +37,7 @@ class ExamController extends Controller
 
         $validated = $request->validate([
             'exam_name' => 'required|string|max:100',
+            'exam_title' => 'nullable|string|max:150',
             'exam_type' => ['required', 'string', Rule::in($examTypes->all())],
             'max_marks_theory' => 'nullable|integer',
             'max_marks_practical' => 'nullable|integer',
@@ -84,6 +85,7 @@ class ExamController extends Controller
             ->groupBy(function ($exam) {
                 return $exam->exam_group_id ?: implode('|', [
                     $exam->exam_name,
+                    $exam->exam_title,
                     $exam->exam_type,
                     $exam->session_year,
                     $exam->max_marks_theory,
@@ -105,6 +107,7 @@ class ExamController extends Controller
                     'id' => $first->id,
                     'exam_group_id' => $first->exam_group_id,
                     'exam_name' => $first->exam_name,
+                    'exam_title' => $first->exam_title,
                     'exam_type' => $first->exam_type,
                     'session_year' => $first->session_year,
                     'class_names' => $classNames !== '' ? $classNames : '-',
@@ -122,6 +125,7 @@ class ExamController extends Controller
                     ->groupBy(function ($exam) {
                         return implode('|', [
                             $exam->exam_name ?? '',
+                            $exam->exam_title ?? '',
                             $exam->exam_type ?? '',
                             $exam->session_year ?? '',
                             $exam->max_marks_theory ?? '',
@@ -143,6 +147,7 @@ class ExamController extends Controller
                         return (object) [
                             'seed_id' => $first->id,
                             'exam_name' => $first->exam_name,
+                            'exam_title' => $first->exam_title,
                             'exam_type' => $first->exam_type,
                             'session_year' => $first->session_year,
                             'class_names' => $sourceClassNames->filter()->unique()->implode(', '),
@@ -211,6 +216,7 @@ class ExamController extends Controller
 
         $validated = $request->validate([
             'exam_name' => 'required|string|max:100',
+            'exam_title' => 'nullable|string|max:150',
             'exam_type' => ['required', 'string', Rule::in($examTypes->all())],
             'max_marks_theory' => 'nullable|integer',
             'max_marks_practical' => 'nullable|integer',
@@ -302,6 +308,7 @@ class ExamController extends Controller
 
         $payload = [
             'exam_name' => $seedExam->exam_name,
+            'exam_title' => $seedExam->exam_title,
             'exam_type' => $seedExam->exam_type,
             'max_marks_theory' => $seedExam->max_marks_theory,
             'max_marks_practical' => $seedExam->max_marks_practical,
@@ -379,6 +386,7 @@ class ExamController extends Controller
             $groups = $sourceExams->groupBy(function ($exam) {
                 return implode('|', [
                     $exam->exam_name ?? '',
+                    $exam->exam_title ?? '',
                     $exam->exam_type ?? '',
                     $exam->session_year ?? '',
                     $exam->max_marks_theory ?? '',
@@ -406,6 +414,7 @@ class ExamController extends Controller
 
                 $payload = [
                     'exam_name' => $first->exam_name,
+                    'exam_title' => $first->exam_title,
                     'exam_type' => $first->exam_type,
                     'max_marks_theory' => $first->max_marks_theory,
                     'max_marks_practical' => $first->max_marks_practical,
@@ -443,6 +452,7 @@ class ExamController extends Controller
             $payload = [
                 'exam_group_id' => $examGroupId,
                 'exam_name' => $validated['exam_name'],
+                'exam_title' => $validated['exam_title'] ?? null,
                 'exam_type' => $validated['exam_type'],
                 'max_marks_theory' => $validated['max_marks_theory'] ?? null,
                 'max_marks_practical' => $validated['max_marks_practical'] ?? null,

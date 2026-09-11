@@ -301,7 +301,7 @@ class SeatingArrangementController extends Controller
         if (!empty($examId)) {
             $exam = DB::connection('dynamic')->table('academic_exam')
                 ->where('id', $examId)
-                ->select('id', 'exam_name', 'exam_type', 'session_year')
+                ->select('id', 'exam_name', 'exam_title', 'exam_type', 'session_year')
                 ->first();
         }
 
@@ -325,7 +325,7 @@ class SeatingArrangementController extends Controller
         if (!empty($examId)) {
             $exam = DB::connection('dynamic')->table('academic_exam')
                 ->where('id', $examId)
-                ->select('id', 'exam_name', 'exam_type', 'session_year')
+                ->select('id', 'exam_name', 'exam_title', 'exam_type', 'session_year')
                 ->first();
         }
 
@@ -376,7 +376,7 @@ class SeatingArrangementController extends Controller
         if (!empty($examId)) {
             $exam = DB::connection('dynamic')->table('academic_exam')
                 ->where('id', $examId)
-                ->select('id', 'exam_name', 'exam_type', 'session_year')
+                ->select('id', 'exam_name', 'exam_title', 'exam_type', 'session_year')
                 ->first();
         }
 

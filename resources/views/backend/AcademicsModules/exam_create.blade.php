@@ -89,6 +89,10 @@
                     <label for="exam_name">Exam Name <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="exam_name" name="exam_name" required>
                 </div>
+                <div class="form-group mt-2">
+                    <label for="exam_title">Exam Title</label>
+                    <input type="text" class="form-control" id="exam_title" name="exam_title" value="{{ old('exam_title') }}" maxlength="150">
+                </div>
                 @if(!empty($currentSessionYear))
                     <p class="text-muted small mb-2">Session year: <strong>{{ $currentSessionYear }}</strong></p>
                 @endif
@@ -168,6 +172,7 @@
             <tr>
                 <th>S.No.</th>
                 <th>Exam Name</th>
+                <th>Exam Title</th>
                 <th>Exam Type</th>
                 <th>Classes</th>
                 <th>Session Year</th>
@@ -180,6 +185,7 @@
                 <tr>
                     <td>{{ $i + 1 }}</td>
                     <td>{{ $exam->exam_name }}</td>
+                    <td>{{ $exam->exam_title ?? '-' }}</td>
                     <td>{{ $exam->exam_type }}</td>
                     <td>{{ $exam->class_names }}</td>
                     <td>{{ $exam->session_year ?? '-' }}</td>

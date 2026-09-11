@@ -192,7 +192,11 @@
 </head>
 <body>
 @php
-    $examHeading = !empty($exam) ? trim($exam->exam_type ?? $exam->exam_name ?? '') : 'I TERM (HALF YEARLY)';
+    $examHeading = 'I TERM (HALF YEARLY)';
+    if (!empty($exam)) {
+        $examHeading = trim((string) ($exam->exam_title ?? ''))
+            ?: trim((string) ($exam->exam_name ?? ''));
+    }
     $isSingle = isset($students) && $students->count() === 1;
     $perPage = $isSingle ? 1 : 4;
 @endphp
@@ -211,7 +215,7 @@
             <div class="admit-card single-card">
                 <div class="admit-card-inner">
                     <img class="school-logo" src="{{ asset('assets/backend/images/LVN-logo.png') }}" alt="Lokmanya Vidya Niketan">
-                    <div class="exam-title">{{ $examHeading }} EXAMINATION ({{ str_replace('_', '-', $sessionName) }})</div>
+                    <div class="exam-title">{{ $examHeading }}</div>
                     <div class="sub-title">ADMIT CARD</div>
 
                     <div class="details">
@@ -252,7 +256,7 @@
                                     <div class="admit-card bulk-card">
                                         <div class="admit-card-inner">
                                             <img class="school-logo" src="{{ asset('assets/backend/images/LVN-logo.png') }}" alt="Lokmanya Vidya Niketan">
-                                            <div class="exam-title">{{ $examHeading }} EXAMINATION ({{ str_replace('_', '-', $sessionName) }})</div>
+                                            <div class="exam-title">{{ $examHeading }}</div>
                                             <div class="sub-title">ADMIT CARD</div>
 
                                             <div class="details">

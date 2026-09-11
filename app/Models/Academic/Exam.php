@@ -11,6 +11,7 @@ class Exam extends Model
     protected $fillable = [
         'exam_group_id',
         'exam_name',
+        'exam_title',
         'exam_type',
         'exam_type_id',
         'max_marks_theory',
