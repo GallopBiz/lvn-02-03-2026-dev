@@ -168,18 +168,11 @@ $statutory = optional($report->employee->statutoryInformation);
                     $report->year
                     );
 
-                    $approvedLeaves = (int) ($report->approved_leaves ?? 0);
-                    $unapprovedLeaves = (int) ($report->unapproved_leaves ?? 0);
-                    $lwpDays = (int) ($report->lwp_days ?? 0);
-
-                    // Approved leaves are PAID
-                    // Only LWP + Unapproved reduce paid days
-                    $paidDays = $monthDays - ($lwpDays + $unapprovedLeaves);
-
-                    if ($paidDays < 0) {
-                        $paidDays=0;
-                        }
-                        @endphp
+                    $approvedLeaves = $approvedLeaves ?? (float) ($report->approved_leaves ?? 0);
+                    $unapprovedLeaves = $unapprovedLeaves ?? (float) ($report->unapproved_leaves ?? 0);
+                    $lwpDays = $lwpDays ?? (float) ($report->lwp_days ?? $unapprovedLeaves);
+                    $paidDays = $paidDays ?? max(0, $monthDays - $lwpDays);
+                    @endphp
                         <td><strong>Paid Days:</strong> {{ $paidDays }}</td>
                         <td><strong>Approved Leaves:</strong> {{ $approvedLeaves }}</td>
                 </tr>

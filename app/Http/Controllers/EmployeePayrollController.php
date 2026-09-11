@@ -1118,8 +1118,45 @@ class EmployeePayrollController extends Controller
 		$deductions = is_array($deductionsRaw) ? $deductionsRaw : json_decode($deductionsRaw, true) ?? [];
 
 		$monthName = date('F', mktime(0, 0, 0, $report->month, 1));
+		$monthStart = Carbon::create($report->year, $report->month, 1)->startOfMonth();
+		$monthEnd = $monthStart->copy()->endOfMonth();
+		$approvedLeaves = 0;
+		$unapprovedLeaves = 0;
 
-		return view('backend.HRMS.salary_slip_print', compact('report', 'deductions', 'additions', 'monthName'));
+		$leaveRequests = HrmsLeaveRequest::where('employee_id', $report->employee_id)
+			->whereDate('start_date', '<=', $monthEnd)
+			->whereDate('end_date', '>=', $monthStart)
+			->get();
+
+		foreach ($leaveRequests as $leaveRequest) {
+			$leaveStart = Carbon::parse($leaveRequest->start_date)->max($monthStart);
+			$leaveEnd = Carbon::parse($leaveRequest->end_date)->min($monthEnd);
+			$leaveDays = $leaveStart->diffInDays($leaveEnd) + 1;
+			if ((bool) $leaveRequest->is_half_day) {
+				$leaveDays = 0.5;
+			}
+
+			if (strtolower(trim((string) $leaveRequest->status)) === 'approved') {
+				$approvedLeaves += $leaveDays;
+			} else {
+				$unapprovedLeaves += $leaveDays;
+			}
+		}
+
+		$approvedLeaves = $approvedLeaves ?: (float) ($report->approved_leaves ?? 0);
+		$lwpDays = (float) ($report->lwp_days ?? $unapprovedLeaves);
+		$paidDays = max(0, ($report->month_days ?? $monthStart->daysInMonth) - $lwpDays);
+
+		return view('backend.HRMS.salary_slip_print', compact(
+			'report',
+			'deductions',
+			'additions',
+			'monthName',
+			'approvedLeaves',
+			'unapprovedLeaves',
+			'lwpDays',
+			'paidDays'
+		));
 	}
 
 

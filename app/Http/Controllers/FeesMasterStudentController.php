@@ -112,7 +112,13 @@ class FeesMasterStudentController extends Controller
     public function student_feesmaster()
     {   
         //$all_inquiry = CommanModel::fetchDataArr('student_registration');
-        $all_inquiry = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('status','=','r')->orderBy('id', 'desc')->get() ; 
+        $all_inquiry = DB::connection('dynamic')->table('student_registration')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)->orWhereNull('is_archived');
+            })
+            ->where('status', '=', 'r')
+            ->orderBy('id', 'desc')
+            ->get();
         // return view('backend.student_registrations.index',compact('all_inquiry'));
         $schedulemasters = Schedulemaster::where('is_delete', 0)->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
@@ -448,7 +454,11 @@ class FeesMasterStudentController extends Controller
         ];
     
         // Initialize $records1
-        $records1 = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->orderBy('id', 'desc');
+        $records1 = DB::connection('dynamic')->table('student_registration')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)->orWhereNull('is_archived');
+            })
+            ->orderBy('id', 'desc');
     
         // Add custom filter conditions
         if(!empty($session_name)){
