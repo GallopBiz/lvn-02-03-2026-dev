@@ -74,7 +74,7 @@
 
                                 <option value="{{ $leaveType->id }}"
                                     {{ $stream_master->leave_type_id == $leaveType->id ? 'selected' : '' }}>
-                                    {{ $leaveType->name }} ({{ $formattedBalance }} available)
+                                    {{ $leaveType->name }}{{ $leaveType->is_paid ? " ({$formattedBalance} available)" : '' }}
                                 </option>
                             @endforeach
                         @endif

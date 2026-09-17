@@ -36,6 +36,10 @@ class LeaverequestsController extends Controller
             $employeeId = $user->employee_id;
             $leaveTypes = HrmsLeaveType::all();
             foreach ($leaveTypes as $leaveType) {
+                if (!$leaveType->is_paid) {
+                    continue;
+                }
+
                 $employeeLeaveBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
                     ->where('leave_type_id', $leaveType->id)
                     ->first();
@@ -72,6 +76,10 @@ class LeaverequestsController extends Controller
         $leaveTypes = HrmsLeaveType::all();
 
         foreach ($leaveTypes as $leaveType) {
+            if (!$leaveType->is_paid) {
+                continue;
+            }
+
             $employeeLeaveBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
                 ->where('leave_type_id', $leaveType->id)
                 ->first();
@@ -170,7 +178,9 @@ class LeaverequestsController extends Controller
             ->where('leave_type_id', $leaveTypeId)
             ->first();
 
-        if (!$leaveBalance || $leaveBalance->balance < $daysRequested) {
+        $leaveType = HrmsLeaveType::find($leaveTypeId);
+
+        if ($leaveType->is_paid && (!$leaveBalance || $leaveBalance->balance < $daysRequested)) {
             Log::warning('Insufficient leave balance.', [
                 'available_balance' => optional($leaveBalance)->balance,
                 'required' => $daysRequested
@@ -179,7 +189,6 @@ class LeaverequestsController extends Controller
         }
 
         $today = now();
-        $leaveType = HrmsLeaveType::find($leaveTypeId);
 
         if ($leaveType->apply_before_days) {
             $minApplyDate = $today->copy()->addDays($leaveType->apply_before_days);
@@ -197,10 +206,12 @@ class LeaverequestsController extends Controller
             return redirect()->route('leaverequests')->with('error', "Backdate leave applications are not allowed for {$leaveType->name}.");
         }
 
-        // Deduct balance
-        $leaveBalance->balance -= $daysRequested;
-        $leaveBalance->save();
-        Log::info('Leave balance updated.', ['new_balance' => $leaveBalance->balance]);
+        // Deduct balance only for paid leave.
+        if ($leaveType->is_paid) {
+            $leaveBalance->balance -= $daysRequested;
+            $leaveBalance->save();
+            Log::info('Leave balance updated.', ['new_balance' => $leaveBalance->balance]);
+        }
 
         // Save leave request
         HrmsLeaveRequest::create([
