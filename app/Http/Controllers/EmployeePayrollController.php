@@ -224,6 +224,7 @@ class EmployeePayrollController extends Controller
 						}
 					}
 					$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
+					$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
 					$lateComingCount = 0;
 					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
@@ -372,7 +373,8 @@ class EmployeePayrollController extends Controller
 							->where('status', 'pending')
 							->update(['status' => 'paid']);
 					}
-					$totalLeaveDeduction = 0;
+					$halfDayLeaveDeductionAmount = round($halfDayLeaveDays * ($grossSalary / $monthDays), 2);
+					$totalLeaveDeduction = $halfDayLeaveDeductionAmount;
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);
 					$lateDeductionAmount = 0;
 					if (!$skipLateComing) {
@@ -389,6 +391,7 @@ class EmployeePayrollController extends Controller
 						'Total Deductions' => $totalDeductions,
 						'Total EMI Deductions' => $totalEmiDeduction,
 						'Late Deduction Amount' => $lateDeductionAmount,
+						'Half Day Leave Deduction Amount' => $halfDayLeaveDeductionAmount,
 						'UnApply Leave Deduction Amount'=> $unApplyLeaveDeductionAmount
 					];
 					$sandwichApplied = ($sandwichCoveredDays > 0) ? 'Yes' : 'No';
@@ -406,6 +409,8 @@ class EmployeePayrollController extends Controller
 						'hra' => $hra,
 						'earn_salary' => $earnSalary,
 						'deductions' => $deductionDetails,
+						'half_day_leave_days' => $halfDayLeaveDays,
+						'half_day_leave_deduction_amount' => $halfDayLeaveDeductionAmount,
 						'net_salary' => $netSalary,
 						'month' => $month,
 						'year' => $year
@@ -573,6 +578,7 @@ class EmployeePayrollController extends Controller
 					}
 
 				$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
+				$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
 				$lateComingCount = 0;
 
 				if ($biometricRequired) {
@@ -835,7 +841,8 @@ class EmployeePayrollController extends Controller
 							->update(['status' => 'paid']);
 					}
 					// No leave type deduction, handled by sandwich logic
-					$totalLeaveDeduction = 0;
+					$halfDayLeaveDeductionAmount = round($halfDayLeaveDays * ($grossSalary / $monthDays), 2);
+					$totalLeaveDeduction = $halfDayLeaveDeductionAmount;
 
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);
 					$lateDeductionAmount = 0;
@@ -885,6 +892,7 @@ class EmployeePayrollController extends Controller
 						'Total Deductions' => $totalDeductions,
 						'Total EMI Deductions' => $totalEmiDeduction,
 						'Late Deduction Amount' => $lateDeductionAmount,
+						'Half Day Leave Deduction Amount' => $halfDayLeaveDeductionAmount,
 						'UnApply Leave Deduction Amount'=> $unApplyLeaveDeductionAmount
 					];
 
