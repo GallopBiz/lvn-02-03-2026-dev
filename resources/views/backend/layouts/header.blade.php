@@ -339,6 +339,7 @@
 
         <div class="header-part-right">
 
+          @role('Admin')
           <div class="lvn-notification-root" data-lvn-notifications
                data-notifications-url="{{ route('notifications.index') }}"
                data-read-url-template="{{ url('notifications/__notification__/read') }}"
@@ -355,6 +356,7 @@
               </div>
             </div>
           </div>
+          @endrole
 
           <!-- Full screen toggle -->
           <i
