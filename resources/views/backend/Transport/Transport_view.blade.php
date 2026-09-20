@@ -71,6 +71,8 @@
                               <div class="card-title"> Other </div>
                                 <div class="separator-breadcrumb border-top"></div>
                                   <div class="ul-widget-app__browser-list">
+                                    <a href="{{ route('transport.fuel.index') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Fuel Entries</span></div></a>
+                                    <a href="{{ route('transport.fuel.report') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Monthly Fuel Report</span></div></a>
                                     <a href="{{ 'NatureOfWork' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Nature Of Work</span></div></a>
                                     <a href="{{ 'bus-attandence-list' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Bus Attandence List </span></div></a>
                                     <a href="{{ 'maintenance-head-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18"> Maintenance Head Master</span></div></a>

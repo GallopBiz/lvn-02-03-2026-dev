@@ -124,6 +124,7 @@ use App\Http\Controllers\backend\TuitionCertificateController;
 use App\Http\Controllers\backend\ExemptionController;
 use App\Http\Controllers\backend\RouteMasterController;
 use App\Http\Controllers\backend\RouteVehicleMapController;
+use App\Http\Controllers\backend\FuelConsumptionController;
 use App\Http\Controllers\backend\DailyCollectionController;
 use App\Http\Controllers\backend\AdmissionReceiptController;
 use App\Http\Controllers\backend\EmployeeLeaveBalanceController;
@@ -637,6 +638,17 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('Challa',[Challa::class, 'registerchallan'])->name('Challa');
     Route::get('partycontroller',[partycontroller::class, 'index'])->name('partycontroller');
 	Route::post('/busstaff/import', [BusStaff::class, 'import'])->name('busstaff.import');
+
+    // Fuel consumption
+    Route::get('transport/fuel', [FuelConsumptionController::class, 'index'])->name('transport.fuel.index');
+    Route::post('transport/fuel', [FuelConsumptionController::class, 'store'])->name('transport.fuel.store');
+    Route::get('transport/fuel/{id}/edit', [FuelConsumptionController::class, 'edit'])->name('transport.fuel.edit');
+    Route::put('transport/fuel/{id}', [FuelConsumptionController::class, 'update'])->name('transport.fuel.update');
+    Route::delete('transport/fuel/{id}', [FuelConsumptionController::class, 'destroy'])->name('transport.fuel.destroy');
+    Route::post('transport/fuel/opening', [FuelConsumptionController::class, 'updateOpeningOdometer'])->name('transport.fuel.opening');
+    Route::post('transport/fuel/stations', [FuelConsumptionController::class, 'stationStore'])->name('transport.fuel.station.store');
+    Route::get('transport/fuel/report', [FuelConsumptionController::class, 'report'])->name('transport.fuel.report');
+    Route::get('transport/fuel/export', [FuelConsumptionController::class, 'export'])->name('transport.fuel.export');
 
     // Maintenance Head master
     Route::resource('maintenance-head-master', MaintenanceController::class);

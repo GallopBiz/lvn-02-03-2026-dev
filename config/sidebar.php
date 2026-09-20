@@ -130,6 +130,7 @@ return [
                     [ 'title' => 'Vehicle Maintenance', 'route' => 'bus-maintenance-entry', 'roles' => ['Admin'] ],
                 ],
             ],
+            
             [
                 'title' => 'Schedule',
                 'icon' => 'i-Clock',
@@ -158,6 +159,12 @@ return [
                 'icon' => 'i-File-Clipboard-Text--Image',
                 'route' => 'route-vehicle-map',
                 'roles' => ['Student']
+            ],
+            [
+                'title' => 'Fuel Management',
+                'icon' => 'i-Fuel',
+                'route' => 'transport/fuel',
+                'roles' => ['Admin'],
             ],
         ],
     ],
