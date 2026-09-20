@@ -8,6 +8,7 @@ use App\Models\CommanModel;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\VehicleImport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class AddVehical extends Controller
 {
@@ -51,6 +52,11 @@ class AddVehical extends Controller
 		$AddVehial->fitnesspaper        = $request->fitnesspaper;
 		$AddVehial->fitness_validfrom   = $request->fitness_validfrom;
 		$AddVehial->fitness_validto     = $request->fitness_validto;
+		foreach ($this->vehicleDocumentColumns() as $column) {
+			if (in_array($column, $this->vehicleTableColumns(), true)) {
+				$AddVehial->{$column} = $request->input($column);
+			}
+		}
 		$AddVehial->gps_tracking_url = $request->gps_tracking_url;
 
 
@@ -116,9 +122,32 @@ class AddVehical extends Controller
 
 		];
 
+		$existingColumns = $this->vehicleTableColumns();
+		foreach ($this->vehicleDocumentColumns() as $column) {
+			if (in_array($column, $existingColumns, true)) {
+				$data[$column] = $request->input($column);
+			}
+		}
+
 		AddVehial::whereId($request->id)->update($data);
 
 		return redirect('addvehical')->with('success', 'Record updated successfully');
+	}
+
+	private function vehicleDocumentColumns(): array
+	{
+		return [
+			'insurance_license_no', 'insurance_validfrom', 'insurance_validto',
+			'permit_license_no', 'permit_validfrom', 'permit_validto',
+			'tax_license_no', 'tax_validfrom', 'tax_validto',
+			'puc_license_no', 'puc_validfrom', 'puc_validto',
+			'gprs_license_no', 'gprs_validfrom', 'gprs_validto',
+		];
+	}
+
+	private function vehicleTableColumns(): array
+	{
+		return Schema::getColumnListing((new AddVehial)->getTable());
 	}
 
 

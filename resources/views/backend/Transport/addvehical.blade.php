@@ -51,7 +51,7 @@
             @csrf
             <div class="row">
                 <div class="col-md-3 form-group mb-3">
-                    <label for="firstName1">Call NO.</label>
+                    <label for="firstName1">Bus No.</label>
                     <input required name="callno" class="form-control" id="callno" type="number" 
                     @if(!empty($Vehicallist))
                       @foreach($Vehicallist as $listV)
@@ -60,7 +60,7 @@
                     @else
                       value=""
                     @endif
-                    placeholder="Call no." />
+                    placeholder="Bus no." />
                 </div>
                 <div class="col-md-3 form-group mb-3">
                     <label for="lastName1">Vehicle NO.</label>
@@ -145,7 +145,7 @@
                      type="text" placeholder="IMEI No" />
                 </div>
                 <div class="col-md-3 form-group mb-3">
-                    <label for="lastName1">Machine ID</label>
+                    <label for="lastName1">Driver Name</label>
                     <input name="Machine" class="form-control" id="Machine" type="text"  @if(!empty($Vehicallist))
                       @foreach($Vehicallist as $listV)
                         value="{{ $listV->machine }}"
@@ -208,61 +208,43 @@
 						return $date->between($today, $today->copy()->addDays(7));
 					}
 				@endphp
-				<!-- RTO Paper Section -->
-		<div class="row align-items-center mb-3">
-			<!-- Section Title -->
-			<div class="col-md-3">
-				<h5 class="mb-0">RTO Paper Details</h5>
-			</div>
-
-			<!-- Input Fields -->
-			<div class="col-md-3">
-				<label for="rtopaper" class="form-label">RTO Paper</label>
-				<input name="rtopaper" class="form-control" id="rtopaper" type="text"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->rtopaper : '' }}"
-					placeholder="Enter RTO Paper info" />
-			</div>
-
-			<div class="col-md-3">
-				<label for="validfrom" class="form-label">Valid From</label>
-				<input name="validfrom" class="form-control" id="validfrom" type="date"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->validfrom : '' }}" />
-			</div>
-
-			<div class="col-md-3">
-				<label for="validto" class="form-label">Valid To</label>
-				<input name="validto" class="form-control" id="validto" type="date"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->validto : '' }}" />
-			</div>
-		</div>
-
-		<!-- Fitness Paper Section -->
-		<div class="row align-items-center mb-3">
-			<!-- Section Title -->
-			<div class="col-md-3">
-				<h5 class="mb-0">Fitness Paper Details</h5>
-			</div>
-
-			<!-- Input Fields -->
-			<div class="col-md-3">
-				<label for="fitnesspaper" class="form-label">Fitness Paper</label>
-				<input name="fitnesspaper" class="form-control" id="fitnesspaper" type="text"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->fitnesspaper : '' }}"
-					placeholder="Enter Fitness Paper info" />
-			</div>
-
-			<div class="col-md-3">
-				<label for="fitness_validfrom" class="form-label">Valid From</label>
-				<input name="fitness_validfrom" class="form-control" id="fitness_validfrom" type="date"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->fitness_validfrom : '' }}" />
-			</div>
-
-			<div class="col-md-3">
-				<label for="fitness_validto" class="form-label">Valid To</label>
-				<input name="fitness_validto" class="form-control" id="fitness_validto" type="date"
-					value="{{ !empty($Vehicallist) ? $Vehicallist[0]->fitness_validto : '' }}" />
-			</div>
-		</div>
+      <!-- RTO Paper Details -->
+    <div class="row align-items-center mb-3">
+      <div class="col-md-12"><h5 class="mb-3">RTO Paper Details</h5></div>
+      @php
+        $documentFields = [
+          ['label' => 'Fitness', 'number' => 'fitnesspaper', 'from' => 'fitness_validfrom', 'to' => 'fitness_validto'],
+          ['label' => 'Insurance', 'number' => 'insurance_license_no', 'from' => 'insurance_validfrom', 'to' => 'insurance_validto'],
+          ['label' => 'Permit', 'number' => 'permit_license_no', 'from' => 'permit_validfrom', 'to' => 'permit_validto'],
+          ['label' => 'Tax', 'number' => 'tax_license_no', 'from' => 'tax_validfrom', 'to' => 'tax_validto'],
+          ['label' => 'PUC', 'number' => 'puc_license_no', 'from' => 'puc_validfrom', 'to' => 'puc_validto'],
+          ['label' => 'GPRS', 'number' => 'gprs_license_no', 'from' => 'gprs_validfrom', 'to' => 'gprs_validto'],
+        ];
+      @endphp
+      @foreach($documentFields as $document)
+        <div class="col-md-3 form-group mb-3"><label>{{ $document['label'] }} License No.</label><input name="{{ $document['number'] }}" class="form-control" type="text" value="{{ !empty($Vehicallist) ? data_get($Vehicallist[0], $document['number']) : '' }}"></div>
+        <div class="col-md-3 form-group mb-3"><label>{{ $document['label'] }} Valid From</label><input name="{{ $document['from'] }}" class="form-control" type="date" value="{{ !empty($Vehicallist) ? data_get($Vehicallist[0], $document['from']) : '' }}"></div>
+        @php
+          $validToValue = !empty($Vehicallist) ? data_get($Vehicallist[0], $document['to']) : null;
+          $daysLeft = $validToValue ? \Carbon\Carbon::today()->diffInDays(\Carbon\Carbon::parse($validToValue), false) : null;
+        @endphp
+        <div class="col-md-3 form-group mb-3">
+          <label>{{ $document['label'] }} Valid To</label>
+          <input name="{{ $document['to'] }}" class="form-control" type="date" value="{{ $validToValue ?? '' }}">
+          @if($daysLeft !== null)
+            <small class="d-block mt-1 {{ $daysLeft < 0 ? 'text-danger' : ($daysLeft <= 7 ? 'text-warning' : 'text-success') }}">
+              @if($daysLeft < 0)
+                Expired {{ abs($daysLeft) }} days ago
+              @elseif($daysLeft === 0)
+                Expires today
+              @else
+                {{ $daysLeft }} days left
+              @endif
+            </small>
+          @endif
+        </div>
+        <div class="col-md-3"></div>
+      @endforeach
 		
 		<!-- GPS Tracking URL Section -->
 		<div class="row align-items-center mb-3">

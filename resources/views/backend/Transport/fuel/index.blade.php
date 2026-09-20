@@ -191,7 +191,6 @@
             <div class="card mt-4"><div class="card-body">
                 <h3>Fuel Stations</h3>
                 <form method="POST" action="{{ route('transport.fuel.station.store') }}" class="form-inline mb-3">@csrf<input name="name" class="form-control mr-2" placeholder="Station name" required><button class="btn btn-secondary">Add Station</button></form>
-                @foreach($stations as $station)<span class="fuel-station-badge mr-2">{{ $station->name }}</span>@endforeach
             </div></div>
         </div>
     </div>
