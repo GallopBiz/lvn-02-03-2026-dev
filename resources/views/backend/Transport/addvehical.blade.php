@@ -145,15 +145,15 @@
                      type="text" placeholder="IMEI No" />
                 </div>
                 <div class="col-md-3 form-group mb-3">
-                    <label for="lastName1">Driver Name</label>
-                    <input name="Machine" class="form-control" id="Machine" type="text"  @if(!empty($Vehicallist))
-                      @foreach($Vehicallist as $listV)
-                        value="{{ $listV->machine }}"
-                      @endforeach
-                    @else
-                      value=""
-                    @endif
-                    placeholder="Machine Id" />
+                    <label for="driver_id">Driver</label>
+                    <select name="driver_id" class="form-control" id="driver_id">
+                        <option value="">Select Driver</option>
+                        @foreach($drivers as $driver)
+                        <option value="{{ $driver->id }}" @selected(old('driver_id', !empty($Vehicallist) ? $Vehicallist[0]->driver_id : '') == $driver->id)>
+                                {{ trim($driver->first_name . ' ' . $driver->last_name) }}{{ $driver->employee_id ? ' (' . $driver->employee_id . ')' : '' }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
                 <div class="col-md-3 form-group mb-3">
                     <label for="lastName1">Nature of Work</label>
@@ -320,7 +320,7 @@
                           <th>Capacity</th>
                           <th>IMEI No</th>
                           <th>Standard Avg</th>
-                          <th>MachineID</th>
+                          <th>Driver</th>
                           <!--<th>Is Scrapped</th>-->
                           <th>Action</th>
                         </tr>
@@ -354,7 +354,7 @@
 								  <td>{{ $vehical->capacity }}</td>
 								  <td>{{ $vehical->imei }}</td>
 								  <td>{{ $vehical->standard }}</td>
-								  <td>{{ $vehical->machine }}</td>
+                                  <td>{{ $vehical->driver ? trim($vehical->driver->first_name . ' ' . $vehical->driver->last_name) : ($vehical->machine ?: '-') }}</td>
 								  <td>
 									  <a class="btn btn-raised ripple btn-primary m-1" href="{{ url('AddVehical-view') .'/'.$vehical->id}}">Edit</a>
 									  <?php $a = "vehicel"."-".$vehical->id ; ?>
@@ -381,7 +381,7 @@
                             <th>Capacity</th>
                             <th>IMEI No</th>
                             <th>Standard Avg</th>
-                            <th>MachineID</th>
+                            <th>Driver</th>
                             <!--<th>Is Scrapped</th>-->
                             <th>Action</th>
                         </tr>

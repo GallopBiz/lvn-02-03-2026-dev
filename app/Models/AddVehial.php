@@ -15,6 +15,11 @@ class AddVehial extends Model
 
     protected $fillable = [
         'callno', 'vehicelno', 'vehiceltype', 'nature', 'model', 'purchase',
-        'capacity', 'standard', 'imei', 'machine', 'studentrelated', 'scrapped', 'is_delete'
+        'capacity', 'standard', 'imei', 'machine', 'driver_id', 'studentrelated', 'scrapped', 'is_delete'
     ];
+
+    public function driver()
+    {
+        return $this->belongsTo(HrmsEmployee::class, 'driver_id');
+    }
 }

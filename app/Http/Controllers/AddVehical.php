@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use DateTime;  // This will allow you to use DateTime without the backslash
 use Illuminate\Http\Request;
 use App\Models\AddVehial;
+use App\Models\HrmsEmployee;
 use App\Models\CommanModel;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\VehicleImport;
@@ -14,8 +15,9 @@ class AddVehical extends Controller
 {
     public function index()
     {
-        $vehicals = AddVehial::where('is_delete', 0)->get();
-        return view('backend.Transport.addvehical', compact('vehicals'));
+		$vehicals = AddVehial::with('driver')->where('is_delete', 0)->get();
+		$drivers = $this->drivers();
+		return view('backend.Transport.addvehical', compact('vehicals', 'drivers'));
     }
 
 	public function addvehical(Request $request)
@@ -24,7 +26,8 @@ class AddVehical extends Controller
 			'callno'    => 'required',
 			'vehicel'   => 'required',
 			'imei'      => 'required',
-			'Machine'   => 'required',
+			'Machine'   => 'nullable',
+			'driver_id' => 'nullable|integer|exists:hrms_employees,id',
 			'gps_tracking_url' => 'nullable|url'
 		]);
 
@@ -40,6 +43,7 @@ class AddVehical extends Controller
 		$AddVehial->standard        = $request->StandardAvg;
 		$AddVehial->imei            = $request->imei;
 		$AddVehial->machine         = $request->Machine;
+		$AddVehial->driver_id       = $request->driver_id;
 		$AddVehial->studentrelated  = $request->StudentRelated;
 		$AddVehial->scrapped        = $request->Scrapped;
 
@@ -88,13 +92,19 @@ class AddVehical extends Controller
     public function view($id)
     {
         $Vehicallist = AddVehial::where('id', $id)->get();
-        $vehicals = AddVehial::where('is_delete', 0)->get();
+		$vehicals = AddVehial::with('driver')->where('is_delete', 0)->get();
+		$drivers = $this->drivers();
 
-        return view('backend.Transport.addvehical', compact('vehicals', 'Vehicallist'));
+		return view('backend.Transport.addvehical', compact('vehicals', 'Vehicallist', 'drivers'));
     }
 
     public function store(Request $request)
 	{
+		$request->validate([
+			'driver_id' => 'nullable|integer|exists:hrms_employees,id',
+			'gps_tracking_url' => 'nullable|url',
+		]);
+
 		$data = [
 			'callno'            => $request->callno,
 			'vehicelno'         => $request->vehicel,
@@ -105,6 +115,7 @@ class AddVehical extends Controller
 			'standard'          => $request->StandardAvg,
 			'imei'              => $request->imei,
 			'machine'           => $request->Machine,
+			'driver_id'         => $request->driver_id,
 			'nature'            => $request->Nature,
 			'studentrelated'    => $request->StudentRelated,
 			'scrapped'          => $request->Scrapped,
@@ -132,6 +143,18 @@ class AddVehical extends Controller
 		AddVehial::whereId($request->id)->update($data);
 
 		return redirect('addvehical')->with('success', 'Record updated successfully');
+	}
+
+	private function drivers()
+	{
+		return HrmsEmployee::with('position')
+			->whereHas('position', function ($query) {
+				$query->whereRaw('LOWER(position_name) = ?', ['driver']);
+			})
+			->where('employee_status', 'active')
+			->orderBy('first_name')
+			->orderBy('last_name')
+			->get();
 	}
 
 	private function vehicleDocumentColumns(): array
