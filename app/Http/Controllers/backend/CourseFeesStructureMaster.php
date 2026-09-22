@@ -13,6 +13,7 @@ use App\Models\CommanModel;
 use App\Models\Terms;
 use DB;
 use Illuminate\Support\Facades\Config;
+use Carbon\Carbon;
 
 class CourseFeesStructureMaster extends Controller
 {
@@ -567,6 +568,12 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         $student_id = $request->value;
         $drivername = $request->driverName;
         $busfeesamount =  $request->busfees;
+        $busFacilityStartDate = $request->filled('busFacilityStartDate')
+            ? Carbon::parse($request->input('busFacilityStartDate'))->format('d-m-Y')
+            : null;
+        $busFacilityEndDate = $request->filled('busFacilityEndDate')
+            ? Carbon::parse($request->input('busFacilityEndDate'))->format('d-m-Y')
+            : null;
         $datagenerat = DB::connection('dynamic')->table('generate_duechartstatus')->where('student_id', $student_id)->get();
         $busFacilityDate = date('d-m-Y');
           // Add or update the "required_school_transport" key with the value "1" in the JSON data
@@ -610,13 +617,16 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         // exit;
         DB::connection('dynamic')->table('generate_duechartstatus')
         ->where('student_id', $student_id)
-        ->update(['json_str' => $jsonStr]);
+        ->update([
+            'json_str' => json_encode($jsonStr),
+            'amount' => $jsonStr[0]['total_above_fees'] ?? null,
+        ]);
         // echo"if";
             // print_r($dataArray);exit;
         // Add or update the "required_school_transport" key with the value "1"
         $dataArray['required_school_transport'] = "";
         $dataArray['driver_name'] = "Select Staff"; // Replace with the actual driver name
-        $dataArray['bus_facility_end_date'] = "$busFacilityDate";
+        $dataArray['bus_facility_end_date'] = $busFacilityEndDate ?: ($dataArray['bus_facility_end_date'] ?? '');
         // Encode the array back to JSON
         $updatedJsonData = json_encode($dataArray);
         // print_r($updatedJsonData);exit;
@@ -629,23 +639,34 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
             // Check if the necessary keys exist
             if (!empty($jsonStr[0]['json_str'])) {
                 $innerJson = json_decode($jsonStr[0]['json_str'], true);
-            // print_r($datagenerat[0]->id);exit;
-                // Extract the first values of fees_date, due_date, and term
-                $feesDate = !empty($innerJson['fees_date'][0]) ? $innerJson['fees_date'][0] : null;
-                $dueDate = !empty($innerJson['due_date'][0]) ? $innerJson['due_date'][0] : null;
-                $term = !empty($innerJson['term'][0]) ? $innerJson['term'][0] : null;
-    
-                // Append values to the respective arrays
-                array_push($innerJson['fees_date'], $feesDate);
-                array_push($innerJson['due_date'], $dueDate);
-                array_push($innerJson['term'], $term);
-    
-                // Assuming "BUS FEES" should be added to the last element of "account_name"
-                // $innerJson['account_name'][0] = "BUS FEES";
-                array_push($innerJson['account_name'], "BUS FEES");
-    
-                // Assuming $busfeesamount should be added to the last element of "fees"
-                array_push($innerJson['fees'], $busfeesamount);
+                $innerJson['fees_date'] = array_values($innerJson['fees_date'] ?? []);
+                $innerJson['account_name'] = array_values($innerJson['account_name'] ?? []);
+                $innerJson['fees'] = array_values($innerJson['fees'] ?? []);
+                $innerJson['due_date'] = array_values($innerJson['due_date'] ?? []);
+                $innerJson['term'] = array_values($innerJson['term'] ?? []);
+
+                $validFeeIndexes = array_keys(array_filter(
+                    $innerJson['account_name'],
+                    fn ($accountName) => trim((string) $accountName) !== ''
+                ));
+                foreach (['fees_date', 'account_name', 'fees', 'due_date', 'term'] as $feeField) {
+                    $innerJson[$feeField] = array_values(array_intersect_key(
+                        $innerJson[$feeField],
+                        array_flip($validFeeIndexes)
+                    ));
+                }
+
+                $busFeesIndex = array_search('BUS FEES', $innerJson['account_name'], true);
+                if ($busFeesIndex === false) {
+                    $busFeesIndex = count($innerJson['account_name']);
+                    $innerJson['fees_date'][$busFeesIndex] = $innerJson['fees_date'][0] ?? date('d-m-Y');
+                    $innerJson['account_name'][$busFeesIndex] = 'BUS FEES';
+                    $innerJson['fees'][$busFeesIndex] = $busfeesamount;
+                    $innerJson['due_date'][$busFeesIndex] = $innerJson['due_date'][0] ?? '';
+                    $innerJson['term'][$busFeesIndex] = $innerJson['term'][0] ?? '';
+                } elseif ($busfeesamount !== null && $busfeesamount !== '') {
+                    $innerJson['fees'][$busFeesIndex] = $busfeesamount;
+                }
 
                 // $innerJson['fees'][0] = $busfeesamount;
             // print_r($innerJson);exit;
@@ -672,7 +693,7 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
                 // Update the json_str and amount columns in the database
                 DB::connection('dynamic')->table('generate_duechartstatus')
                     ->where('student_id', $student_id)
-                    ->update(['json_str' => $jsonStr, 'amount' => $newamount['total_above_fees']]);
+                    ->update(['json_str' => json_encode($jsonStr), 'amount' => $newamount['total_above_fees']]);
     
                 // Output for testing
             }
@@ -682,7 +703,7 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         // Add or update the "required_school_transport" key with the value "1"
         $dataArray['required_school_transport'] = "1";
         $dataArray['driver_name'] = "$drivername"; // Replace with the actual driver name
-        $dataArray['bus_facility_start_date'] = "$busFacilityDate";
+        $dataArray['bus_facility_start_date'] = $busFacilityStartDate ?: $busFacilityDate;
 
         // Encode the array back to JSON
         $updatedJsonData = json_encode($dataArray);
@@ -829,7 +850,8 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
                 // print_r($decodedData);
 
                 // print_r($data);
-                return redirect('fees-master-student');
+                $this->saveBusFacilityState($request, $st_id);
+                return redirect()->route('feesmasterviewlist', $st_id);
             // echo "hai kuch";
         } else {
             // $data['total_above_fees'] = $totalfees;
@@ -862,12 +884,42 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
                 ->where('student_id', $st_id)
                 ->update(['json_str' => $a,'amount'=>$discountTotalfees]);
             // echo "nhi hai";
-            return redirect('fees-master-student');
+            $this->saveBusFacilityState($request, $st_id);
+            return redirect()->route('feesmasterviewlist', $st_id);
 
         }
         
-        return redirect('fees-master-student');
+        $this->saveBusFacilityState($request, $st_id);
+        return redirect()->route('feesmasterviewlist', $st_id);
         
+    }
+
+    private function saveBusFacilityState(Request $request, $studentId)
+    {
+        $registration = DB::connection('dynamic')->table('student_registration')
+            ->where('id', $studentId)
+            ->first(['json_str']);
+
+        if (!$registration) {
+            return;
+        }
+
+        $studentData = json_decode($registration->json_str, true) ?: [];
+        $isEnabled = $request->boolean('is_bus_facility');
+        $studentData['required_school_transport'] = $isEnabled ? '1' : '0';
+        $studentData['driver_name'] = $request->input('bus_driver_name', '');
+
+        if ($isEnabled && $request->filled('bus_facility_start_date')) {
+            $studentData['bus_facility_start_date'] = Carbon::parse($request->input('bus_facility_start_date'))->format('d-m-Y');
+        }
+
+        if (!$isEnabled && $request->filled('bus_facility_end_date')) {
+            $studentData['bus_facility_end_date'] = Carbon::parse($request->input('bus_facility_end_date'))->format('d-m-Y');
+        }
+
+        DB::connection('dynamic')->table('student_registration')
+            ->where('id', $studentId)
+            ->update(['json_str' => json_encode($studentData)]);
     }
 
     public function course_fees_structure_delete($id){

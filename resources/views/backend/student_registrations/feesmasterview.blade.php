@@ -226,6 +226,13 @@
                                                                                 $feesstr = json_decode($generateDueChartStatus[0]->json_str, true);
                                                                                 $de =  json_decode($feesstr[0]['json_str']);
                                                                                 $jsonData = json_encode($de);
+                                                                                $currentBusFee = '';
+                                                                                $feeAccountNames = json_decode($feesstr[0]['json_str'], true)['account_name'] ?? [];
+                                                                                $feeAmounts = json_decode($feesstr[0]['json_str'], true)['fees'] ?? [];
+                                                                                $currentBusFeeIndex = array_search('BUS FEES', $feeAccountNames, true);
+                                                                                if ($currentBusFeeIndex !== false) {
+                                                                                    $currentBusFee = $feeAmounts[$currentBusFeeIndex] ?? '';
+                                                                                }
                                                                                 // print_r($jsonData);exit;
                                                                                 if (isset($notificationData1['required_school_transport'])) {
                                                                                     $busValue = $notificationData1['required_school_transport'];
@@ -280,38 +287,45 @@
                                                     
                                                 
                                                                                     <div class="col-md-4">
-                                                                                        <input type="checkbox" id="busFacility" name="is_bus_facility" <?php if (!empty($notificationData1['required_school_transport'])) {
+                                                                                        <input type="checkbox" id="busFacility" name="is_bus_facility" value="1" <?php if (!empty($notificationData1['required_school_transport'])) {
                                                                                                                                                             echo "checked";
                                                                                                                                                         } ?>>
                                                                                         <span>
                                                                                             <label class="form__choice-wrapper">
-                                                                                                <label class="form-label text-primary" id="busFacility"  for="form1">Bus Facility</label>
+                                                                                                <label class="form-label text-primary" for="busFacility">Bus Facility</label>
                                                                                             </label>
                                                                                         </span>
+                                                                                        {{-- Pickup location assignment is temporarily disabled; retain this block for future use.
                                                                                         <span>
-
-                                                                                           
-                                                                                                   <!-- Your Button -->
-    <button id="openModalButton" onclick="form_p('{{ $stor_dat['id'] }}', '{{ $stor_dat['student_check_value'] }}','{{ $stor_dat['stu_driver'] }}');" class="btn btn-raised ripple btn-raised-primary m-1" <?php echo $stor_dat['pickup_bool_s']; ?>>select pickup</button>
-
-
+                                                                                            <button id="openModalButton" onclick="form_p('{{ $stor_dat['id'] }}', '{{ $stor_dat['student_check_value'] }}','{{ $stor_dat['stu_driver'] }}');" class="btn btn-raised ripple btn-raised-primary m-1" <?php echo $stor_dat['pickup_bool_s']; ?>>select pickup</button>
                                                                                         </span>
+                                                                                        --}}
                                                                                         <span>
                                                                                         <div id="feesAmountContainer" style="display: <?php echo (!empty($notificationData1['required_school_transport'])) ? 'block' : 'none'; ?>">
                                                                                             <input type="hidden" id="hiddenInput" name="hiddenInput" value="{{$generateDueChartStatus[0]->student_id}}">
                                                                                             <select id="busFeesSelect" name="busFeesSelect" class="form-control" <?php echo empty($notificationData1['required_school_transport']) ? 'disabled' : ''; ?>>
                                                                                                 <option value=""> -- Select amount -- </option>
                                                                                                 @foreach($busfeesamount as $feeOption)
-                                                                                                    <option value="{{$feeOption->amount}}">
+                                                                                                    <option value="{{$feeOption->amount}}" @selected((string) $currentBusFee === (string) $feeOption->amount)>
                                                                                                         {{$feeOption->amount}}
                                                                                                     </option>
                                                                                                 @endforeach
                                                                                             </select>
                                                                                         </div>
                                                                                         </span> 
+                                                                                        <div class="row mt-2">
+                                                                                            <div class="col-md-6">
+                                                                                                <label class="form-label" for="busFacilityStartDate">Bus Facility Start Date</label>
+                                                                                                <input type="date" id="busFacilityStartDate" name="bus_facility_start_date" class="form-control" value="{{ !empty($notificationData1['bus_facility_start_date']) ? \Carbon\Carbon::createFromFormat('d-m-Y', $notificationData1['bus_facility_start_date'])->format('Y-m-d') : '' }}" <?php echo empty($notificationData1['required_school_transport']) ? 'disabled' : ''; ?>>
+                                                                                            </div>
+                                                                                            <div class="col-md-6">
+                                                                                                <label class="form-label" for="busFacilityEndDate">Bus Facility Stop Date (Optional)</label>
+                                                                                                <input type="date" id="busFacilityEndDate" name="bus_facility_end_date" class="form-control" value="{{ !empty($notificationData1['bus_facility_end_date']) ? \Carbon\Carbon::createFromFormat('d-m-Y', $notificationData1['bus_facility_end_date'])->format('Y-m-d') : '' }}">
+                                                                                            </div>
+                                                                                        </div>
                                                                                         <span>
                                                                                             <div id="dropdownContainer">
-                                                                                                <select id="busDropdown" class="form-control">
+                                                                                                <select id="busDropdown" name="bus_driver_name" class="form-control">
                                                                                                     @if(!empty($notificationData1['driver_name']))
                                                                                                     <option value=""> -- Please select -- </option>
                                                                                                     @foreach($drivername as $eachStudent)
@@ -371,6 +385,7 @@
                                                                         </form>
                                                                     </div>
                                                                 </div>
+                                                                {{-- Pickup location assignment is temporarily disabled; retain this block for future use.
                                                                 <!-- Your Modal -->
 <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -389,8 +404,7 @@
             <div class="form-check">
               <label class="form-check-label" for="disableFieldsCheckbox">Take student address </label>
               <input type="checkbox" class="form-check-input" name="studentaddcheck" id="studentaddcheck"><br>
-              <span id="studentAddCheckMessage"></span>
-              <span id="studentAddCheckMessage" class="text-danger"></span>
+                                                                        <span id="studentAddCheckMessage" class="text-danger"></span>
               <input type="hidden" id="latLngInput" name="latLngInput" placeholder="Latitude,Longitude">
               <input type="hidden" id="stu_bus_no" name="pickup_bus_no" placeholder="Latitude,Longitude">
             </div>
@@ -463,38 +477,34 @@
       </div>
     </div>
 </div>
+                                                                --}}
 
                                                                 <!-- end of main-content -->
                                                                 <!-- Footer Start -->
                                                                 <div class="flex-grow-1"></div>
                                                                 <!-- fotter end -->
                                                             </div>
-                                                            <script>
-    // Handle button click to open the modal
-    $('#openModalButton').click(function () {
-        // Show the modal
-        $('#myModal').modal('show');
-    });
-</script>
+{{-- Pickup location assignment is temporarily disabled; retain this script for future use.
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         var busFacilityCheckbox = document.getElementById('busFacility');
         var feesAmountContainer = document.getElementById('feesAmountContainer');
         var busFeesSelect = document.getElementById('busFeesSelect');
+        var openModalButton = document.getElementById('openModalButton');
 
         busFacilityCheckbox.addEventListener('change', function() {
             feesAmountContainer.style.display = this.checked ? 'block' : 'none';
             busFeesSelect.disabled = !this.checked; // Enable/disable the select based on the checkbox state
+            openModalButton.style.display = this.checked ? 'block' : 'none';
             if (!this.checked) {
                 busFeesSelect.value = ""; // Reset select value
             }
         });
+            openModalButton.style.display = 'none';
     });
 </script>
 <script>
         $(document).ready(function () {
-            var openModalButton = document.getElementById('openModalButton');
-            openModalButton.style.display = 'none';
             // Handle form submission through AJAX when the button is clicked
             $('#submitFormButton').click(function () {
                 // Serialize the form data
@@ -524,66 +534,33 @@
             // Other JavaScript code here
         });
     </script>
-                                                            <script>
-                                                                    // Handle checkbox change event
-                                                                    document.getElementById('busFacility').addEventListener('change', function() {
-                                                                        var openModalButton = document.getElementById('openModalButton');
-                                                                        if (this.checked) {
-                                                                            // Show the button if the checkbox is checked
-                                                                            openModalButton.style.display = 'block';
-                                                                        } else {
-                                                                            // Hide the button if the checkbox is not checked
-                                                                            openModalButton.style.display = 'none';
-                                                                        }
-                                                                    });
+--}}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var busFacilityCheckbox = document.getElementById('busFacility');
+        var feesAmountContainer = document.getElementById('feesAmountContainer');
+        var busFeesSelect = document.getElementById('busFeesSelect');
+        var startDateInput = document.getElementById('busFacilityStartDate');
+        var endDateInput = document.getElementById('busFacilityEndDate');
 
-                                                                    // Handle button click to open the modal
-                                                                    document.getElementById('openModalButton').addEventListener('click', function () {
-                                                                        $('#myModal').modal('show');
-                                                                    });
-                                                                </script>
+        function updateBusFacilityControls() {
+            feesAmountContainer.style.display = busFacilityCheckbox.checked ? 'block' : 'none';
+            busFeesSelect.disabled = !busFacilityCheckbox.checked;
+            startDateInput.disabled = !busFacilityCheckbox.checked;
+            endDateInput.disabled = busFacilityCheckbox.checked;
+            if (!busFacilityCheckbox.checked) {
+                busFeesSelect.value = "";
+            }
+        }
+
+        updateBusFacilityControls();
+        busFacilityCheckbox.addEventListener('change', updateBusFacilityControls);
+    });
+</script>
                                                             <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/sweetalert2.min.css" />
-                                                            <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.js"></script>
                                                             <script src="{{url('assets/backend')}}/js/plugins/sweetalert2.min.js"></script>
                                                             <script src="{{url('assets/backend')}}/js/scripts/sweetalert.script.min.js"></script>
-                                                            <!-- Add jQuery library to your HTML if it's not already included -->
-                                                            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-                                                            <script>
-                                                                $(document).ready(function() {
-                                                                    $('#busDropdown').change(function() {
-                                                                        var isChecked = $('#busFacility').is(':checked') ? 1 : 0; // Set 1 if checked, 0 if unchecked
-                                                                        var stuid = <?php echo json_encode($generateDueChartStatus[0]->student_id); ?>;
-                                                                        var selectedOption = $('#busDropdown').val();
-                                                                        var busfees = $('#busFeesSelect').val();
-
-                                                                        $.ajax({
-                                                                            method: 'POST',
-                                                                            headers: {
-                                                                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                                                                            },
-                                                                            data: {
-                                                                                isChecked: isChecked,
-                                                                                value: stuid,
-                                                                                driverName: selectedOption,
-                                                                                busfees: busfees
-                                                                            },
-                                                                            url: "{{ url('bus-facility-on') }}",
-                                                                            dataType: 'json',
-                                                                            success: function(response) {
-                                                                                // console.log(response);
-                                                                                console.log('AJAX call triggered successfully.');
-                                                                                // Handle the response if needed
-                                                                                // location.reload();
-
-                                                                            },
-                                                                            error: function(error) {
-                                                                                console.error('Error triggering AJAX call: ' + error);
-                                                                            }
-                                                                        });
-                                                                    });
-                                                                });
-                                                            </script>
                                                             <script>
                                                                 // Sample JSON data (replace this with your actual JSON data)
                                                                 // console.log($feesstr[0]['json_str']);
@@ -594,6 +571,51 @@
                                                                 var newstujsonData = {!!json_encode($all_inquiry[0]->json_str)!!};
                                                                 var stujsonData = JSON.parse(newstujsonData);
                                                                 var discountedFeesArray = [];
+                                                                var busFacilityChanged = false;
+
+                                                                function busRowIndex(data) {
+                                                                    return data.account_name.indexOf('BUS FEES');
+                                                                }
+
+                                                                function removeBusRow() {
+                                                                    var index = busRowIndex(newrowdata);
+                                                                    if (index === -1) return;
+                                                                    ['fees_date', 'account_name', 'fees', 'orig_fees', 'due_date', 'term'].forEach(function(key) {
+                                                                        if (newrowdata[key]) newrowdata[key].splice(index, 1);
+                                                                    });
+                                                                }
+
+                                                                function syncBusRow() {
+                                                                    var busEnabled = $('#busFacility').is(':checked');
+                                                                    var amount = $('#busFeesSelect').val();
+                                                                    var index = busRowIndex(newrowdata);
+
+                                                                    if (!busEnabled || !amount) {
+                                                                        removeBusRow();
+                                                                        return;
+                                                                    }
+
+                                                                    if (index === -1) {
+                                                                        index = newrowdata.account_name.length;
+                                                                        newrowdata.fees_date.push($('#busFacilityStartDate').val() ? $('#busFacilityStartDate').val().split('-').reverse().join('-') : '');
+                                                                        newrowdata.account_name.push('BUS FEES');
+                                                                        newrowdata.fees.push(amount);
+                                                                        newrowdata.due_date.push(newrowdata.due_date[0] || '');
+                                                                        newrowdata.term.push(newrowdata.term[0] || '');
+                                                                    } else {
+                                                                        newrowdata.fees[index] = amount;
+                                                                    }
+                                                                    newrowdata.orig_fees = newrowdata.orig_fees || [];
+                                                                    newrowdata.orig_fees[index] = amount;
+                                                                }
+
+                                                                function refreshBusRow() {
+                                                                    syncBusRow();
+                                                                    jsonData = JSON.stringify(newrowdata);
+                                                                    generateTable();
+                                                                    updateTotal();
+                                                                }
+
                                                                 // console.log(newrowdata.account_name);
 
                                                                 // Function to dynamically generate the HTML table
@@ -621,6 +643,7 @@
                                                                     // Create table body
                                                                     var tbody = document.createElement('tbody');
                                                                     var jsonDataNew = JSON.parse(jsonData);
+                                                                    discountedFeesArray = [];
                                                                     // var jsonDataNew = JSON.parse(stujsonData);
                                                                     // Get the length of fees_date
                                                                     var totalDiscountedFees = 0;
@@ -822,8 +845,6 @@
                                                                     totalDiscountedFeesInput.readOnly = true;
 
                                                                     // Assuming you have a container element to append this to, replace 'yourContainerId' with the actual ID
-                                                                    var container = document.getElementById('totalFees');
-                                                                    container.appendChild(totalDiscountedFeesInput);
                                                                     table.appendChild(tbody);
                                                                     dataContainer.appendChild(table);
                                                                 }
@@ -886,11 +907,21 @@
 
                                                                 // Function to clear fields of the current row
                                                                 function clearRowFields(sNo) {
+                                                                    var row = document.querySelector('tbody tr:nth-child(' + sNo + ')');
+                                                                    var accountName = row.querySelector('select[name="account_name[]"]');
+                                                                    if (accountName && accountName.value === 'BUS FEES') {
+                                                                        removeBusRow();
+                                                                        $('#busFacility').prop('checked', false);
+                                                                        $('#busFeesSelect').val('');
+                                                                        jsonData = JSON.stringify(newrowdata);
+                                                                        generateTable();
+                                                                        updateTotal();
+                                                                        return false;
+                                                                    }
                                                                     // alert(sNo);
                                                                     var fff = <?php echo json_encode($generateDueChartStatus[0]->student_id); ?>;
                                                                     var wholedata = <?php echo json_encode($generateDueChartStatus[0]); ?>;
                                                                     // console.log(fff);
-                                                                    var row = document.querySelector('tbody tr:nth-child(' + sNo + ')');
                                                                     //  alert(fff);
                                                                     var inputs = row.querySelectorAll('input, select');
 
@@ -1189,6 +1220,56 @@
                                                                 window.onload = function() {
                                                                     generateTable();
                                                                     updateTotal();
+
+                                                                    $('#progress-form').on('submit', function(event) {
+                                                                        var busEnabled = $('#busFacility').is(':checked');
+                                                                        if (busEnabled && (!$('#busFacilityStartDate').val() || !$('#busFeesSelect').val())) {
+                                                                            event.preventDefault();
+                                                                            alert('Please select the bus start date and amount.');
+                                                                            return false;
+                                                                        }
+                                                                        if (!busEnabled && busFacilityChanged && !$('#busFacilityEndDate').val()) {
+                                                                            event.preventDefault();
+                                                                            alert('Please select the bus facility stop date.');
+                                                                            $('#busFacilityEndDate').focus();
+                                                                            return false;
+                                                                        }
+                                                                    });
+
+                                                                    $('#busFacility').on('change', function() {
+                                                                        busFacilityChanged = true;
+                                                                        if (this.checked && !$('#busFacilityStartDate').val()) {
+                                                                            $('#feesAmountContainer').show();
+                                                                            $('#busFeesSelect').prop('disabled', false);
+                                                                            $('#busFacilityStartDate').prop('disabled', false).focus();
+                                                                            alert('Please select the bus facility start date.');
+                                                                            return;
+                                                                        }
+                                                                        if (this.checked && !$('#busFeesSelect').val()) {
+                                                                            alert('Please select the bus amount.');
+                                                                            $('#feesAmountContainer').show();
+                                                                            $('#busFeesSelect').prop('disabled', false).focus();
+                                                                            return;
+                                                                        }
+                                                                        $('#feesAmountContainer').toggle(this.checked);
+                                                                        $('#busFeesSelect').prop('disabled', !this.checked);
+                                                                        $('#busFacilityStartDate').prop('disabled', !this.checked);
+                                                                        refreshBusRow();
+                                                                    });
+
+                                                                    $('#busFeesSelect').on('change', function() {
+                                                                        if ($('#busFacility').is(':checked')) refreshBusRow();
+                                                                    });
+
+                                                                    $('#busFacilityStartDate').on('change', function() {
+                                                                        if ($('#busFacility').is(':checked')) refreshBusRow();
+                                                                    });
+
+                                                                    $('#busFacilityEndDate').on('change', function() {
+                                                                        if (!$('#busFacility').is(':checked') && !this.value) {
+                                                                            alert('Please select the bus facility stop date.');
+                                                                        }
+                                                                    });
 
                                                                     var addRowButton = document.getElementById('addRowButton');
                                                                     addRowButton.addEventListener('click', function() {
@@ -1539,9 +1620,7 @@
 </div>
 
 
-<script src="//code.jquery.com/jquery-1.10.2.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBa0_Zia458Lqzrwk7PzzpU7JIwJAkITdk&libraries=places"></script>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
 @php
     $currentScholarNo = optional($all_inquiry->first())->scholar_no;
     $existingNextYearFeeRows = collect($next_year_fee_rows[$currentScholarNo] ?? [])->values();
@@ -1761,16 +1840,18 @@ function addNewRow(accountName, fees) {
   const fieldsToDisable = document.querySelectorAll('.form-group select');
   const studentIdSelectP = document.getElementById('student_id_select_p');
 
-  disableFieldsCheckbox.addEventListener('change', () => {
-    const isDisabled = disableFieldsCheckbox.checked;
+    if (disableFieldsCheckbox && studentIdSelectP) {
+        disableFieldsCheckbox.addEventListener('change', () => {
+            const isDisabled = disableFieldsCheckbox.checked;
 
-    fieldsToDisable.forEach(field => {
-      field.disabled = isDisabled;
-    });
+            fieldsToDisable.forEach(field => {
+                field.disabled = isDisabled;
+            });
 
-    // Ensure student_id_select_p is never disabled
-    studentIdSelectP.disabled = false;
-  });
+            // Ensure student_id_select_p is never disabled
+            studentIdSelectP.disabled = false;
+        });
+    }
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -1780,7 +1861,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var errorP = document.getElementById('studentAddCheckMessage');
   var form = document.getElementById('progress-form');
 
-  form.addEventListener('submit', function (event) {
+    if (form) form.addEventListener('submit', function (event) {
     // if (isBusFacilityChecked.checked == true && stuBusNo.value === '') {
       // event.preventDefault(); // Prevent form submission
 
@@ -1788,7 +1869,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // errorP.textContent = 'Please assign a bus to the student or ensure the present address is correct.';
       // errorP.style.color = 'red';
     // }
-  });
+    });
 });
 function pick_up_route(val) {
     var pickup_area_name = val.value
@@ -2354,6 +2435,7 @@ function pick_up_route(val) {
 
     });
 </script>
+{{-- Pickup location assignment is temporarily disabled; retain these functions for future use.
 <script>
       function form_p(id, student_check_value, stu_driver) {
     console.log(id, student_check_value, stu_driver);
@@ -2375,7 +2457,7 @@ function pick_up_route(val) {
         $('#stu_bus_no').val(data);
       }
     })
-    $('#verifyModalContent').modal('show');
+        $('#myModal').modal('show');
 
     // Geocode the student address to obtain latitude and longitude
     geocodeAddress(student_check_value, function(lat, lng) {
@@ -2396,7 +2478,6 @@ function pick_up_route(val) {
       }
     });
 
-    $('#verifyModalContent').modal('show');
   }
 
 
@@ -2415,6 +2496,7 @@ function pick_up_route(val) {
     });
   }
 </script>
+--}}
 
 
 
@@ -2531,7 +2613,7 @@ function pick_up_route(val) {
         $('#scholar_no').on('change', updateCheckboxStates);
 
         // Function to handle checkbox state change and update database
-        $('input[type="checkbox"]').on('change', function() {
+        $('input[type="checkbox"]:not(#busFacility)').on('change', function() {
             var scholar_no = $('#scholar_no').val();
             var checkboxName = $(this).attr('name');
             var isChecked = $(this).is(':checked') ? '1' : '0';

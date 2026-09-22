@@ -17,6 +17,7 @@ use App\Models\State;
 use App\Models\City; 
 use App\Models\Inquiry_registration;
 use App\Models\Late_fees_master;
+use App\Models\HrmsEmployee;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Response;
 
@@ -1107,7 +1108,15 @@ class InquiryEntryController extends Controller
 		//CommanModel::fetchDataWhere('student_registration',['id'=> $id]);
         $data['generateDueChartStatus'] = DB::connection('dynamic')->table('generate_duechartstatus')->select('*')->where('student_id',$id)->get();
         $data['late_fees_master'] = DB::connection('dynamic')->table('late_fees_master')->where('id',1)->first(); //Late_fees_master::where('id',1)->first();
-        $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
+        $data['drivername'] = HrmsEmployee::query()
+            ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename")
+            ->whereHas('position', function ($query) {
+                $query->whereRaw('LOWER(position_name) = ?', ['driver']);
+            })
+            ->where('employee_status', 'active')
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
         $data['schedulemasters'] = DB::connection('dynamic')->table('schedulemaster')->where('is_delete', 0)->get();
         $data['busfeesamount'] = DB::connection('dynamic')->table('busfees')->select('amount')->where('is_delete',0)->get();
         // print_r($data['busfeesamount']);exit;
