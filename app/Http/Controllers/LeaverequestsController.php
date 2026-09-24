@@ -63,7 +63,7 @@ class LeaverequestsController extends Controller
             // Admin panel: paginate all leave requests
             $user = auth()->user();
             $stream = HrmsLeaveRequest::orderByDesc('id')->paginate(20);
-            $employees = HrmsEmployee::all();
+            $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
             $leaveTypes = HrmsLeaveType::all();
             return view('backend.HRMS.leaverequests', compact('stream','employees','leaveTypes'));
         }
@@ -251,7 +251,7 @@ class LeaverequestsController extends Controller
     public function view($id){
         $stream_master = HrmsLeaveRequest::where('id',$id)->first();
         $stream = HrmsLeaveRequest::orderBy('id','desc')->paginate(5); 
-        $employees = HrmsEmployee::all();
+        $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
 
         $employee=HrmsEmployee::where('id', $stream_master->employee_id)->first();
         $leaveAllocated=HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)->get();

@@ -81,7 +81,9 @@ class EmployeeLeavesController extends Controller
 			]
 		);
 
-		$employees = HrmsEmployee::all();
+		$employees = HrmsEmployee::orderBy('first_name')
+			->orderBy('last_name')
+			->get();
 		$leaveTypes = HrmsLeaveType::all();
 
 		return view(

@@ -1554,6 +1554,26 @@
             // Load saved form data on page load
             loadFormData();
 
+            const nameFields = ['FirstName', 'LastName', 'Father_Name'];
+            const formatName = (value) => value.toLowerCase().replace(/(^|[\s'-])([\p{L}])/gu, (match, separator, letter) => separator + letter.toUpperCase());
+
+            nameFields.forEach((fieldId) => {
+                const field = document.getElementById(fieldId);
+
+                if (!field) {
+                    return;
+                }
+
+                const normalizeName = () => {
+                    const cursorPosition = field.selectionStart;
+                    field.value = formatName(field.value);
+                    field.setSelectionRange(cursorPosition, cursorPosition);
+                };
+
+                field.addEventListener('input', normalizeName);
+                normalizeName();
+            });
+
             // Check localStorage to toggle reset button visibility
 
 

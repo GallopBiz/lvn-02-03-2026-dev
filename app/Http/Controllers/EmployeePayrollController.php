@@ -853,8 +853,6 @@ class EmployeePayrollController extends Controller
 							2
 						);
 					}
-
-
 					// --- Net Salary ---
 					$netSalary = $grossSalary - $totalDeductions - $totalEmiDeduction - $efpa - $esic - $totalLeaveDeduction - $lateDeductionAmount - $unApplyLeaveDeductionAmount;
 

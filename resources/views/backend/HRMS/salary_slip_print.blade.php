@@ -221,6 +221,12 @@ $statutory = optional($report->employee->statutoryInformation);
                         <td>ESIC</td>
                         <td class="amount">{{ round($report->esic ?? 0) }}</td>
                     </tr>
+                    @if (($report->late_deduction_amount ?? 0) > 0)
+                        <tr>
+                            <td>Leave Without Pay</td>
+                            <td class="amount">{{ round($report->late_deduction_amount) }}</td>
+                        </tr>
+                    @endif
                     <tr>
                         <td>Lunch Allow</td>
                         <td class="amount">{{ round(getD($deductions, 'Lunch')) }}</td>
@@ -268,8 +274,8 @@ $statutory = optional($report->employee->statutoryInformation);
             $displayTotalDeductions =
             $jsonDeductionTotal +
             ($report->epfa ?? 0) +
-            ($report->esic ?? 0)
-            // do not add late_deduction_amount here
+            ($report->esic ?? 0) +
+            ($report->late_deduction_amount ?? 0)
             ;
             @endphp
 

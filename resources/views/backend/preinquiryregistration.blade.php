@@ -437,6 +437,25 @@ $(".submit_btn").on('click', function (e) {
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+      ['studentname', 'fathername', 'mothername'].forEach(function (fieldId) {
+          var field = document.getElementById(fieldId);
+
+          if (!field) {
+              return;
+          }
+
+          function normalizeName() {
+              var cursorPosition = field.selectionStart;
+              field.value = field.value.toLowerCase().replace(/(^|[\s'-])([\p{L}])/gu, function (match, separator, letter) {
+                  return separator + letter.toUpperCase();
+              });
+              field.setSelectionRange(cursorPosition, cursorPosition);
+          }
+
+          field.addEventListener('input', normalizeName);
+          normalizeName();
+      });
+
       var select = document.getElementById('state-dd');
       for (var i = 0; i < select.options.length; i++) {
           select.options[i].innerText = capitalizeFirstLetter(select.options[i].innerText);
