@@ -72,6 +72,7 @@ use App\Http\Controllers\EnquiryReciptController;
 
 use App\Http\Controllers\TeacherBusAssignController;
 use App\Http\Controllers\backend\ScholarbusassignController;
+use App\Http\Controllers\backend\TransportReportController;
 use App\Http\Controllers\backend\FeesDuechart;
 use App\Http\Controllers\MobileController;
 use App\Http\Controllers\backend\FeesreceiptchallanController;
@@ -813,6 +814,9 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     // scholarbusassign
     Route::get('scholarbusassign',[ScholarbusassignController::class, 'index'])->name('scholarbusassign');
+    Route::get('transport/assignment-report',[TransportReportController::class, 'index'])->name('transport.assignment-report');
+    Route::get('transport/assignment-report/driver-bus-strength/export-csv',[TransportReportController::class, 'exportSummaryCsv'])->name('transport.assignment-report.summary-export');
+    Route::get('transport/assignment-report/student-fee-master-assignments/export-csv',[TransportReportController::class, 'exportStudentsCsv'])->name('transport.assignment-report.students-export');
     Route::get('scholarbusassign_student',[ScholarbusassignController::class, 'student_get'])->name('student_get');
     Route::get('scholarbusassign_student_shedule_name',[ScholarbusassignController::class, 'scholarbusassign_student_shedule_namee'])->name('scholarbusassign_student_shedule_nameee');
     Route::get('scholarbusassign_student_pick_up_routes',[ScholarbusassignController::class, 'scholarbusassign_student_pick_up_routes'])->name('scholarbusassign_student_pick_up_routes');

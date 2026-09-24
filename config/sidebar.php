@@ -148,6 +148,13 @@ return [
                 ],
             ],
             [
+                'title' => 'Reports',
+                'icon' => 'i-Bar-Chart',
+                'children' => [
+                    [ 'title' => 'Driver / Bus Assignment Report', 'route' => 'transport/assignment-report', 'roles' => ['Admin'] ],
+                ],
+            ],
+            [
                 'title' => 'Bus Live Location',
                 'icon' => 'i-Bus',
                 'children' => [
