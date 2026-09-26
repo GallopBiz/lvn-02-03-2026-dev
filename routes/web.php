@@ -206,6 +206,13 @@ Route::group(['namespace' => 'App\Http\Controllers'], function()
 
 Route::get('/home', [HomeController::class, 'index'])->name('home');
 
+// Link this public endpoint from WordPress (for example: Student Services > Download TC).
+// A session-bound, single-use token protects the actual file download.
+Route::get('/download-tc', [App\Http\Controllers\PublicStudentTcDownloadController::class, 'index'])->name('student-tc-download.index');
+Route::post('/download-tc/search', [App\Http\Controllers\PublicStudentTcDownloadController::class, 'search'])->middleware('throttle:tc-public-search')->name('student-tc-download.search');
+Route::get('/download-tc/view/{token}', [App\Http\Controllers\PublicStudentTcDownloadController::class, 'view'])->middleware('throttle:tc-public-download')->name('student-tc-download.view');
+Route::get('/download-tc/file/{token}', [App\Http\Controllers\PublicStudentTcDownloadController::class, 'download'])->middleware('throttle:tc-public-download')->name('student-tc-download.file');
+
 Route::middleware(['auth:web,staff'])->group(function () {
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks']);
@@ -1428,6 +1435,17 @@ Route::prefix('transfer-certificate')->group(function () {
     Route::get('/print/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'print'])->name('transfercertificate.print');
     Route::get('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate');
     Route::post('/duplicate/{id}', [App\Http\Controllers\backend\TransferCertificateController::class, 'duplicate'])->name('transfercertificate.duplicate.store');
+});
+
+// Independent scanned-TC upload; it does not use or modify the TC generation module.
+Route::prefix('student-tc-files')->group(function () {
+    Route::get('/', [App\Http\Controllers\StudentTcFileController::class, 'index'])->name('student-tc-files.index');
+    Route::get('/student-search', [App\Http\Controllers\StudentTcFileController::class, 'studentSearch'])->name('student-tc-files.student-search');
+    Route::get('/search-records', [App\Http\Controllers\StudentTcFileController::class, 'recordSearch'])->name('student-tc-files.record-search');
+    Route::post('/', [App\Http\Controllers\StudentTcFileController::class, 'store'])->name('student-tc-files.store');
+    Route::get('/{file}/view', [App\Http\Controllers\StudentTcFileController::class, 'view'])->name('student-tc-files.view');
+    Route::get('/{file}/download', [App\Http\Controllers\StudentTcFileController::class, 'download'])->name('student-tc-files.download');
+    Route::delete('/{file}', [App\Http\Controllers\StudentTcFileController::class, 'destroy'])->name('student-tc-files.delete');
 });
 
 

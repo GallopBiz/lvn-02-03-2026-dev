@@ -354,6 +354,7 @@ return [
                 'children' => [
                     [ 'title' => 'Generate T.C.', 'route' => 'transfer-certificate/create', 'roles' => ['Admin'] ],
                     [ 'title' => 'T.C. Reports', 'route' => 'transfer-certificate', 'roles' => ['Admin'] ],
+                    [ 'title' => 'TC Upload', 'route' => 'student-tc-files', 'roles' => ['Admin'] ],
                 ],
             ],
         ],

@@ -36,6 +36,14 @@ return [
             'throw' => false,
         ],
 
+        // Deliberately not linked from public/. TC documents are served only by
+        // an authorized controller action.
+        'private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'throw' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

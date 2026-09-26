@@ -17,11 +17,27 @@ class NotificationService
         $vehicles = AddVehial::query()
             ->where('is_delete', 0)
             ->whereNotNull('validto')
+            ->where('validto', '!=', '')
+            ->where('validto', '!=', '0000-00-00')
+            ->where('validto', '!=', '0000-00-00 00:00:00')
+            ->whereDate('validto', '>=', '1970-01-01')
             ->whereDate('validto', '<=', $latestAllowedDate)
             ->get(['id', 'vehicelno', 'validto']);
 
         foreach ($vehicles as $vehicle) {
-            $validTo = Carbon::parse($vehicle->validto);
+            $rawDate = (string) $vehicle->validto;
+            if (empty($rawDate) || str_starts_with($rawDate, '0000-00-00') || str_starts_with($rawDate, '-')) {
+                continue;
+            }
+
+            try {
+                $validTo = Carbon::parse($rawDate);
+                if ($validTo->year < 2000) {
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
             $eventKey = 'RTO_EXPIRY:' . $vehicle->id . ':' . $validTo->toDateString();
             $daysLeft = $today->diffInDays($validTo, false);
             $vehicleNumber = $vehicle->vehicelno ?: ('Vehicle #' . $vehicle->id);
