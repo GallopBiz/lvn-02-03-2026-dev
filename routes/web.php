@@ -1438,7 +1438,7 @@ Route::prefix('transfer-certificate')->group(function () {
 });
 
 // Independent scanned-TC upload; it does not use or modify the TC generation module.
-Route::prefix('student-tc-files')->group(function () {
+Route::middleware(['auth:web,staff'])->prefix('student-tc-files')->group(function () {
     Route::get('/', [App\Http\Controllers\StudentTcFileController::class, 'index'])->name('student-tc-files.index');
     Route::get('/student-search', [App\Http\Controllers\StudentTcFileController::class, 'studentSearch'])->name('student-tc-files.student-search');
     Route::get('/search-records', [App\Http\Controllers\StudentTcFileController::class, 'recordSearch'])->name('student-tc-files.record-search');

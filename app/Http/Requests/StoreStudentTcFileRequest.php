@@ -19,9 +19,25 @@ class StoreStudentTcFileRequest extends FormRequest
         $validator->after(function ($validator) {
             $file = $this->file('tc_file');
             if (!$file || !$file->isValid()) return;
-            $handle = @fopen($file->getRealPath(), 'rb'); $signature = $handle ? fread($handle, 5) : false;
+
+            $clientName = $file->getClientOriginalName();
+            if (str_contains($clientName, "\0") || preg_match('/\.(php|phtml|php3|php4|php5|phps|phar|js|html|htm|exe|sh|bat|cmd|svg|asp|aspx)\./i', $clientName)) {
+                $validator->errors()->add('tc_file', 'The uploaded file has an invalid filename or prohibited extension.');
+                return;
+            }
+
+            $extension = strtolower($file->getClientOriginalExtension());
+            if ($extension !== 'pdf') {
+                $validator->errors()->add('tc_file', 'The uploaded file extension must strictly be .pdf');
+                return;
+            }
+
+            $handle = @fopen($file->getRealPath(), 'rb');
+            $signature = $handle ? fread($handle, 5) : false;
             if ($handle) fclose($handle);
-            if ($signature !== '%PDF-') $validator->errors()->add('tc_file', 'The uploaded file must be a valid PDF.');
+            if ($signature !== '%PDF-') {
+                $validator->errors()->add('tc_file', 'The uploaded file content is not a valid PDF document.');
+            }
         });
     }
 }

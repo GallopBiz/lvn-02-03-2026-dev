@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
 <title>Download Transfer Certificate</title>
 <style>
     *{box-sizing:border-box} body{margin:0;min-height:100vh;font-family:Arial,sans-serif;color:#1f2937;background:linear-gradient(135deg,#edf4ff,#f7f9fc)}
@@ -18,9 +19,8 @@
                 <div><span>Student Name</span>{{ $studentDetails['name'] ?: '--' }}</div>
                 <div><span>Class / Section</span>{{ trim(($studentDetails['class'] ?: '--') . ($studentDetails['section'] ? ' / ' . $studentDetails['section'] : '')) }}</div>
             </div>
-            <div class="status">PDF available. Please preview the document before downloading.</div>
+            <div class="status">PDF available for download.</div>
             <div class="btn-row">
-                <a class="btn btn-secondary" target="_blank" rel="noopener" href="{{ route('student-tc-download.view', $token) }}">View TC</a>
                 <a class="btn btn-primary" href="{{ route('student-tc-download.file', $token) }}">Download PDF</a>
             </div>
         @else

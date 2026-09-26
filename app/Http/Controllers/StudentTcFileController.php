@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -38,15 +39,37 @@ class StudentTcFileController extends Controller
         if (!$student) {
             throw ValidationException::withMessages(['scholar_no' => 'Select a valid Scholar No. from student registration.']);
         }
+
         $file = $request->file('tc_file');
         $path = 'student-tc/' . $session . '/' . Str::uuid() . '.pdf';
         Storage::disk('private')->putFileAs(dirname($path), $file, basename($path));
+
         $old = StudentTcFile::where('scholar_no', $data['scholar_no'])->where('session_name', $session)->first();
-        StudentTcFile::updateOrCreate(['scholar_no' => $data['scholar_no'], 'session_name' => $session], [
-            'file_path' => $path, 'original_filename' => $file->getClientOriginalName(), 'file_size' => $file->getSize(), 'mime_type' => 'application/pdf',
-            'uploaded_by' => Auth::guard('web')->id() ?: Auth::guard('staff')->id(), 'uploaded_at' => now(),
+        $userId = Auth::guard('web')->id() ?: Auth::guard('staff')->id();
+
+        StudentTcFile::updateOrCreate(
+            ['scholar_no' => $data['scholar_no'], 'session_name' => $session],
+            [
+                'file_path' => $path,
+                'original_filename' => $file->getClientOriginalName(),
+                'file_size' => $file->getSize(),
+                'mime_type' => 'application/pdf',
+                'uploaded_by' => $userId,
+                'uploaded_at' => now(),
+            ]
+        );
+
+        if ($old && Storage::disk('private')->exists($old->file_path)) {
+            Storage::disk('private')->delete($old->file_path);
+        }
+
+        Log::info('Admin uploaded/updated TC PDF', [
+            'scholar_no' => $data['scholar_no'],
+            'session' => $session,
+            'user_id' => $userId,
+            'original_filename' => $file->getClientOriginalName(),
         ]);
-        if ($old) Storage::disk('private')->delete($old->file_path);
+
         return back()->with('success', $old ? 'TC PDF replaced.' : 'TC PDF uploaded.');
     }
 
@@ -77,16 +100,41 @@ class StudentTcFileController extends Controller
 
     public function download(Request $request, int $file)
     {
-        $this->bindDatabase($this->sessionName($request)); $file = StudentTcFile::findOrFail($file);
-        abort_unless(Storage::disk('private')->exists($file->file_path), 404);
-        return Storage::disk('private')->download($file->file_path, 'transfer-certificate-' . $file->scholar_no . '.pdf', ['Content-Type' => 'application/pdf']);
+        $this->bindDatabase($this->sessionName($request));
+        $file = StudentTcFile::findOrFail($file);
+        $this->assertSafePath($file->file_path);
+
+        Log::info('Admin downloaded TC PDF', [
+            'file_id' => $file->id,
+            'scholar_no' => $file->scholar_no,
+            'user_id' => Auth::guard('web')->id() ?: Auth::guard('staff')->id(),
+        ]);
+
+        $downloadName = 'TC_Document_' . Str::random(16) . '.pdf';
+
+        return Storage::disk('private')->download(
+            $file->file_path,
+            $downloadName,
+            $this->securityHeaders(['Content-Type' => 'application/pdf'])
+        );
     }
 
     public function view(Request $request, int $file)
     {
-        $this->bindDatabase($this->sessionName($request)); $file = StudentTcFile::findOrFail($file);
-        abort_unless(Storage::disk('private')->exists($file->file_path), 404);
-        return response()->file(Storage::disk('private')->path($file->file_path), ['Content-Type' => 'application/pdf']);
+        $this->bindDatabase($this->sessionName($request));
+        $file = StudentTcFile::findOrFail($file);
+        $fullPath = $this->assertSafePath($file->file_path);
+
+        Log::info('Admin viewed TC PDF', [
+            'file_id' => $file->id,
+            'scholar_no' => $file->scholar_no,
+            'user_id' => Auth::guard('web')->id() ?: Auth::guard('staff')->id(),
+        ]);
+
+        return response()->file($fullPath, $this->securityHeaders([
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="transfer-certificate-' . $file->scholar_no . '.pdf"',
+        ]));
     }
 
     public function recordSearch(Request $request)
@@ -104,15 +152,57 @@ class StudentTcFileController extends Controller
 
     public function destroy(Request $request, int $file)
     {
-        $this->bindDatabase($this->sessionName($request)); $file = StudentTcFile::findOrFail($file);
-        Storage::disk('private')->delete($file->file_path); $file->delete();
+        $this->bindDatabase($this->sessionName($request));
+        $file = StudentTcFile::findOrFail($file);
+        if (Storage::disk('private')->exists($file->file_path)) {
+            Storage::disk('private')->delete($file->file_path);
+        }
+        $file->delete();
+
+        Log::info('Admin deleted TC PDF', [
+            'file_id' => $file->id,
+            'scholar_no' => $file->scholar_no,
+            'user_id' => Auth::guard('web')->id() ?: Auth::guard('staff')->id(),
+        ]);
+
         return back()->with('success', 'TC PDF deleted.');
+    }
+
+    private function assertSafePath(string $filePath): string
+    {
+        abort_unless(Storage::disk('private')->exists($filePath), 404, 'TC File missing on disk.');
+
+        $fullPath = Storage::disk('private')->path($filePath);
+        $basePath = storage_path('app/private/student-tc');
+
+        $realFile = realpath($fullPath);
+        $realBase = realpath($basePath);
+
+        if (!$realFile || !$realBase || !str_starts_with($realFile, $realBase)) {
+            Log::alert('Security Alert: Path traversal attempt blocked on admin TC controller', [
+                'file_path' => $filePath,
+                'resolved' => $realFile,
+            ]);
+            abort(403, 'Unauthorized file path access.');
+        }
+
+        return $realFile;
+    }
+
+    private function securityHeaders(array $merge = []): array
+    {
+        return array_merge([
+            'X-Robots-Tag' => 'noindex, nofollow, noarchive',
+            'X-Content-Type-Options' => 'nosniff',
+            'X-Frame-Options' => 'SAMEORIGIN',
+            'Cache-Control' => 'private, no-cache, no-store, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => 'Sat, 01 Jan 2000 00:00:00 GMT',
+        ], $merge);
     }
 
     private function sessionName(Request $request): string
     {
-        // The normal admin flow sets selectedYear. When this standalone page is
-        // opened directly, use Laravel's configured dynamic database instead.
         $session = $request->input('session_name')
             ?: $request->session()->get('selectedYear')
             ?: $request->cookie('selectedYear')
@@ -120,9 +210,13 @@ class StudentTcFileController extends Controller
         abort_unless(is_string($session) && preg_match('/^\d{4}_\d{4}$/', $session), 422, 'Select a valid academic session.');
         return $session;
     }
+
     private function bindDatabase(string $session): void
     {
-        Config::set('database.connections.dynamic.database', $session); DB::purge('dynamic'); DB::reconnect('dynamic'); DB::setDefaultConnection('dynamic');
+        Config::set('database.connections.dynamic.database', $session);
+        DB::purge('dynamic');
+        DB::reconnect('dynamic');
+        DB::setDefaultConnection('dynamic');
     }
 
     private function addStudentSection($file)
