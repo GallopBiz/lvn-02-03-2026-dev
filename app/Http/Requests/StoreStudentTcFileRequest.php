@@ -11,7 +11,10 @@ class StoreStudentTcFileRequest extends FormRequest
     {
         return [
             'scholar_no' => ['required', 'string', 'max:50'],
-            'tc_file' => ['required', 'file', 'max:500', 'mimes:pdf', 'mimetypes:application/pdf,application/x-pdf'],
+            'student_name' => ['required', 'string', 'max:150'],
+            'class_name' => ['required', 'string', 'max:100'],
+            'section_name' => ['nullable', 'string', 'max:100'],
+            'tc_file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf,application/x-pdf'],
         ];
     }
     public function withValidator($validator): void

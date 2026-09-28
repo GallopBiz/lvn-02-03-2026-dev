@@ -65,9 +65,9 @@ class PublicStudentTcDownloadController extends Controller
 
         $details = json_decode($student?->json_str ?? '{}', true) ?: [];
         $studentDetails = [
-            'name' => $student->student_name ?? '',
-            'class' => $student->class_name ?? '',
-            'section' => $details['section_name'] ?? '',
+            'name' => !empty($file->student_name) ? $file->student_name : ($student->student_name ?? ''),
+            'class' => !empty($file->class_name) ? $file->class_name : ($student->class_name ?? ''),
+            'section' => !empty($file->section_name) ? $file->section_name : ($details['section_name'] ?? ''),
         ];
 
         return response()

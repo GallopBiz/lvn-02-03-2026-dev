@@ -15,7 +15,6 @@
             <h2 class="result-title">Your Transfer Certificate is ready</h2>
             <div class="details">
                 <div><span>Scholar Number</span>{{ $file->scholar_no }}</div>
-                <div><span>Academic Session</span>{{ $file->session_name }}</div>
                 <div><span>Student Name</span>{{ $studentDetails['name'] ?: '--' }}</div>
                 <div><span>Class / Section</span>{{ trim(($studentDetails['class'] ?: '--') . ($studentDetails['section'] ? ' / ' . $studentDetails['section'] : '')) }}</div>
             </div>

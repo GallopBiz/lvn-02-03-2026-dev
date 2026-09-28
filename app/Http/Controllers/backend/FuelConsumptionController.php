@@ -1,9 +1,11 @@
 <?php
 
 namespace App\Http\Controllers\backend;
+
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -35,6 +37,7 @@ class FuelConsumptionController extends Controller
 
     public function index(Request $request)
     {
+        $this->ensureFuelTablesExist();
         $connection = DB::connection('dynamic');
         $vehicleColumns = ['id', 'vehicelno'];
         $hasOpeningOdometer = Schema::connection('dynamic')->hasColumn('vehicel', 'fuel_opening_odometer');
@@ -95,6 +98,7 @@ class FuelConsumptionController extends Controller
 
     public function export(Request $request)
     {
+        $this->ensureFuelTablesExist();
         $filteredEntries = $this->fuelEntriesQuery($request);
         $query = (clone $filteredEntries)
             ->orderBy('fuel.fuel_date')
@@ -109,8 +113,8 @@ class FuelConsumptionController extends Controller
 
         return response()->streamDownload(function () use ($query, $totals) {
             $output = fopen('php://output', 'w');
-                fputcsv($output, ['S.No.', 'Date', 'Vehicle', 'Fuel Type', 'Quantity', 'Unit', 'Rate', 'Total Amount', 'Previous KM', 'Current KM', 'Distance', 'Efficiency', 'Driver', 'Fuel Station', 'Bill Number']);
-                foreach ($query as $index => $entry) {
+            fputcsv($output, ['S.No.', 'Date', 'Vehicle', 'Fuel Type', 'Quantity', 'Unit', 'Rate', 'Total Amount', 'Previous KM', 'Current KM', 'Distance', 'Efficiency', 'Driver', 'Fuel Station', 'Bill Number']);
+            foreach ($query as $index => $entry) {
                 fputcsv($output, [
                     $index + 1,
                     $entry->fuel_date,
@@ -167,6 +171,7 @@ class FuelConsumptionController extends Controller
 
     public function store(Request $request)
     {
+        $this->ensureFuelTablesExist();
         $fuelTypes = array_keys(self::FUEL_TYPES);
         $validated = $request->validate([
             'fuel_date' => ['required', 'date'],
@@ -237,6 +242,7 @@ class FuelConsumptionController extends Controller
 
     public function edit(int $id)
     {
+        $this->ensureFuelTablesExist();
         $connection = DB::connection('dynamic');
         $entry = $connection->table('fuel_entries')->where('id', $id)->first();
         abort_unless($entry, 404);
@@ -264,6 +270,7 @@ class FuelConsumptionController extends Controller
 
     public function update(Request $request, int $id)
     {
+        $this->ensureFuelTablesExist();
         $fuelTypes = array_keys(self::FUEL_TYPES);
         $validated = $request->validate([
             'fuel_date' => ['required', 'date'],
@@ -333,6 +340,7 @@ class FuelConsumptionController extends Controller
 
     public function destroy(int $id)
     {
+        $this->ensureFuelTablesExist();
         $deleted = DB::connection('dynamic')->table('fuel_entries')->where('id', $id)->delete();
         abort_unless($deleted, 404);
 
@@ -341,9 +349,7 @@ class FuelConsumptionController extends Controller
 
     public function updateOpeningOdometer(Request $request)
     {
-        if (!Schema::connection('dynamic')->hasColumn('vehicel', 'fuel_opening_odometer')) {
-            return back()->withErrors(['fuel_opening_odometer' => 'Fuel database migration is pending. Please run the fuel migration before setting opening KM.']);
-        }
+        $this->ensureFuelTablesExist();
         $validated = $request->validate([
             'vehicle_id' => ['required', 'integer'],
             'fuel_opening_odometer' => ['required', 'numeric', 'min:0'],
@@ -361,6 +367,7 @@ class FuelConsumptionController extends Controller
 
     public function stationStore(Request $request)
     {
+        $this->ensureFuelTablesExist();
         $validated = $request->validate(['name' => ['required', 'string', 'max:150']]);
         DB::connection('dynamic')->table('fuel_stations')->insert([
             'name' => $validated['name'],
@@ -374,6 +381,7 @@ class FuelConsumptionController extends Controller
 
     public function report(Request $request)
     {
+        $this->ensureFuelTablesExist();
         $month = (int) ($request->input('month') ?: now()->month);
         $year = (int) ($request->input('year') ?: now()->year);
         $connection = DB::connection('dynamic');
@@ -401,5 +409,52 @@ class FuelConsumptionController extends Controller
 
         $vehicles = $connection->table('vehicel')->where('is_delete', 0)->orderBy('vehicelno')->get();
         return view('backend.Transport.fuel.report', compact('report', 'vehicles', 'month', 'year'));
+    }
+
+    private function ensureFuelTablesExist(): void
+    {
+        if (Schema::connection('dynamic')->hasTable('vehicel') && !Schema::connection('dynamic')->hasColumn('vehicel', 'fuel_opening_odometer')) {
+            Schema::connection('dynamic')->table('vehicel', function (Blueprint $table) {
+                $table->decimal('fuel_opening_odometer', 12, 2)->nullable();
+            });
+        }
+
+        if (!Schema::connection('dynamic')->hasTable('fuel_stations')) {
+            Schema::connection('dynamic')->create('fuel_stations', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 150);
+                $table->boolean('status')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (!Schema::connection('dynamic')->hasTable('fuel_entries')) {
+            Schema::connection('dynamic')->create('fuel_entries', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('vehicle_id');
+                $table->unsignedBigInteger('driver_id')->nullable();
+                $table->unsignedBigInteger('fuel_station_id');
+                $table->date('fuel_date');
+                $table->string('fuel_type', 30);
+                $table->decimal('quantity', 12, 3);
+                $table->string('quantity_unit', 20);
+                $table->decimal('rate', 12, 2);
+                $table->decimal('total_amount', 14, 2);
+                $table->decimal('previous_odometer', 12, 2);
+                $table->decimal('current_odometer', 12, 2);
+                $table->decimal('distance', 12, 2);
+                $table->decimal('efficiency', 12, 3)->nullable();
+                $table->string('bill_number', 100)->nullable();
+                $table->string('payment_mode', 30)->nullable();
+                $table->string('payment_reference', 150)->nullable();
+                $table->text('remarks')->nullable();
+                $table->unsignedBigInteger('created_by')->nullable();
+                $table->unsignedBigInteger('updated_by')->nullable();
+                $table->timestamps();
+
+                $table->index(['vehicle_id', 'fuel_date']);
+                $table->index('fuel_type');
+            });
+        }
     }
 }

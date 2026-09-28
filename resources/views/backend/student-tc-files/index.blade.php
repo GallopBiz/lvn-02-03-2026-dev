@@ -15,27 +15,51 @@
     <div class="card mb-3"><div class="card-body">
         <form method="POST" enctype="multipart/form-data" action="{{ route('student-tc-files.store') }}" class="row">
             @csrf
-            <div class="col-md-4 form-group tc-student-search">
-                <label>Scholar No. / Student Search</label>
-                <input id="scholar_no" class="form-control" name="scholar_no" value="{{ old('scholar_no') }}" autocomplete="off" placeholder="Type Scholar No. or student name" required>
+            <div class="col-md-3 form-group tc-student-search">
+                <label>Scholar No.</label>
+                <input id="scholar_no" class="form-control" name="scholar_no" value="{{ old('scholar_no') }}" autocomplete="off" placeholder="Enter Scholar No." required>
                 <div id="student-results" class="tc-student-results list-group d-none"></div>
                 @error('scholar_no')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
-            <div class="col-md-3 form-group"><label>Student Name</label><input id="student_name" class="form-control" readonly></div>
-            <div class="col-md-2 form-group"><label>Class</label><input id="class_name" class="form-control" readonly></div>
-            <div class="col-md-2 form-group"><label>Section</label><input id="section_name" class="form-control" readonly></div>
+            <div class="col-md-3 form-group">
+                <label>Student Name</label>
+                <input id="student_name" class="form-control" name="student_name" value="{{ old('student_name') }}" autocomplete="off" placeholder="Enter Student Name" required>
+                @error('student_name')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-2 form-group">
+                <label>Class</label>
+                <select id="class_name" class="form-control" name="class_name" required>
+                    <option value="">Select Class</option>
+                    @foreach ($classes as $c)
+                        <option value="{{ $c }}" {{ old('class_name') == $c ? 'selected' : '' }}>{{ $c }}</option>
+                    @endforeach
+                </select>
+                @error('class_name')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-2 form-group">
+                <label>Section</label>
+                <select id="section_name" class="form-control" name="section_name">
+                    <option value="">Select Section</option>
+                    @foreach ($sections as $s)
+                        <option value="{{ $s }}" {{ old('section_name') == $s ? 'selected' : '' }}>{{ $s }}</option>
+                    @endforeach
+                </select>
+                @error('section_name')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
             <div class="col-md-4 form-group">
-                <label>TC PDF (maximum 500 KB)</label>
+                <label>TC PDF</label>
                 <input class="form-control" type="file" name="tc_file" accept="application/pdf,.pdf" required>
                 @error('tc_file')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
-            <div class="col-md-2 form-group d-flex align-items-end"><button class="btn btn-primary btn-block">Upload PDF</button></div>
+            <div class="col-md-2 form-group d-flex align-items-end">
+                <button class="btn btn-primary btn-block">Upload PDF</button>
+            </div>
         </form>
     </div></div>
 
     <div class="card"><div class="card-body">
         <div class="d-flex justify-content-end mb-3">
-            <input id="tc-record-search" type="search" class="form-control form-control-sm" placeholder="Search Scholar No." aria-controls="zero_configuration_table" style="max-width:260px">
+            <input id="tc-record-search" type="search" class="form-control form-control-sm" placeholder="Search Scholar No. or Name" aria-controls="zero_configuration_table" style="max-width:260px">
         </div>
         <table id="zero_configuration_table" class="table table-bordered"><thead><tr><th>Sr. No.</th><th>Scholar No.</th><th>Student Name</th><th>Class</th><th>Section</th><th>Session</th><th>Uploaded</th><th>Action</th></tr></thead><tbody id="tc-record-results">
             @forelse ($files as $file)
@@ -76,25 +100,38 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var scholar = document.getElementById('scholar_no');
+    var studentNameInput = document.getElementById('student_name');
+    var classNameSelect = document.getElementById('class_name');
+    var sectionNameSelect = document.getElementById('section_name');
     var results = document.getElementById('student-results');
     var searchUrl = @json(route('student-tc-files.student-search'));
 
-    function clearDetails() {
-        document.getElementById('student_name').value = '';
-        document.getElementById('class_name').value = '';
-        document.getElementById('section_name').value = '';
-    }
     function selectStudent(student) {
         scholar.value = student.scholar_no;
-        document.getElementById('student_name').value = student.student_name || '';
-        document.getElementById('class_name').value = student.class_name || '';
-        document.getElementById('section_name').value = student.section_name || '';
+        studentNameInput.value = student.student_name || '';
+
+        if (student.class_name) {
+            for (var i = 0; i < classNameSelect.options.length; i++) {
+                if (classNameSelect.options[i].value.toLowerCase() === student.class_name.toLowerCase()) {
+                    classNameSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        if (student.section_name) {
+            for (var j = 0; j < sectionNameSelect.options.length; j++) {
+                if (sectionNameSelect.options[j].value.toLowerCase() === student.section_name.toLowerCase()) {
+                    sectionNameSelect.selectedIndex = j;
+                    break;
+                }
+            }
+        }
         results.classList.add('d-none');
         results.innerHTML = '';
     }
+
     scholar.addEventListener('input', function () {
         var query = scholar.value.trim();
-        clearDetails();
         if (query.length < 2) { results.innerHTML = ''; results.classList.add('d-none'); return; }
         fetch(searchUrl + '?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
             .then(function (response) { return response.ok ? response.json() : []; })
@@ -111,7 +148,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 results.classList.toggle('d-none', students.length === 0);
             });
     });
-    scholar.addEventListener('blur', function () { setTimeout(function () { results.classList.add('d-none'); }, 150); });
+
+    scholar.addEventListener('blur', function () { setTimeout(function () { results.classList.add('d-none'); }, 200); });
 });
 </script>
 <script>

@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class StudentTcFileController extends Controller
 {
@@ -19,15 +19,27 @@ class StudentTcFileController extends Controller
     {
         $session = $this->sessionName($request);
         $this->bindDatabase($session);
+        $this->ensureTableColumnsExist();
+
+        [$classes, $sections] = $this->getClassesAndSections();
+
         $files = StudentTcFile::query()
             ->leftJoin('student_registration as students', 'students.scholar_no', '=', 'student_tc_files.scholar_no')
-            ->select('student_tc_files.*', 'students.student_name', 'students.class_name', 'students.json_str as student_json')
+            ->select(
+                'student_tc_files.*',
+                DB::raw("COALESCE(NULLIF(student_tc_files.student_name, ''), students.student_name) as student_name"),
+                DB::raw("COALESCE(NULLIF(student_tc_files.class_name, ''), students.class_name) as class_name"),
+                DB::raw("COALESCE(NULLIF(student_tc_files.section_name, ''), '') as tc_section_name"),
+                'students.json_str as student_json'
+            )
             ->when($request->filled('search'), fn ($query) => $query->where('student_tc_files.scholar_no', 'like', '%' . $request->input('search') . '%'))
             ->latest('student_tc_files.uploaded_at')
             ->paginate(25)
             ->withQueryString();
+
         $files->getCollection()->transform(fn ($file) => $this->addStudentSection($file));
-        return view('backend.student-tc-files.index', compact('files', 'session'));
+
+        return view('backend.student-tc-files.index', compact('files', 'session', 'classes', 'sections'));
     }
 
     public function store(StoreStudentTcFileRequest $request)
@@ -35,10 +47,7 @@ class StudentTcFileController extends Controller
         $data = $request->validated();
         $session = $this->sessionName($request);
         $this->bindDatabase($session);
-        $student = DB::connection('dynamic')->table('student_registration')->where('scholar_no', $data['scholar_no'])->first();
-        if (!$student) {
-            throw ValidationException::withMessages(['scholar_no' => 'Select a valid Scholar No. from student registration.']);
-        }
+        $this->ensureTableColumnsExist();
 
         $file = $request->file('tc_file');
         $path = 'student-tc/' . $session . '/' . Str::uuid() . '.pdf';
@@ -50,6 +59,9 @@ class StudentTcFileController extends Controller
         StudentTcFile::updateOrCreate(
             ['scholar_no' => $data['scholar_no'], 'session_name' => $session],
             [
+                'student_name' => $data['student_name'],
+                'class_name' => $data['class_name'],
+                'section_name' => $data['section_name'] ?? null,
                 'file_path' => $path,
                 'original_filename' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
@@ -65,6 +77,7 @@ class StudentTcFileController extends Controller
 
         Log::info('Admin uploaded/updated TC PDF', [
             'scholar_no' => $data['scholar_no'],
+            'student_name' => $data['student_name'],
             'session' => $session,
             'user_id' => $userId,
             'original_filename' => $file->getClientOriginalName(),
@@ -140,13 +153,28 @@ class StudentTcFileController extends Controller
     public function recordSearch(Request $request)
     {
         $this->bindDatabase($this->sessionName($request));
+        $this->ensureTableColumnsExist();
         $search = trim((string) $request->input('q'));
         if ($search === '') return response()->json([]);
+
         return response()->json(StudentTcFile::query()
             ->leftJoin('student_registration as students', 'students.scholar_no', '=', 'student_tc_files.scholar_no')
-            ->where('student_tc_files.scholar_no', 'like', '%' . $search . '%')
+            ->where(function ($q) use ($search) {
+                $q->where('student_tc_files.scholar_no', 'like', '%' . $search . '%')
+                  ->orWhere('student_tc_files.student_name', 'like', '%' . $search . '%')
+                  ->orWhere('students.student_name', 'like', '%' . $search . '%');
+            })
             ->latest('student_tc_files.uploaded_at')->limit(25)
-            ->get(['student_tc_files.id', 'student_tc_files.scholar_no', 'student_tc_files.session_name', 'student_tc_files.uploaded_at', 'students.student_name', 'students.class_name', 'students.json_str as student_json'])
+            ->get([
+                'student_tc_files.id',
+                'student_tc_files.scholar_no',
+                'student_tc_files.session_name',
+                'student_tc_files.uploaded_at',
+                DB::raw("COALESCE(NULLIF(student_tc_files.student_name, ''), students.student_name) as student_name"),
+                DB::raw("COALESCE(NULLIF(student_tc_files.class_name, ''), students.class_name) as class_name"),
+                DB::raw("COALESCE(NULLIF(student_tc_files.section_name, ''), '') as tc_section_name"),
+                'students.json_str as student_json'
+            ])
             ->map(fn ($file) => $this->addStudentSection($file)));
     }
 
@@ -166,6 +194,71 @@ class StudentTcFileController extends Controller
         ]);
 
         return back()->with('success', 'TC PDF deleted.');
+    }
+
+    private function ensureTableColumnsExist(): void
+    {
+        if (!Schema::connection('dynamic')->hasTable('student_tc_files')) {
+            return;
+        }
+
+        Schema::connection('dynamic')->table('student_tc_files', function ($table) {
+            if (!Schema::connection('dynamic')->hasColumn('student_tc_files', 'student_name')) {
+                $table->string('student_name', 150)->nullable()->after('scholar_no');
+            }
+            if (!Schema::connection('dynamic')->hasColumn('student_tc_files', 'class_name')) {
+                $table->string('class_name', 100)->nullable()->after('student_name');
+            }
+            if (!Schema::connection('dynamic')->hasColumn('student_tc_files', 'section_name')) {
+                $table->string('section_name', 100)->nullable()->after('class_name');
+            }
+        });
+    }
+
+    private function getClassesAndSections(): array
+    {
+        $classes = collect();
+        $sections = collect();
+
+        if (Schema::connection('dynamic')->hasTable('classes')) {
+            $classes = DB::connection('dynamic')->table('classes')
+                ->whereNotNull('class_name')
+                ->where('class_name', '!=', '')
+                ->orderBy('class_name')
+                ->pluck('class_name')
+                ->unique()
+                ->values();
+
+            $sections = DB::connection('dynamic')->table('classes')
+                ->whereNotNull('section_name')
+                ->where('section_name', '!=', '')
+                ->orderBy('section_name')
+                ->pluck('section_name')
+                ->unique()
+                ->values();
+        }
+
+        if ($classes->isEmpty() && Schema::connection('dynamic')->hasTable('class_name')) {
+            $classes = DB::connection('dynamic')->table('class_name')
+                ->whereNotNull('class_name')
+                ->where('class_name', '!=', '')
+                ->orderBy('class_name')
+                ->pluck('class_name')
+                ->unique()
+                ->values();
+        }
+
+        if ($sections->isEmpty() && Schema::connection('dynamic')->hasTable('sections')) {
+            $sections = DB::connection('dynamic')->table('sections')
+                ->whereNotNull('section')
+                ->where('section', '!=', '')
+                ->orderBy('section')
+                ->pluck('section')
+                ->unique()
+                ->values();
+        }
+
+        return [$classes, $sections];
     }
 
     private function assertSafePath(string $filePath): string
@@ -221,9 +314,13 @@ class StudentTcFileController extends Controller
 
     private function addStudentSection($file)
     {
-        $details = json_decode($file->student_json ?? '{}', true) ?: [];
-        $file->section_name = $details['section_name'] ?? '';
-        unset($file->student_json);
+        if (!empty($file->tc_section_name)) {
+            $file->section_name = $file->tc_section_name;
+        } else {
+            $details = json_decode($file->student_json ?? '{}', true) ?: [];
+            $file->section_name = $details['section_name'] ?? '';
+        }
+        unset($file->student_json, $file->tc_section_name);
         return $file;
     }
 }
