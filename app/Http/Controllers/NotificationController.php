@@ -30,8 +30,7 @@ class NotificationController extends Controller
             ])->values(),
             'unreadCount' => AppNotification::query()
                 ->where('user_id', $user->getAuthIdentifier())
-                ->where('is_hidden', false)
-                ->where('is_read', false)
+                ->where('type', 'RTO_EXPIRY')
                 ->count(),
         ]);
     }

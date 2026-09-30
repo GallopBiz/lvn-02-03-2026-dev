@@ -195,8 +195,7 @@
           $notificationService = app(\App\Services\NotificationService::class);
           $notificationService->syncFor($notificationUser);
           $notificationUnreadCount = \App\Models\AppNotification::where('user_id', $notificationUser->getAuthIdentifier())
-              ->where('is_hidden', false)
-              ->where('is_read', false)
+              ->where('type', 'RTO_EXPIRY')
               ->count();
         @endphp
         <div class="col-md-3 align-items-center ">         
