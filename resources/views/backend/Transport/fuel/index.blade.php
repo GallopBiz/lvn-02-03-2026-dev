@@ -115,6 +115,16 @@
 
     #fuel-filter-form + .table-responsive {
         margin-top: 20px;
+        max-height: 65vh;
+        overflow-y: auto;
+    }
+
+    #fuel_entries_table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #f8f9fa;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.15);
     }
 
     @media (max-width: 991px) {
@@ -180,7 +190,7 @@
         <div class="fuel-entry-settings mb-4">
             <div class="card"><div class="card-body">
                 <h3>Vehicle Fuel Opening Odometer</h3>
-                <p class="text-muted">Select one vehicle and set its opening KM once.</p>
+                <p class="text-muted">Select a vehicle to set or edit its opening KM.</p>
                 <form method="POST" action="{{ route('transport.fuel.opening') }}">
                     @csrf
                     <div class="form-group mb-3"><label>Vehicle</label><select name="vehicle_id" id="opening_vehicle_id" class="form-control" required><option value="">Select Vehicle</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" data-opening="{{ $vehicle->fuel_opening_odometer }}">{{ $vehicle->vehicelno }}</option>@endforeach</select></div>
@@ -191,11 +201,23 @@
             <div class="card mt-4"><div class="card-body">
                 <h3>Fuel Stations</h3>
                 <form method="POST" action="{{ route('transport.fuel.station.store') }}" class="form-inline mb-3">@csrf<input name="name" class="form-control mr-2" placeholder="Station name" required><button class="btn btn-secondary">Add Station</button></form>
+                @if(count($stations) > 0)
+                    <div class="mt-2">
+                        <label class="d-block text-muted mb-2"><small>Created Stations:</small></label>
+                        <div class="d-flex flex-wrap" style="gap: 6px;">
+                            @foreach($stations as $station)
+                                <span class="fuel-station-badge">{{ $station->name }}</span>
+                            @endforeach
+                        </div>
+                    </div>
+                @else
+                    <p class="text-muted small mb-0">No fuel stations added yet.</p>
+                @endif
             </div></div>
         </div>
     </div>
 
-    <div class="card"><div class="card-body"><div class="d-flex justify-content-between align-items-center mb-3"><h3 class="mb-0">Fuel Entries</h3><input type="search" form="fuel-filter-form" name="search" class="form-control" style="max-width:280px" placeholder="Search entries..." value="{{ request('search') }}"></div><form id="fuel-filter-form" method="GET" action="{{ route('transport.fuel.index') }}"><div class="form-row align-items-end"><div class="form-group col-md-2"><label>From Date</label><input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}"></div><div class="form-group col-md-2"><label>To Date</label><input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}"></div><div class="form-group col-md-3"><label>Vehicle</label><select name="filter_vehicle_id" class="form-control"><option value="">All Vehicles</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected(request('filter_vehicle_id') == $vehicle->id)>{{ $vehicle->vehicelno }}</option>@endforeach</select></div><div class="form-group col-md-2"><label>Fuel Type</label><select name="filter_fuel_type" class="form-control"><option value="">All Types</option>@foreach($fuelTypes as $type => $unit)<option value="{{ $type }}" @selected(request('filter_fuel_type') === $type)>{{ $type }}</option>@endforeach</select></div><div class="form-group col-md-3"><button class="btn btn-primary mr-2">Filter</button><a href="{{ route('transport.fuel.index') }}" class="btn btn-light mr-2">Clear</a><a href="{{ route('transport.fuel.export', request()->except('page')) }}" class="btn btn-success">Export CSV</a></div></div></form><div class="table-responsive"><table class="table table-striped table-bordered"><thead><tr><th>S.No.</th><th>Date</th><th>Vehicle</th><th>Type</th><th>Quantity</th><th>Amount</th><th>Previous KM</th><th>Current KM</th><th>Distance</th><th>Average</th><th>Actions</th></tr></thead><tbody>@forelse($entries as $entry)<tr><td>{{ $entries->firstItem() + $loop->index }}</td><td>{{ \Carbon\Carbon::parse($entry->fuel_date)->format('d-m-Y') }}</td><td>{{ $entry->vehicelno }}</td><td>{{ $entry->fuel_type }}</td><td>{{ number_format($entry->quantity, 2) }} {{ $entry->quantity_unit }}</td><td>{{ number_format($entry->total_amount, 2) }}</td><td>{{ number_format($entry->previous_odometer, 2) }}</td><td>{{ number_format($entry->current_odometer, 2) }}</td><td>{{ number_format($entry->distance, 2) }}</td><td>{{ $entry->efficiency !== null ? number_format($entry->efficiency, 2).' KM/'.$entry->quantity_unit : 'N/A' }}</td><td class="text-nowrap"><a href="{{ route('transport.fuel.edit', $entry->id) }}" class="btn btn-sm btn-primary">Edit</a> <form method="POST" action="{{ route('transport.fuel.destroy', $entry->id) }}" class="d-inline" onsubmit="return confirm('Delete this fuel entry?');">@csrf @method('DELETE')<button type="submit" class="btn btn-sm btn-danger">Delete</button></form></td></tr>@empty<tr><td colspan="11" class="text-center">No fuel entries found.</td></tr>@endforelse</tbody><tfoot><tr class="font-weight-bold"><td colspan="5" class="text-right">Total</td><td>{{ number_format($totals->quantity, 2) }}</td><td>{{ number_format($totals->total_amount, 2) }}</td><td>{{ number_format($totals->previous_odometer, 2) }}</td><td>{{ number_format($totals->current_odometer, 2) }}</td><td>{{ number_format($totals->distance, 2) }}</td><td>{{ $totals->average !== null ? number_format($totals->average, 2).' KM' : 'N/A' }}</td><td></td></tr></tfoot></table></div><div class="d-flex flex-wrap justify-content-between align-items-center mt-3"><small class="text-muted">Showing {{ $entries->firstItem() ?? 0 }} to {{ $entries->lastItem() ?? 0 }} of {{ $entries->total() }} fuel entries (20 per page)</small>{{ $entries->onEachSide(1)->links() }}</div></div></div>
+    <div class="card"><div class="card-body"><div class="d-flex justify-content-between align-items-center mb-3"><h3 class="mb-0">Fuel Entries</h3><input type="search" form="fuel-filter-form" name="search" class="form-control" style="max-width:280px" placeholder="Search entries..." value="{{ request('search') }}"></div><form id="fuel-filter-form" method="GET" action="{{ route('transport.fuel.index') }}"><div class="form-row align-items-end"><div class="form-group col-md-2"><label>From Date</label><input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}"></div><div class="form-group col-md-2"><label>To Date</label><input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}"></div><div class="form-group col-md-3"><label>Vehicle</label><select name="filter_vehicle_id" class="form-control"><option value="">All Vehicles</option>@foreach($vehicles as $vehicle)<option value="{{ $vehicle->id }}" @selected(request('filter_vehicle_id') == $vehicle->id)>{{ $vehicle->vehicelno }}</option>@endforeach</select></div><div class="form-group col-md-2"><label>Fuel Type</label><select name="filter_fuel_type" class="form-control"><option value="">All Types</option>@foreach($fuelTypes as $type => $unit)<option value="{{ $type }}" @selected(request('filter_fuel_type') === $type)>{{ $type }}</option>@endforeach</select></div><div class="form-group col-md-3"><button class="btn btn-primary mr-2">Filter</button><a href="{{ route('transport.fuel.index') }}" class="btn btn-light mr-2">Clear</a><a href="{{ route('transport.fuel.export', request()->except('page')) }}" class="btn btn-success">Export CSV</a></div></div></form><div class="table-responsive"><table class="table table-striped table-bordered" id="fuel_entries_table"><thead><tr><th>S.No.</th><th>Date</th><th>Vehicle</th><th>Driver</th><th>Fuel Station</th><th>Type</th><th>Quantity</th><th>Amount</th><th>Previous KM</th><th>Current KM</th><th>Distance</th><th>Average</th><th>Actions</th></tr></thead><tbody>@forelse($entries as $entry)<tr><td>{{ $entries->firstItem() + $loop->index }}</td><td>{{ \Carbon\Carbon::parse($entry->fuel_date)->format('d-m-Y') }}</td><td>{{ $entry->vehicelno }}</td><td>{{ $entry->driver_name ?: 'N/A' }}</td><td>{{ $entry->station_name ?: 'N/A' }}</td><td>{{ $entry->fuel_type }}</td><td>{{ number_format($entry->quantity, 2) }} {{ $entry->quantity_unit }}</td><td>{{ number_format($entry->total_amount, 2) }}</td><td>{{ number_format($entry->previous_odometer, 0) }}</td><td>{{ number_format($entry->current_odometer, 0) }}</td><td>{{ number_format($entry->distance, 0) }}</td><td>{{ $entry->efficiency !== null ? number_format($entry->efficiency, 2).' KM/'.$entry->quantity_unit : 'N/A' }}</td><td class="text-nowrap"><a href="{{ route('transport.fuel.edit', $entry->id) }}" class="btn btn-sm btn-primary">Edit</a> <form method="POST" action="{{ route('transport.fuel.destroy', $entry->id) }}" class="d-inline" onsubmit="return confirm('Delete this fuel entry?');">@csrf @method('DELETE')<button type="submit" class="btn btn-sm btn-danger">Delete</button></form></td></tr>@empty<tr><td colspan="13" class="text-center">No fuel entries found.</td></tr>@endforelse</tbody><tfoot><tr class="font-weight-bold"><td colspan="6" class="text-right">Total</td><td>{{ number_format($totals->quantity, 2) }}</td><td>{{ number_format($totals->total_amount, 2) }}</td><td>{{ number_format($totals->previous_odometer, 0) }}</td><td>{{ number_format($totals->current_odometer, 0) }}</td><td>{{ number_format($totals->distance, 0) }}</td><td>{{ $totals->average !== null ? number_format($totals->average, 2).' KM' : 'N/A' }}</td><td></td></tr></tfoot></table></div><div class="mt-3">@include('backend.Transport.partials.datatables-pagination', ['paginator' => $entries, 'tableId' => 'fuel_entries_table'])</div></div></div>
 </div>
 <script>
 (function () {

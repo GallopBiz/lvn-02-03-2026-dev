@@ -5,6 +5,7 @@ namespace App\Http\Controllers\backend;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Models\HrmsEmployee;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -58,14 +59,7 @@ class FuelConsumptionController extends Controller
             $vehicle->fuel_previous_odometer = $latestOdometer?->current_odometer
                 ?? ($vehicle->fuel_opening_odometer ?? null);
         });
-        $drivers = $connection->table('busstaff')
-            ->where('is_delete', 0)
-            ->where(function ($query) {
-                $query->whereRaw('LOWER(role) = ?', ['driver'])
-                    ->orWhereRaw('LOWER(role) LIKE ?', ['%driver%']);
-            })
-            ->orderBy('ename')
-            ->get(['id', 'ename']);
+        $drivers = $this->getDrivers();
         $stations = $connection->table('fuel_stations')
             ->where('status', 1)
             ->orderBy('name')
@@ -151,15 +145,22 @@ class FuelConsumptionController extends Controller
         return DB::connection('dynamic')->table('fuel_entries as fuel')
             ->leftJoin('vehicel as vehicle', 'vehicle.id', '=', 'fuel.vehicle_id')
             ->leftJoin('fuel_stations as station', 'station.id', '=', 'fuel.fuel_station_id')
-            ->leftJoin('busstaff as driver', 'driver.id', '=', 'fuel.driver_id')
-            ->select('fuel.*', 'vehicle.vehicelno', 'station.name as station_name', 'driver.ename as driver_name')
+            ->leftJoin('hrms_employees as driver', 'driver.id', '=', 'fuel.driver_id')
+            ->leftJoin('busstaff as legacy_driver', 'legacy_driver.id', '=', 'fuel.driver_id')
+            ->select(
+                'fuel.*',
+                'vehicle.vehicelno',
+                'station.name as station_name',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(COALESCE(driver.first_name, ''), ' ', COALESCE(driver.last_name, ''))), ''), legacy_driver.ename) as driver_name")
+            )
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->input('search');
                 $query->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('vehicle.vehicelno', 'like', "%{$search}%")
                         ->orWhere('fuel.fuel_type', 'like', "%{$search}%")
                         ->orWhere('station.name', 'like', "%{$search}%")
-                        ->orWhere('driver.ename', 'like', "%{$search}%")
+                        ->orWhere(DB::raw("CONCAT(COALESCE(driver.first_name, ''), ' ', COALESCE(driver.last_name, ''))"), 'like', "%{$search}%")
+                        ->orWhere('legacy_driver.ename', 'like', "%{$search}%")
                         ->orWhere('fuel.bill_number', 'like', "%{$search}%");
                 });
             })
@@ -251,14 +252,7 @@ class FuelConsumptionController extends Controller
             ->where('is_delete', 0)
             ->orderBy('vehicelno')
             ->get(['id', 'vehicelno']);
-        $drivers = $connection->table('busstaff')
-            ->where('is_delete', 0)
-            ->where(function ($query) {
-                $query->whereRaw('LOWER(role) = ?', ['driver'])
-                    ->orWhereRaw('LOWER(role) LIKE ?', ['%driver%']);
-            })
-            ->orderBy('ename')
-            ->get(['id', 'ename']);
+        $drivers = $this->getDrivers();
         $stations = $connection->table('fuel_stations')
             ->where('status', 1)
             ->orderBy('name')
@@ -355,14 +349,44 @@ class FuelConsumptionController extends Controller
             'fuel_opening_odometer' => ['required', 'numeric', 'min:0'],
         ]);
         $connection = DB::connection('dynamic');
-        if ($connection->table('fuel_entries')->where('vehicle_id', $validated['vehicle_id'])->exists()) {
-            return back()->withErrors(['fuel_opening_odometer' => 'Opening odometer cannot be changed after a fuel entry has been recorded.']);
-        }
-        $connection->table('vehicel')->where('id', $validated['vehicle_id'])->where('is_delete', 0)->update([
-            'fuel_opening_odometer' => $validated['fuel_opening_odometer'],
-        ]);
+        $newOpening = (float) $validated['fuel_opening_odometer'];
 
-        return back()->with('success', 'Fuel opening odometer saved.');
+        // Find the earliest fuel entry for this vehicle (if any exist)
+        $firstEntry = $connection->table('fuel_entries')
+            ->where('vehicle_id', $validated['vehicle_id'])
+            ->orderBy('fuel_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->first();
+
+        if ($firstEntry) {
+            if ($newOpening > (float) $firstEntry->current_odometer) {
+                return back()->withInput()->withErrors([
+                    'fuel_opening_odometer' => 'Opening odometer cannot be greater than the first fuel entry\'s current odometer (' . number_format($firstEntry->current_odometer, 0) . ' KM).'
+                ]);
+            }
+
+            // Update first entry's starting odometer, recalculated distance & efficiency
+            $distance = round((float) $firstEntry->current_odometer - $newOpening, 2);
+            $quantity = (float) $firstEntry->quantity;
+            $efficiency = $quantity > 0 && $distance > 0 ? round($distance / $quantity, 3) : null;
+
+            $connection->table('fuel_entries')->where('id', $firstEntry->id)->update([
+                'previous_odometer' => $newOpening,
+                'distance' => $distance,
+                'efficiency' => $efficiency,
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Update vehicle opening odometer
+        $connection->table('vehicel')
+            ->where('id', $validated['vehicle_id'])
+            ->where('is_delete', 0)
+            ->update([
+                'fuel_opening_odometer' => $newOpening,
+            ]);
+
+        return back()->with('success', 'Fuel opening odometer updated successfully.');
     }
 
     public function stationStore(Request $request)
@@ -456,5 +480,25 @@ class FuelConsumptionController extends Controller
                 $table->index('fuel_type');
             });
         }
+    }
+
+    private function getDrivers()
+    {
+        $drivers = HrmsEmployee::with('position')
+            ->whereHas('position', function ($query) {
+                $query->whereRaw('LOWER(position_name) = ?', ['driver']);
+            })
+            ->where('employee_status', 'active')
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        return $drivers->map(function ($driver) {
+            $name = trim(($driver->first_name ?? '') . ' ' . ($driver->last_name ?? ''));
+            return (object) [
+                'id' => $driver->id,
+                'ename' => $name,
+            ];
+        });
     }
 }
