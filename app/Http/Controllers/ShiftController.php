@@ -83,6 +83,19 @@ class ShiftController extends Controller
             ->paginate(20, ['*'], 'histories_page')
             ->appends($request->only(['department_id', 'position_id', 'staff_type_id', 'employee_status', 'recent_search']));
 
+        if ($request->ajax()) {
+            $html = view('backend.HRMS.shifts.history', compact(
+                'departments',
+                'employees',
+                'positions',
+                'recentHistories',
+                'shifts',
+                'staffTypes'
+            ))->render();
+
+            return response()->json(['html' => $html]);
+        }
+
         return view('backend.HRMS.shifts.history', compact(
             'departments',
             'employees',

@@ -62,6 +62,28 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
 <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            if (sessionStorage.getItem('shifts_search_focused') === 'true') {
+                searchInput.focus();
+                const val = searchInput.value;
+                searchInput.value = '';
+                searchInput.value = val;
+                sessionStorage.removeItem('shifts_search_focused');
+            }
+
+            let searchDebounce;
+            searchInput.addEventListener('input', function () {
+                sessionStorage.setItem('shifts_search_focused', 'true');
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(function () {
+                    searchInput.closest('form').submit();
+                }, 400);
+            });
+        }
+    });
+
     function confirmDelete(event) {
         event.preventDefault(); // Prevents the default form submission
         Swal.fire({
