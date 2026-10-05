@@ -2,8 +2,8 @@
 @section('main-container')
     <div class="main-content">
 		<div class="breadcrumb">
-			@role('Student')
-			<h1 class="me-2">Student Panel</h1>			@endrole
+			@if(auth()->check() && (auth()->user()->hasRole('Student') || !auth()->user()->hasRole('Admin')))
+			<h1 class="me-2">Student Panel</h1>			@endif
 			
 			@role('Admin')
 			<h1 class="me-2">Admin Panel</h1>
@@ -571,7 +571,7 @@
         </div>
 		@endrole
 		
-@role('Student')
+@if(auth()->check() && (auth()->user()->hasRole('Student') || !auth()->user()->hasRole('Admin')))
 <div class="row">          
     <div class="col-lg-12 col-md-12">
         <div class="row"> 
@@ -616,7 +616,7 @@
         </div>
     </div>
 </div>
-@endrole
+@endif
 
 
 		

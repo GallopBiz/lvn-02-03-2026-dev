@@ -53,4 +53,20 @@ class StudentPanelController extends Controller
         // Redirect with a success message
         return redirect()->route('student.profile')->with('success', 'Password updated successfully.');
     }
+
+    /**
+     * Show student calendar
+     */
+    public function student_calender()
+    {
+        return view('backend.student_panel.calender');
+    }
+
+    /**
+     * Show student announcement
+     */
+    public function student_announcement()
+    {
+        return view('backend.student_panel.student_announcement');
+    }
 }

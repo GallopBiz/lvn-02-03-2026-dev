@@ -378,8 +378,14 @@
                 class="dropdown-menu dropdown-menu-right"
                 aria-labelledby="userDropdown"
               >
+                @php
+                  $isStaffRequest = request()->is('staff*') || request()->is('*staff*') || request()->routeIs('staff.*');
+                  $headerUser = ($isStaffRequest && Auth::guard('staff')->check())
+                      ? Auth::guard('staff')->user()
+                      : (Auth::guard('web')->check() ? Auth::guard('web')->user() : (Auth::guard('staff')->user() ?? Auth::user()));
+                @endphp
                 <div class="dropdown-header">
-                  <i class="i-Lock-User me-1"></i> {{ optional(Auth::user())->student_name ?? optional(Auth::user())->name ?? 'User' }}
+                  <i class="i-Lock-User me-1"></i> {{ optional($headerUser)->student_name ?? optional($headerUser)->name ?? 'User' }}
                 </div>
                 <!-- <a class="dropdown-item" href="signin.html">Sign out</a> -->
 

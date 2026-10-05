@@ -64,7 +64,7 @@ $(document).ready(function () {
 
   // Prevent opeing link if has data-item
   $sidebarLeft.find(".nav-item").on("click", function (e) {
-    var $navItem = $(event.currentTarget);
+    var $navItem = $(e.currentTarget);
     var dataItem = $navItem.data("item");
     if (dataItem) {
       e.preventDefault();

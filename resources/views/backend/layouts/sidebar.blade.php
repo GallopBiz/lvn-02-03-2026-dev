@@ -15,7 +15,28 @@ $staffUser = Auth::guard('staff')->user();
 			@php
 			// use App\Models\RoleMenu; // Already imported at the top
 			// Use correct user object for staff or default
-			$user = Auth::guard('staff')->check() ? Auth::guard('staff')->user() : auth()->user();
+			if (!function_exists('isStaffRouteRequest')) {
+				function isStaffRouteRequest() {
+					return request()->is('staff*') || request()->is('*staff*') || request()->routeIs('staff.*');
+				}
+			}
+
+			if (!function_exists('getSidebarUser')) {
+				function getSidebarUser() {
+					if (isStaffRouteRequest() && Auth::guard('staff')->check()) {
+						return Auth::guard('staff')->user();
+					}
+					if (Auth::guard('web')->check()) {
+						return Auth::guard('web')->user();
+					}
+					if (Auth::guard('staff')->check()) {
+						return Auth::guard('staff')->user();
+					}
+					return auth()->user();
+				}
+			}
+
+			$user = getSidebarUser();
 			function getRoleNameForUser($user) {
 				if (!$user) return null;
 
@@ -82,7 +103,8 @@ $staffUser = Auth::guard('staff')->user();
 					return '#';
 				}
 
-				$route = Auth::guard('staff')->check() && isset($item['staff_route'])
+				$isStaffUser = isStaffRouteRequest() || (Auth::guard('staff')->check() && !Auth::guard('web')->check());
+				$route = $isStaffUser && isset($item['staff_route'])
 					? $item['staff_route']
 					: ($item['route'] ?? '#');
 
@@ -95,12 +117,30 @@ $staffUser = Auth::guard('staff')->user();
 				$menu = !empty($allowedMenu)
 					? filterMenuByAllowed(config('sidebar'), $allowedMenu)
 					: filterMenuByRoleName(config('sidebar'), getRoleNameForUser($user)); // Fallback to role defaults if menu mapping is missing
+
+				// Ensure Dashboard menu is always present in sidebar for Student / non-admin users
+				$hasDashboard = false;
+				foreach ($menu as $mItem) {
+					if (strtolower($mItem['title'] ?? '') === 'dashboard') {
+						$hasDashboard = true;
+						break;
+					}
+				}
+				if (!$hasDashboard) {
+					array_unshift($menu, [
+						'title' => 'Dashboard',
+						'route' => 'admin-dashboard',
+						'icon' => 'i-Bar-Chart',
+						'permission' => 'dashboard',
+						'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
+					]);
+				}
 			}
 			@endphp
 
 
 			@foreach ($menu as $item)
-				<li class="nav-item" data-item="{{ strtolower($item['title']) }}">
+				<li class="nav-item" @if(!empty($item['children'])) data-item="{{ strtolower($item['title']) }}" @endif>
 					<a class="nav-item-hold" href="{{ menuItemUrl($item) }}">
 						<i class="nav-icon {{ $item['icon'] ?? '' }}"></i>
 						<span class="nav-text">

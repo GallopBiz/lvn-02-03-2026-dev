@@ -261,7 +261,22 @@ Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(functi
     Route::get('delete-teacher-remark-entry/{id}', [TeacherRemarkEntryController::class, 'destroy'])->name('delete-teacher-remark-entry');
 });
 
-Route::group(['middleware' => ['auth']], function() {
+Route::middleware(['auth:web'])->group(function() {
+    Route::get('student_calender', [StudentPanelController::class, 'student_calender'])->name('student_calender');
+    Route::get('student_fees_leadger', [FeesreceiptchallanController::class, 'student_fees_leadger'])->name('student_fees_leadger');
+    Route::get('student_announcement', [StudentPanelController::class, 'student_announcement'])->name('student_announcement');
+    Route::get('razorpay-payment', [RazorpayPaymentController::class, 'index']);
+    Route::post('razorpay-payment', [RazorpayPaymentController::class, 'store'])->name('razorpay.payment.store');
+    Route::post('/student/update-password', [App\Http\Controllers\student\StudentPanelController::class, 'updatePassword'])->name('student.update-password');
+});
+
+Route::middleware(['auth'])->group(function() {
+    Route::get('admin-dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
+    Route::get('/Dashboard ', [RegistrationController::class, 'dashboard'])->name('dashboard');
+    Route::get('/route-vehicle-map', [RouteVehicleMapController::class, 'index'])->name('backend.route.vehicle.map');
+});
+
+Route::group(['middleware' => ['auth', 'admin']], function() {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/{id}/hide', [NotificationController::class, 'hide'])->name('notifications.hide');
@@ -274,11 +289,6 @@ Route::group(['middleware' => ['auth']], function() {
     Route::get('delete-permission/{id}', [UserPermissionController::class, 'bs_soft_delete']);
     // Route::resource('products', ProductController::class);
     /*Admin Routes*/
-    Route::get('admin-dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
-
-
-
-    Route::get('/Dashboard ',[RegistrationController::class, 'dashboard'])->name('dashboard');
 	//Route::get('bonafide', [BonafideCertificateController::class, 'index']);
 	//Route::get('bonafide-certificate', [BonafideCertificateController::class, 'showForm']);
 	Route::get('inquiry-report', [InquiryReportController::class, 'inquiryreport'])->name('inquiry.report');
@@ -1091,18 +1101,8 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('getNewDestination', [MapController::class, 'getNewDestination'])->name('getNewDestination');
     Route::post('filterstuaddre',[MapController::class, 'stuaddress'])->name('filterstuaddre');
 
-    //student panel
-    Route::get('student_calender',[StudentPanelController::class,'student_calender'])->name('student_calender');
-    Route::get('student_fees_leadger',[FeesreceiptchallanController::class,'student_fees_leadger'])->name('student_fees_leadger');
-    Route::get('student_announcement',[StudentPanelController::class,'student_announcement'])->name('student_announcement');
-
     Route::get('session',[SessionController::class,'index'])->name('session');
     Route::post('create-session',[SessionController::class,'create'])->name('create_session');
-
-
-    Route::get('razorpay-payment', [RazorpayPaymentController::class, 'index']);
-    Route::post('razorpay-payment', [RazorpayPaymentController::class, 'store'])->name('razorpay.payment.store');
-	Route::post('/student/update-password', [App\Http\Controllers\student\StudentPanelController::class, 'updatePassword'])->name('student.update-password');
 
 
 	// upload bulk student photo
@@ -1352,7 +1352,6 @@ Route::get('/basicDeduction/fetch', [BasicDeductionsController::class, 'fetchDed
 
 	// show all bus routes
 	Route::get('/routes', [RouteMasterController::class, 'index'])->name('backend.routes.index');
-	Route::get('/route-vehicle-map', [RouteVehicleMapController::class, 'index'])->name('backend.route.vehicle.map');
 
     // Custom GPS tracking endpoint for SML buses
     Route::get('/gps/sml/{vehicleNo}', [SmlBusGpsController::class, 'track'])->name('smlbus.gps.track');
