@@ -31,15 +31,26 @@ class RouteVehicleMapController extends Controller
         $routeVehicleMap = [];
 
         $user = auth()->user();
-        $sessionId = Auth::user()->id;
+        $sessionId = Auth::guard('web')->id() ?? ($user ? $user->id : null);
 
-        // ✅ Check if current user is student with required transport
-        $student = DB::connection('dynamic')->table('student_registration')
-            ->where('id', $sessionId)
-            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.required_school_transport')) = '1'")
-            ->first();
+        // Check if current user is a student in their logged-in student portal (web guard user where type != 'a')
+        $isStudentPortalUser = Auth::guard('web')->check() && 
+            strtolower(trim(Auth::guard('web')->user()->type ?? '')) !== 'a' && 
+            !Auth::guard('staff')->check();
 
-        if ($student || !($user->hasRole('Student'))) {
+        if ($isStudentPortalUser && $sessionId) {
+            $studentHasTransport = DB::connection('dynamic')->table('student_registration')
+                ->where('id', $sessionId)
+                ->whereRaw("TRIM(JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.required_school_transport'))) IN ('1', 1)")
+                ->exists();
+
+            if (!$studentHasTransport) {
+                return redirect()->route('admin.dashboard')->with('error', 'You have not opted for the Bus Facility.');
+            }
+        }
+
+        // Fetch active vehicles for routes
+        if (true) {
             // ✅ Fetch only active vehicles (is_delete = 0)
             $vehicles = DB::connection('dynamic')->table('vehicel')
                 ->select('vehicelno', 'gps_tracking_url')

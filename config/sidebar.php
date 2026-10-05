@@ -11,19 +11,19 @@ return [
         'title' => 'Scholars',
         'icon' => 'i-Student-Hat-2',
         'permission' => 'scholars',
-        'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
+        'roles' => ['Admin', 'Academic Staff (Teacher)'],
         'children' => [
             [
                 'title' => 'Pre-Admission',
                 'icon' => 'i-File-Clipboard-Text--Image',
                 'permission' => 'scholars',
                 'children' => [
-                    [ 'title' => 'Pre-Enquiry Entry', 'route' => 'admin-preenquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Pre-Enquiry List', 'route' => 'admin-pre-enquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Enquiry Entry', 'route' => 'admin-enquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Enquiry List', 'route' => 'adminenquirylist', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Follow-Up Scheduling', 'route' => 'followupdate', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Selection Process', 'route' => 'selection-process', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Pre-Enquiry Entry', 'route' => 'admin-preenquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Pre-Enquiry List', 'route' => 'admin-pre-enquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Enquiry Entry', 'route' => 'admin-enquiryform', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Enquiry List', 'route' => 'adminenquirylist', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Follow-Up Scheduling', 'route' => 'followupdate', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Selection Process', 'route' => 'selection-process', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
                 ],
             ],
             [
@@ -31,8 +31,8 @@ return [
                 'icon' => 'i-Add-User',
                 'permission' => 'scholars',
                 'children' => [
-                    [ 'title' => 'Student Registration', 'route' => 'add-student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
-                    [ 'title' => 'Registration List', 'route' => 'student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Student Registration', 'route' => 'add-student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
+                    [ 'title' => 'Registration List', 'route' => 'student-registrations', 'permission' => 'scholars', 'roles' => ['Admin', 'Academic Staff (Teacher)'] ],
                 ],
             ],
             [
@@ -58,7 +58,7 @@ return [
         'route' => 'fees',
         'icon' => 'i-Money-2',
         'permission' => 'fees',
-        'roles' => ['Admin', 'Student', 'Academic'],
+        'roles' => ['Admin', 'Academic'],
         'children' => [
             [
                 'title' => 'Collection',

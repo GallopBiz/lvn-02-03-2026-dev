@@ -13,8 +13,6 @@ $staffUser = Auth::guard('staff')->user();
 		<ul class="navigation-left">
 
 			@php
-			// use App\Models\RoleMenu; // Already imported at the top
-			// Use correct user object for staff or default
 			if (!function_exists('isStaffRouteRequest')) {
 				function isStaffRouteRequest() {
 					return request()->is('staff*') || request()->is('*staff*') || request()->routeIs('staff.*');
@@ -37,29 +35,40 @@ $staffUser = Auth::guard('staff')->user();
 			}
 
 			$user = getSidebarUser();
-			function getRoleNameForUser($user) {
-				if (!$user) return null;
 
-				if (method_exists($user, 'getRoleNames')) {
+			// Check if current logged-in user is a Student (web guard user where type != 'a')
+			$isStudentUser = Auth::guard('web')->check() && strtolower(trim(Auth::guard('web')->user()->type ?? '')) !== 'a';
+
+			if ($isStudentUser) {
+				$isAdmin = false;
+				$roleName = 'Student';
+			} else {
+				$roleName = null;
+				if ($user && method_exists($user, 'getRoleNames')) {
 					$roleName = $user->getRoleNames()->first();
-					if (!empty($roleName)) {
-						return $roleName;
-					}
 				}
-
-				return $user->role ?? null;
+				if (empty($roleName) && $user) {
+					$roleName = $user->role ?? null;
+				}
+				$isAdmin = $user && (
+					($roleName === 'Admin') ||
+					(method_exists($user, 'hasRole') && $user->hasRole('Admin')) ||
+					(isset($user->type) && strtolower(trim($user->type)) === 'a')
+				);
 			}
 
-			$isAdmin = $user && ((method_exists($user, 'hasRole') && $user->hasRole('Admin')) || getRoleNameForUser($user) === 'Admin');
-			function getAllowedMenuForUser($user) {
+			function getAllowedMenuForUser($user, $roleName = null, $isStudentUser = false) {
 				if (!$user) return [];
-				$roleName = getRoleNameForUser($user);
-				if (!$roleName) return [];
+				if (!$roleName) {
+					$roleName = getRoleNameForUser($user);
+				}
+				if ($isStudentUser || !$roleName || $roleName === 'Student') return []; // Students do not use DB role_menus
 				$roleId = \DB::table('roles')->where('name', $roleName)->value('id');
 				if (!$roleId) return [];
 				$roleMenu = \App\Models\RoleMenu::where('role_id', $roleId)->first();
 				return $roleMenu ? json_decode($roleMenu->menu, true) : [];
 			}
+
 			function filterMenuByAllowed($menu, $allowed, $prefix = '') {
 				$filtered = [];
 				foreach ($menu as $item) {
@@ -81,23 +90,31 @@ $staffUser = Auth::guard('staff')->user();
 				}
 				return $filtered;
 			}
+
 			function filterMenuByRoleName($menu, $roleName) {
 				$filtered = [];
 				foreach ($menu as $item) {
 					$roles = $item['roles'] ?? [];
-					$roleAllowed = empty($roles) || in_array($roleName, $roles);
-					$children = !empty($item['children']) ? filterMenuByRoleName($item['children'], $roleName) : [];
 
-					if ($roleAllowed || $children) {
-						$filteredItem = $item;
-						if (!empty($item['children'])) {
-							$filteredItem['children'] = $children;
-						}
-						$filtered[] = $filteredItem;
+					// Explicit roles check: roleName MUST be in $roles if $roles is non-empty
+					if (!empty($roles) && !in_array($roleName, $roles)) {
+						continue;
 					}
+
+					$filteredItem = $item;
+					if (!empty($item['children'])) {
+						$children = filterMenuByRoleName($item['children'], $roleName);
+						if (empty($children)) {
+							continue;
+						}
+						$filteredItem['children'] = $children;
+					}
+
+					$filtered[] = $filteredItem;
 				}
 				return $filtered;
 			}
+
 			function menuItemUrl($item) {
 				if (!empty($item['children'])) {
 					return '#';
@@ -110,15 +127,15 @@ $staffUser = Auth::guard('staff')->user();
 
 				return $route === '#' ? '#' : url($route);
 			}
+
 			if ($isAdmin) {
 				$menu = config('sidebar'); // Admin sees all menu items
 			} else {
-				$allowedMenu = getAllowedMenuForUser($user);
+				$allowedMenu = getAllowedMenuForUser($user, $roleName, $isStudentUser);
 				$menu = !empty($allowedMenu)
 					? filterMenuByAllowed(config('sidebar'), $allowedMenu)
-					: filterMenuByRoleName(config('sidebar'), getRoleNameForUser($user)); // Fallback to role defaults if menu mapping is missing
-
-				// Ensure Dashboard menu is always present in sidebar for Student / non-admin users
+					: filterMenuByRoleName(config('sidebar'), $roleName);
+				
 				$hasDashboard = false;
 				foreach ($menu as $mItem) {
 					if (strtolower($mItem['title'] ?? '') === 'dashboard') {
@@ -162,19 +179,15 @@ $staffUser = Auth::guard('staff')->user();
 		data-suppress-scroll-x="true">
 
 		   @php
-		   // Use the same menu filtering logic as the left sidebar
-		   // Functions are already defined above, just reuse the $menu variable
 		   if (!isset($menu)) {
 			   if ($isAdmin) {
 				   $menu = config('sidebar');
 			   } else {
-				   $allowedMenu = getAllowedMenuForUser($user);
+				   $allowedMenu = getAllowedMenuForUser($user, $roleName, $isStudentUser);
 				   $menu = filterMenuByAllowed(config('sidebar'), $allowedMenu);
 			   }
 		   }
 		   @endphp
-
-
 
 		   @foreach($menu as $item)
 			   @if (isset($item['children']) && count($item['children']))
