@@ -1,12 +1,15 @@
 <style>
-    @page { size: A4 landscape; margin: 5mm; }
+    @page { size: A4 landscape; margin: 8mm 12mm; }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 13px; color: #000; }
 
     .page {
         width: 100%;
-        height: 200mm;
+        height: 194mm;
+        max-height: 194mm;
+        overflow: hidden;
         page-break-inside: avoid;
+        page-break-after: always;
     }
 
     /* Dompdf-safe 2x2 landscape layout (tables render reliably) */
@@ -14,7 +17,7 @@
         width: 100%;
         height: 100%;
         border-collapse: separate;
-        border-spacing: 5mm;
+        border-spacing: 4mm;
         table-layout: fixed;
         page-break-inside: avoid;
     }
@@ -23,28 +26,28 @@
     .bulk-table tr { height: 50%; }
     .bulk-td { width: 50%; height: 50%; vertical-align: top; }
 
-    .admit-card { border: 2px solid #000; padding: 8px 10px; position: relative; overflow: hidden; page-break-inside: avoid; }
-    .admit-card:before { content: ''; position: absolute; inset: 4px; border: 1px solid #000; pointer-events: none; }
+    .admit-card { border: 2px solid #000; padding: 6px 10px; position: relative; overflow: hidden; page-break-inside: avoid; }
+    .admit-card:before { content: ''; position: absolute; inset: 3px; border: 1px solid #000; pointer-events: none; }
     .admit-card-inner { position: relative; z-index: 1; }
 
-    .admit-card.bulk-card { height: 100%; padding: 8px 10px; }
-    .admit-card.single-card { width: 50%; height: 86mm; padding: 8px 10px; margin: 0 auto; }
+    .admit-card.bulk-card { height: 100%; padding: 6px 10px; display: flex; flex-direction: column; justify-content: space-between; }
+    .admit-card.single-card { width: 48%; max-width: 130mm; height: 90mm; padding: 8px 12px; margin: 10mm auto; }
 
-    .school-logo { display: block; width: 82%; max-width: 330px; height: auto; margin: 0 auto 3px auto; }
-    .exam-title { text-align: center; font-weight: 700; margin: 10px 0; font-size: 14px; text-transform: uppercase; }
-    .sub-title { text-align: center; font-weight: 700; margin: 4px 0 8px 0; font-size: 16px; letter-spacing: 1px; text-decoration: underline; }
+    .school-logo { display: block; width: 78%; max-width: 290px; height: auto; margin: 0 auto 2px auto; }
+    .exam-title { text-align: center; font-weight: 700; margin: 4px 0 2px 0; font-size: 14px; text-transform: uppercase; }
+    .sub-title { text-align: center; font-weight: 700; margin: 2px 0 6px 0; font-size: 15px; letter-spacing: 1px; text-decoration: underline; }
 
-    .details p { margin: 6px 0; font-size: 14px; font-weight: 700; }
-    .details .row-line { display: flex; justify-content: space-between; gap: 10px; }
+    .details p { margin: 4px 0; font-size: 13px; font-weight: 700; }
+    .details .row-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     .details .row-line span { display: inline-block; }
 
-    .room-box { display: inline-block; border: 2px solid #000; padding: 2px 10px; font-size: 18px; font-weight: 700; line-height: 1.1; min-width: 60px; text-align: center; }
+    .room-box { display: inline-block; border: 2px solid #000; padding: 1px 8px; font-size: 15px; font-weight: 700; line-height: 1.1; min-width: 48px; text-align: center; }
 
-    .installment-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+    .installment-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
     .installment-grid { border-collapse: collapse; }
-    .installment-grid td { border: 1px solid #000; width: 40px; height: 28px; text-align: center; font-size: 14px; font-weight: 700; }
+    .installment-grid td { border: 1px solid #000; width: 34px; height: 22px; text-align: center; font-size: 12px; font-weight: 700; }
 
-    .sign-row { margin-top: 50px; display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
+    .sign-row { margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
     .sign-row span { width: 33.333%; }
     .sign-row span:nth-child(1) { text-align: left; }
     .sign-row span:nth-child(2) { text-align: center; }
@@ -52,24 +55,28 @@
 
     /* card scaling for bulk and single-student print */
     .bulk-card .school-logo,
-    .single-card .school-logo { width: 82%; max-width: 330px; }
+    .single-card .school-logo { width: 78%; max-width: 290px; }
     .bulk-card .exam-title,
-    .single-card .exam-title { font-size: 18px; }
+    .single-card .exam-title { font-size: 14px; }
     .bulk-card .sub-title,
-    .single-card .sub-title { font-size: 15px; margin-bottom: 7px; }
+    .single-card .sub-title { font-size: 14px; margin-bottom: 5px; }
     .bulk-card .details p,
-    .single-card .details p { font-size: 13px; margin: 5px 0; }
+    .single-card .details p { font-size: 13px; margin: 4px 0; }
     .bulk-card .room-box,
-    .single-card .room-box { font-size: 16px; min-width: 54px; padding: 2px 8px; }
+    .single-card .room-box { font-size: 15px; min-width: 48px; padding: 1px 6px; }
     .bulk-card .installment-row,
-    .single-card .installment-row { font-size: 12px; margin-top: 8px; }
+    .single-card .installment-row { font-size: 12px; margin-top: 6px; }
     .bulk-card .installment-grid td,
-    .single-card .installment-grid td { width: 36px; height: 24px; font-size: 12px; }
+    .single-card .installment-grid td { width: 34px; height: 22px; font-size: 11px; }
     .bulk-card .sign-row,
-    .single-card .sign-row { margin-top: 28px; font-size: 11px; }
+    .single-card .sign-row {
+        margin-top: 60px;
+        font-size: 11px;
+    }
 
     @media print {
         .page-break { page-break-after: always; }
+        .page:last-child { page-break-after: avoid; }
     }
 </style>
 

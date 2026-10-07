@@ -19,10 +19,16 @@
 
 <style>
     @media print {
+        @page {
+            size: A4 landscape;
+            margin: 8mm 12mm !important;
+        }
         html, body {
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
+            height: 100% !important;
+            overflow: hidden !important;
         }
         .app-admin-wrap,
         .main-content-wrap,
@@ -43,22 +49,21 @@
         .text-center {
             display: none !important;
         }
-        body * { visibility: hidden; }
-        #printme, #printme * { visibility: visible; }
+        body * {
+            visibility: hidden !important;
+        }
+        #printme, #printme * {
+            visibility: visible !important;
+        }
         #printme {
             display: block !important;
-            position: static !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
         }
-        #printme .exam-title { font-size: 20px !important; }
-        #printme .sub-title { font-size: 17px !important; }
-        #printme .details p { font-size: 15px !important; }
-        #printme .room-box { font-size: 18px !important; }
-        #printme .installment-row { font-size: 14px !important; }
-        #printme .installment-grid td { font-size: 14px !important; }
-        #printme .sign-row { font-size: 12px !important; }
     }
 </style>
 

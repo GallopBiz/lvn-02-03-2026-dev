@@ -22,14 +22,14 @@
 
 <div class="main-content">
     <div class="breadcrumb">
-        <h1 class="me-2">Grading Master</h1>
+        <h1 class="me-2">Overall Grade</h1>
     </div>
 
     <div class="separator-breadcrumb border-top"></div>
 
     <div class="row">
         <div class="col-md-6 mb-4">
-            <h4>Set Grading Scheme Here :-</h4>
+            <h4>Set Overall Grade Scheme Here :-</h4>
 
             <div class="separator-breadcrumb border-top"></div>
             <form id="progress-form" class="p-4 progress-form" action="{{ !empty($editingGrade) ? url('store-gradingmaster') : url('save-gradingmaster') }}" method="post">
@@ -143,7 +143,7 @@
     <div class="row">
         <div class="col-md-12 mb-4">
             <div class="breadcrumb">
-                <h1 class="me-2">List of Saved Records :-</h1>
+                <h1 class="me-2">List of Overall Grades :-</h1>
             </div>
             <div class="separator-breadcrumb border-top"></div>
 

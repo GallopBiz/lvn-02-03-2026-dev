@@ -24,7 +24,7 @@ $i = 0;
 
     <div class="row">
         <div class="col-md-6 mb-4">
-            <h4>Set Grades :-</h4>
+            <h4>Individual Subject Grade Setup :-</h4>
 
 
             <div class="separator-breadcrumb border-top"></div>
@@ -45,7 +45,7 @@ $i = 0;
 
 
 
-                     <h5>Co-Scholastic Areas :-</h5>
+                     <h5>Individual Subject Grade Details :-</h5>
                      {{-- <div class="col-md-3 form-group mb-3">
                       <label for="min_per">Min %</label>
                       <input name="min_per" class="form-control" id="min_per" type="text"/>
@@ -79,7 +79,7 @@ $i = 0;
          
          
                      <div class="col-md-3 form-group mb-3">
-                         <label for="min_per">Type Grade</label>
+                         <label for="termigradedicipline">Grade</label>
                          <input class="form-control" id="termigradedicipline" name="termigradedicipline" type="text" @if(!empty($stream_master)) @foreach($stream_master as $streammaster) value="{{ $streammaster->termigradedicipline }}" @endforeach @else value="" @endif placeholder="A1" />
                      </div>
          
@@ -172,7 +172,7 @@ $i = 0;
 
     <div class="col-md-12 mb-4">
         <div class="breadcrumb">
-            <h1 class="me-2">List of Saved Records :-</h1>
+            <h1 class="me-2">List of Individual Subject Grades :-</h1>
         </div>
         <div class="separator-breadcrumb border-top"></div>
 
