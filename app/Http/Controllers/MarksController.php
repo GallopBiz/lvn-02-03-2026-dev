@@ -76,7 +76,7 @@ class MarksController extends Controller
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
         }
-        $this->applyPtMarksConversionToRequest($request);
+        // $this->applyPtMarksConversionToRequest($request);
         $this->applyTotalMarksRoundingToRequest($request);
         $this->applyGradesToRequest($request);
 
@@ -144,16 +144,19 @@ class MarksController extends Controller
 
             if ($classLevel >= 11) {
                 if (!$hasSubjectAssignments) {
-                    return ['students' => []];
+                    // return ['students' => []];
                 }
-                $shouldApplyCombinationFilter = true;
+                $shouldApplyCombinationFilter = $hasSubjectAssignments;
             } else {
                 $shouldApplyCombinationFilter = $hasSubjectAssignments;
             }
         }
 
         $studentsQuery = DB::connection('dynamic')->table('student_registration')
-            ->where('is_archived', 0)
+            ->where(function ($query) {
+                $query->where('is_archived', 0)
+                    ->orWhereNull('is_archived');
+            })
             ->where(function ($query) use ($classId, $className) {
                 $query->where('class_id', $classId)
                     ->orWhere('class_name', $className);
@@ -197,23 +200,11 @@ class MarksController extends Controller
     }
 
     public function grade_percentage(Request $request) {
-        $percentage = $request->post('percentage');
+        $percentage = (float) ($request->post('percentage') ?? 0);
+        $maxMarks = (float) ($request->post('max_marks') ?? 0);
+        $data = $this->gradeFromMaster($percentage, $maxMarks);
 
-        $arr = DB::connection('dynamic')->table('grademaster')->where('is_delete','=',0)->get();
-        $data = "";
-
-        foreach ($arr as $range) {
-            $min = $range->min_per;
-            $max = $range->max_per;
-            $grade = $range->grade;
-
-            if ($percentage >= $min && $percentage <= $max) {
-                $data = $grade;
-                break;  // Break out of the loop once a match is found
-            }
-        }
-
-        return json_encode($data);
+        return response()->json($data);
     }
 
 
@@ -236,7 +227,10 @@ class MarksController extends Controller
         $marksData = DB::connection('dynamic')->table($studentMarksTable)
             ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
             ->where($studentMarksTable . '.marks_id', $stream_master->id)
-            ->where('student_registration.is_archived', 0)
+            ->where(function ($query) {
+                $query->where('student_registration.is_archived', 0)
+                    ->orWhereNull('student_registration.is_archived');
+            })
             ->select($studentMarksTable . '.*', 'student_registration.*') // Add fields as needed
             ->get();
         $rollMap = $this->studentRollMap($classlist->class_name ?? '', $stream_master->section_name ?? '', $stream_master->exam_id ?? null);
@@ -278,7 +272,7 @@ class MarksController extends Controller
         if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
             return response()->json(['status' => 'error', 'message' => $message], 422);
         }
-        $this->applyPtMarksConversionToRequest($request);
+        // $this->applyPtMarksConversionToRequest($request);
         $this->applyTotalMarksRoundingToRequest($request);
         $this->applyGradesToRequest($request);
 
@@ -407,7 +401,10 @@ class MarksController extends Controller
                 ->where('previosly_saved_marks_entry.class_name', '=', $class_name)
                 ->where('previosly_saved_marks_entry.section_name', '=', $section_name)
                 ->Where('previosly_saved_marks_entry.exam_name', '=', $term_name)
-                ->where('student_registration.is_archived', 0)
+                ->where(function ($query) {
+                    $query->where('student_registration.is_archived', 0)
+                        ->orWhereNull('student_registration.is_archived');
+                })
                 ->get();
         $class_teacher = DB::connection('dynamic')->table('teacher_subjects')->select('teacher_name')
         ->where('class_name','=',$class_name)
@@ -444,20 +441,7 @@ class MarksController extends Controller
     }
 
     public function check_grade($number){
-        $arr = DB::connection('dynamic')->table('grademaster')->where('is_delete','=','0')->get();
-        $data = "";
-
-        foreach ($arr as $range) {
-            $min = $range->min_per;
-            $max = $range->max_per;
-            $grade = $range->grade;
-
-            if ($number >= $min && $number <= $max) {
-                $data = $grade;
-                break;  // Break out of the loop once a match is found
-            }
-        }
-        return $data;
+        return $this->gradeFromMaster((float) $number, 100);
     }
 
     private function isStaffMarksUser(): bool
@@ -592,7 +576,7 @@ class MarksController extends Controller
             'students.*.grade' => 'nullable|string|max:20',
             'students.*.result' => 'nullable|string|in:D,S',
             'students.*.internal_assessments' => 'nullable|array',
-            'students.*.internal_assessments.*' => 'nullable|numeric|min:0',
+            'students.*.internal_assessments.*' => 'nullable|numeric|min:0|max:5',
             'students.*.internal_assessment_marks' => 'nullable|string',
         ];
 
@@ -605,6 +589,16 @@ class MarksController extends Controller
 
     private function validateStudentMarksAgainstExamConfig(Request $request): ?string
     {
+        foreach ($request->students ?? [] as $student) {
+            if (!empty($student['internal_assessments']) && is_array($student['internal_assessments'])) {
+                foreach ($student['internal_assessments'] as $iaVal) {
+                    if ($iaVal !== null && $iaVal !== '' && (float) $iaVal > 5) {
+                        return 'Internal Assessment (IA) marks cannot be greater than 5.';
+                    }
+                }
+            }
+        }
+
         $maxTheory = $request->filled('max_marks_theory') ? (float) $request->max_marks_theory : null;
         $maxPractical = $request->filled('max_marks_practical') ? (float) $request->max_marks_practical : null;
 
@@ -716,40 +710,45 @@ class MarksController extends Controller
 
     private function applyGradesToRequest(Request $request): void
     {
-        $className = Classname::where('id', $request->class_name)->value('class_name');
-        $subjectType = Subject::where('id', $request->subject_name)->value('subject_type');
+        $maxMarks = (float) ($request->max_marks ?? 0);
 
-        $students = collect($request->students ?? [])->map(function ($student) use ($className, $subjectType) {
+        $students = collect($request->students ?? [])->map(function ($student) use ($maxMarks) {
             $marks = is_numeric($student['total_marks'] ?? null)
                 ? (float) $student['total_marks']
                 : (float) (($student['mark_theory'] ?? 0) + ($student['mark_practical'] ?? 0));
 
-            $student['grade'] = $this->gradeFromMaster($marks, $className, $subjectType);
+            $student['grade'] = $this->gradeFromMaster($marks, $maxMarks);
             return $student;
         })->all();
 
         $request->merge(['students' => $students]);
     }
 
-    private function gradeFromMaster(float $marks, ?string $className, ?string $subjectType): string
+    private function gradeFromMaster(float $marks, float $maxMarks = 0): string
     {
-        $subjectType = trim((string) $subjectType);
-        if ($subjectType === '') {
+        $percentage = ($maxMarks > 0) ? ($marks / $maxMarks) * 100 : $marks;
+        $ranges = $this->activeGradeRanges();
+
+        if ($ranges->isEmpty()) {
             return '';
         }
 
-        return $this->activeGradeRanges()
-            ->first(function ($range) use ($marks, $className, $subjectType) {
-                $classes = collect(json_decode($range->groups ?? '[]', true) ?: []);
-                $classMatches = $classes->isEmpty() || $classes->contains($className);
-                $subjectMatches = strcasecmp(trim((string) $range->subject_type), $subjectType) === 0;
+        foreach ($ranges as $range) {
+            $min = (float) ($range->min_per ?? 0);
+            $max = (float) ($range->max_per ?? 100);
+            if ($percentage >= $min && $percentage <= $max) {
+                return (string) $range->grade;
+            }
+        }
 
-                return $classMatches
-                    && $subjectMatches
-                    && $marks >= (float) $range->min_per
-                    && $marks <= (float) $range->max_per;
-            })
-            ->grade ?? '';
+        foreach ($ranges as $range) {
+            $min = (float) ($range->min_per ?? 0);
+            if ($percentage >= $min) {
+                return (string) $range->grade;
+            }
+        }
+
+        return '';
     }
 
     private function accessibleAcademicExams()
@@ -970,13 +969,38 @@ class MarksController extends Controller
 
     private function activeGradeRanges()
     {
-        if (!Schema::connection('dynamic')->hasTable('grademaster')) {
-            return collect();
+        if (Schema::connection('dynamic')->hasTable('grades')) {
+            $grades = DB::connection('dynamic')->table('grades')
+                ->where('is_delete', 0)
+                ->orderByRaw('CAST(termigradecoscholasticareas AS DECIMAL(10,2)) DESC')
+                ->get()
+                ->map(function ($row) {
+                    return (object) [
+                        'min_per' => (float) $row->termigradecoscholasticareas,
+                        'max_per' => (float) $row->termiigradecoscholasticareas,
+                        'grade' => (string) $row->termigradedicipline,
+                    ];
+                });
+
+            if ($grades->isNotEmpty()) {
+                return $grades;
+            }
         }
 
-        return DB::connection('dynamic')->table('grademaster')
-            ->where('is_delete', 0)
-            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
-            ->get();
+        if (Schema::connection('dynamic')->hasTable('grademaster')) {
+            return DB::connection('dynamic')->table('grademaster')
+                ->where('is_delete', 0)
+                ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
+                ->get()
+                ->map(function ($row) {
+                    return (object) [
+                        'min_per' => (float) $row->min_per,
+                        'max_per' => (float) $row->max_per,
+                        'grade' => (string) $row->grade,
+                    ];
+                });
+        }
+
+        return collect();
     }
 }

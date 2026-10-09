@@ -318,7 +318,7 @@
                                             @endphp
                                             @foreach($internalAssessments ?? [] as $assessment)
                                                 <td class="ia-column d-none">
-                                                    <input type="text" class="form-control internal_assessment_mark" data-ia-code="{{ $assessment->assessment_code }}" value="{{ $iaMarks[$assessment->assessment_code] ?? ($loop->first ? $singleIaMark : '') }}" />
+                                                    <input type="number" step="any" min="0" max="5" class="form-control internal_assessment_mark" data-ia-code="{{ $assessment->assessment_code }}" value="{{ $iaMarks[$assessment->assessment_code] ?? ($loop->first ? $singleIaMark : '') }}" />
                                                 </td>
                                             @endforeach
                                             <td><input type="text" class="form-control total_marks" value="{{ $marks->total_marks ?? $marks->subject_marks ?? 0 }}" readonly /></td>
@@ -510,16 +510,11 @@
     }
 
     function roundMark(value) {
-        return Math.round(value);
+        return Math.round((Number(value) || 0) * 100) / 100;
     }
 
     function convertPtMarksToFivePoint(obtainedMarks) {
-        const maxMarks = numericValue($('#max_marks').val());
-        if (!isPtExam() || maxMarks <= 0) {
-            return obtainedMarks;
-        }
-
-        return roundMark((obtainedMarks / maxMarks) * 5);
+        return obtainedMarks;
     }
 
     function selectedClassName() {
@@ -553,30 +548,32 @@
         }
     }
 
-    function gradeFromMaster(marks) {
-        const className = selectedClassName();
-        const subjectType = normalizeSubjectType(selectedSubjectType());
-        if (!subjectType) {
+    function gradeFromMaster(totalMarks) {
+        const maxMarks = numericValue($('#max_marks').val());
+        const percentage = (maxMarks > 0) ? (totalMarks / maxMarks) * 100 : totalMarks;
+
+        if (!gradeRanges || gradeRanges.length === 0) {
             return '';
         }
 
-        const match = gradeRanges.find((range) => {
-            let classes = [];
-            try {
-                classes = range.groups ? JSON.parse(range.groups) : [];
-            } catch (e) {
-                classes = [];
+        for (let i = 0; i < gradeRanges.length; i++) {
+            const range = gradeRanges[i];
+            const min = Number(range.min_per || 0);
+            const max = Number(range.max_per || 100);
+            if (percentage >= min && percentage <= max) {
+                return range.grade || '';
             }
+        }
 
-            const classMatches = classes.length === 0 || classes.includes(className);
-            const subjectMatches = normalizeSubjectType(range.subject_type) === subjectType;
-            const from = Number(range.min_per || 0);
-            const to = Number(range.max_per || 0);
+        for (let i = 0; i < gradeRanges.length; i++) {
+            const range = gradeRanges[i];
+            const min = Number(range.min_per || 0);
+            if (percentage >= min) {
+                return range.grade || '';
+            }
+        }
 
-            return classMatches && subjectMatches && marks >= from && marks <= to;
-        });
-
-        return match ? (match.grade || '') : '';
+        return '';
     }
 
     function recalculateStudentTotal(row) {
@@ -588,7 +585,7 @@
                 internalAssessmentTotal += numericValue($(this).val());
             });
         }
-        const total = roundMark(convertPtMarksToFivePoint(theory + practical) + internalAssessmentTotal);
+        const total = roundMark(theory + practical + internalAssessmentTotal);
         row.find('.total_marks').val(total);
         row.find('.grade').val(gradeFromMaster(total));
     }
@@ -653,7 +650,7 @@
     function internalAssessmentCells() {
         return activeInternalAssessments.map((assessment) => `
             <td class="ia-column ${isInternalAssessmentEnabled() ? '' : 'd-none'}">
-                <input type="text" class="form-control internal_assessment_mark" data-ia-code="${assessment.assessment_code}" value="" />
+                <input type="number" step="any" min="0" max="5" class="form-control internal_assessment_mark" data-ia-code="${assessment.assessment_code}" value="" />
             </td>
         `).join('');
     }
@@ -683,11 +680,16 @@
         alert('Entered marks should not be greater than maximum marks.');
     }
 
+    function iaMaxMarksAlert() {
+        alert('Internal Assessment (IA) marks cannot be greater than 5.');
+    }
+
     function validateObtainedMarks() {
         const maxTheory = numericValue($('#max_marks_theory').val());
         const maxPractical = numericValue($('#max_marks_practical').val());
         const maxTotal = numericValue($('#max_marks').val());
         let isValid = true;
+        let iaExceeded = false;
 
         $('#studentdatatable').find('.student-row').each(function () {
             const row = $(this);
@@ -700,10 +702,26 @@
                 isValid = false;
                 return false;
             }
+
+            if (isInternalAssessmentEnabled()) {
+                row.find('.internal_assessment_mark').each(function () {
+                    const val = numericValue($(this).val());
+                    if (val > 5) {
+                        isValid = false;
+                        iaExceeded = true;
+                        return false;
+                    }
+                });
+                if (!isValid) return false;
+            }
         });
 
         if (!isValid) {
-            maxMarksAlert();
+            if (iaExceeded) {
+                iaMaxMarksAlert();
+            } else {
+                maxMarksAlert();
+            }
         }
 
         return isValid;
@@ -854,11 +872,11 @@
                         $('#marks_entry_status')
                             .removeClass('d-none alert-info')
                             .addClass('alert-warning')
-                            .html(`${data.message} <a href="${data.edit_url}" class="alert-link">Open existing entry</a>`);
+                            .html(`${data.message} <a href="${data.edit_url}" class="alert-link btn btn-sm btn-primary ms-2">Open Existing Entry</a>`);
                         $('#show_students_btn').prop('disabled', true);
                         $('#marks_submit_btn').prop('disabled', true);
-                        $("#studentdatatable").html('<tr><td colspan="12" class="text-center">Marks already entered. Open existing entry to update.</td></tr>');
-                        toastr.info(data.message, "Already Completed");
+                        $("#studentdatatable").html(`<tr><td colspan="12" class="text-center p-3">${data.message} <a href="${data.edit_url}" class="btn btn-sm btn-primary ms-2">Open Existing Entry to Update</a></td></tr>`);
+                        toastr.info(data.message, "Entry Exists");
                     }
                 },
                 error: function(xhr, status, error) {
@@ -871,61 +889,93 @@
             var section_name = $("#section_name").val();
             var subject_id = $("#subject_name").val();
             var exam_id = $("#exam_name").val();
+            var teacher_id = $("#teacher_name").val();
             let token = document.getElementsByName("_token")[0].value;
-            if (iso2 && section_name && subject_id && exam_id) {
-                $.ajax({
-                    data: {
-                        class: iso2,
-                        section_name:section_name,
-                        subject_id:subject_id,
-                        exam_name: exam_id
-                    },
-                    url: "{{url($marksUrlPrefix . 'class-studentdata')}}",
-                    headers: {
-                        'X-CSRF-TOKEN': token
-                    },
-                    method: "POST",
-                    dataType: 'json',
-                    success: function(data) {
-                        let rows = '';
-                        data.students.map((item, index) => {
-                            rows += `
-                            <tr class="student-row">
-                                <td>${index + 1}</td>
-                                <td><input type="checkbox" class="is_absent" /></td>
-                                <td class="practical-column"><input type="checkbox" class="is_absent_pr" /></td>
-                                <td>
-                                    ${item.scholar_no || ''}
-                                    <input type="hidden" class="scholar_no" value="${item.scholar_no || ''}" />
-                                </td>
-                                <td>${item.student_name}</td>
-                                <td>
-                                    ${item.roll_no || ''}
-                                    <input type="hidden" class="student_id" value="${item.id}" />
-                                    <input type="hidden" class="roll_no" value="${item.roll_no || ''}" />
-                                </td>
-                                <td><input type="text" class="form-control mark_theory" value="0" /></td>
-                                <td class="practical-column"><input type="text" class="form-control mark_practical" value="0" /></td>
-                                ${internalAssessmentCells()}
-                                <td><input type="text" class="form-control total_marks" value="0" readonly /></td>
-                                <td><input type="text" class="form-control grade" value="" readonly /></td>
-                                <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
-                            </tr>`;
-                        })
 
-                        $("#studentdatatable").html(rows)
-                        setExamMaxMarks($("#exam_name").val());
-                        toggleInternalAssessmentColumns();
-                        togglePracticalColumns();
-
-                    }
-                    , error: function(xhr, status, error) {
-                        console.error(error);
-                    }
-                });
-            } else {
-                toastr.error("Please select class, section, subject, and term/exam first.", "Required");
+            if (!teacher_id) {
+                toastr.error("Please select a Teacher first.", "Required");
+                return;
             }
+            if (!iso2) {
+                toastr.error("Please select a Class first.", "Required");
+                return;
+            }
+            if (!section_name) {
+                toastr.error("Please select a Section first.", "Required");
+                return;
+            }
+            if (!subject_id) {
+                toastr.error("Please select a Subject first.", "Required");
+                return;
+            }
+            if (!exam_id) {
+                toastr.error("Please select a Term/Exam first.", "Required");
+                return;
+            }
+
+            const btn = $('#show_students_btn');
+            btn.prop('disabled', true).text('Loading Students...');
+
+            $.ajax({
+                data: {
+                    class: iso2,
+                    section_name: section_name,
+                    subject_id: subject_id,
+                    exam_name: exam_id,
+                    teacher_name: teacher_id
+                },
+                url: "{{url($marksUrlPrefix . 'class-studentdata')}}",
+                headers: {
+                    'X-CSRF-TOKEN': token
+                },
+                method: "POST",
+                dataType: 'json',
+                success: function(data) {
+                    btn.prop('disabled', false).text('Show Students');
+                    if (!data || !data.students || data.students.length === 0) {
+                        $("#studentdatatable").html('<tr><td colspan="12" class="text-center text-muted fw-bold p-3">No active students found for the selected Class & Section.</td></tr>');
+                        toastr.warning("No active students found for the selected Class & Section.", "No Students");
+                        return;
+                    }
+                    let rows = '';
+                    data.students.forEach((item, index) => {
+                        rows += `
+                        <tr class="student-row">
+                            <td>${index + 1}</td>
+                            <td><input type="checkbox" class="is_absent" /></td>
+                            <td class="practical-column"><input type="checkbox" class="is_absent_pr" /></td>
+                            <td>
+                                ${item.scholar_no || ''}
+                                <input type="hidden" class="scholar_no" value="${item.scholar_no || ''}" />
+                            </td>
+                            <td>${item.student_name}</td>
+                            <td>
+                                ${item.roll_no || ''}
+                                <input type="hidden" class="student_id" value="${item.id}" />
+                                <input type="hidden" class="roll_no" value="${item.roll_no || ''}" />
+                            </td>
+                            <td><input type="text" class="form-control mark_theory" value="0" /></td>
+                            <td class="practical-column"><input type="text" class="form-control mark_practical" value="0" /></td>
+                            ${internalAssessmentCells()}
+                            <td><input type="text" class="form-control total_marks" value="0" readonly /></td>
+                            <td><input type="text" class="form-control grade" value="" readonly /></td>
+                            <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
+                        </tr>`;
+                    });
+
+                    $("#studentdatatable").html(rows);
+                    setExamMaxMarks($("#exam_name").val());
+                    toggleInternalAssessmentColumns();
+                    togglePracticalColumns();
+                    toastr.success(`Loaded ${data.students.length} student(s).`, "Success");
+                },
+                error: function(xhr, status, error) {
+                    btn.prop('disabled', false).text('Show Students');
+                    console.error(error);
+                    $("#studentdatatable").html('<tr><td colspan="12" class="text-center text-danger p-3">Error loading student data. Please try again.</td></tr>');
+                    toastr.error(ajaxErrorMessage(xhr), "Error Loading Students");
+                }
+            });
         }
         $('#class_name').on('change', function() {
             var classId = $(this).val();
@@ -969,7 +1019,12 @@
         @if(!empty($stream_master))
             setExamMaxMarks("{{ $stream_master->exam_id }}");
         @endif
-        $('#max_marks_theory, #max_marks_practical').on('input', refreshTotalMaxMarks);
+        $('#max_marks_theory, #max_marks_practical').on('input', function() {
+            refreshTotalMaxMarks();
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
+        });
         $('#max_marks').on('input', function() {
             const total = Number($(this).val() || 0);
             if (total > 0) {
@@ -977,6 +1032,9 @@
             } else {
                 $('.total_marks').removeAttr('data-max');
             }
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
         });
         $('#subject_name').on('change', function() {
             const subjectId = $(this).val();
