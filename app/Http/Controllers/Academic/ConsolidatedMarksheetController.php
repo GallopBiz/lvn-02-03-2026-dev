@@ -37,9 +37,9 @@ class ConsolidatedMarksheetController extends Controller
         return view('backend.AcademicsModules.consolidated_marksheet_print', compact('reports', 'selectedExam'));
     }
 
-    private function buildReports(Request $request)
+    public function buildReports(Request $request)
     {
-        $className = $request->filled('class_name') ? (string) $request->input('class_name') : null;
+        $className = $request->filled('classname') ? (string) $request->input('classname') : ($request->filled('class_name') ? (string) $request->input('class_name') : null);
         $sectionName = $request->filled('section_name') ? (string) $request->input('section_name') : null;
         $classId = $request->integer('class_id') ?: null;
         $selectedExam = $request->integer('exam_id') ? Exam::query()->find($request->integer('exam_id')) : null;

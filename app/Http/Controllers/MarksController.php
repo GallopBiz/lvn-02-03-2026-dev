@@ -527,7 +527,12 @@ class MarksController extends Controller
             $studentmarks_total[$student->student_name][$student->subject_name] = $maxM;
         }
 
-        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks','sections'));
+        $consolidated_reports = collect();
+        if ($report_type === 'Consolidated Subject Wise' || $report_type === 'consolidated_subject_wise') {
+            $consolidated_reports = app(\App\Http\Controllers\Academic\ConsolidatedMarksheetController::class)->buildReports($request);
+        }
+
+        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks','sections','consolidated_reports'));
     }
 
     public function check_grade($number){
