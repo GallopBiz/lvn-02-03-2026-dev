@@ -12,9 +12,9 @@
             $hours = floor($minutes / 60);
             $remMinutes = $minutes % 60;
             if ($remMinutes > 0) {
-                return $hours . 'hr ' . $remMinutes . 'm';
+                return $hours . 'h ' . $remMinutes . 'm';
             }
-            return $hours . 'hr';
+            return $hours . 'h';
         }
     }
 @endphp
@@ -24,50 +24,157 @@
             text-transform: capitalize;
         }
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
+            width: 44px;
+            height: 44px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #3b82f6;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.8s linear infinite;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
+        /* Container & Table Structure */
+        .att-card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+        }
+
         #attendanceTable .table-responsive {
-            max-height: 70vh;
+            max-height: 72vh;
             overflow: auto;
         }
         #attendanceTable table {
             min-width: max-content;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
         }
         #attendanceTable th,
         #attendanceTable td {
-            white-space: nowrap;
+            border-bottom: 1px solid #cbd5e1 !important;
+            border-right: 1px solid #e2e8f0 !important;
+            vertical-align: middle;
         }
+
+        /* Sticky Left Column: Employee Name */
         #attendanceTable th:first-child,
         #attendanceTable td:first-child {
             position: sticky;
             left: 0;
-            background-color: white;
-            z-index: 5;
-            border-right: 2px solid #dee2e6;
-            min-width: 180px;
-            max-width: 280px;
+            background-color: #ffffff;
+            z-index: 6;
+            border-right: 2px solid #94a3b8 !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+            min-width: 190px;
+            max-width: 240px;
             white-space: normal;
+            box-shadow: 3px 0 6px rgba(0, 0, 0, 0.03);
         }
+
+        /* Sticky Header Row */
         #attendanceTable thead th {
             position: sticky;
             top: 0;
-            z-index: 7;
-            background-color: #afa4a4;
-        }
-        #attendanceTable th:first-child {
-            background-color: #e5e5e5;
             z-index: 8;
+            background: #1e293b;
+            color: #f8fafc;
+            border-bottom: 2px solid #0f172a !important;
+            padding: 8px 4px;
+            text-align: center;
+            font-weight: 600;
         }
+
+        #attendanceTable thead th:first-child {
+            background: #0f172a;
+            color: #ffffff;
+            z-index: 10;
+            text-align: left;
+            padding-left: 14px;
+        }
+
+        /* Weekend Header */
+        #attendanceTable thead th.header-weekend {
+            background: #334155;
+            color: #f87171;
+        }
+
+        /* Matrix Cell Width & Layout */
+        .att-cell {
+            min-width: 86px;
+            max-width: 96px;
+            width: 88px;
+            padding: 5px 3px !important;
+            text-align: center;
+            transition: background-color 0.15s ease;
+            font-size: 11px;
+            background-color: #ffffff;
+        }
+
+        .att-cell:hover {
+            background-color: #f1f5f9 !important;
+        }
+
+        .cell-weekend {
+            background-color: #f8fafc;
+        }
+
+        .cell-absent {
+            background-color: #fff5f5;
+        }
+
+        .cell-holiday {
+            background-color: #f0fdf4;
+        }
+
+        /* Badge Chips Styling */
+        .badge-chip {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1.5px 5px;
+            border-radius: 4px;
+            line-height: 1.25;
+            white-space: nowrap;
+            text-transform: capitalize;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .badge-chip-present { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .badge-chip-late { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+        .badge-chip-early { background-color: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+        .badge-chip-extra { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+        .badge-chip-noout { background-color: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
+        .badge-chip-absent { background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+        .badge-chip-leave { background-color: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .badge-chip-holiday { background-color: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+        .badge-chip-sunday { background-color: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+
+        /* Punch Timing Formatting */
+        .punch-times {
+            margin-top: 3px;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 10.5px;
+            line-height: 1.35;
+        }
+        .punch-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            white-space: nowrap;
+        }
+        .punch-in { color: #166534; font-weight: 600; }
+        .punch-out { color: #991b1b; font-weight: 600; }
+        .lbl-in { color: #16a34a; font-size: 9.5px; font-weight: 700; }
+        .lbl-out { color: #dc2626; font-size: 9.5px; font-weight: 700; }
     </style>
 
     @php
@@ -87,98 +194,117 @@
             '12' => 'December',
         ];
         $selectedMonth = request('month', date('m')); // Default to current month
+        $selectedMonthName = $months[$selectedMonth] ?? 'Unknown';
     @endphp
 
     <div class="main-content">
-        <div id="loader" style="display: none; text-align: center;">
-            <div class="spinner"></div>
+        <div id="loader" style="display: none; text-align: center; padding: 20px;">
+            <div class="spinner mx-auto"></div>
+            <p class="mt-2 text-muted small">Loading attendance records...</p>
         </div>
         
-        <h2 class="mb-4">Attendance Management</h2>
-        <button id="syncAttendance" class="btn btn-primary mb-3">🔄 Sync Attendance</button>
-        @php
-            $selectedMonthName = $months[$selectedMonth] ?? 'Unknown';
-        @endphp
-
-        <button id="lockAttendanceBtn" class="btn btn-primary mb-3">🔒 Lock {{ $months[$selectedMonth] }} Attendance</button>
+        <!-- Header & Action Row -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+            <div>
+                <h3 class="mb-1 text-dark font-weight-bold">Biometric Attendance Management</h3>
+                <p class="text-muted mb-0 small">Monthly employee attendance matrix and ESSL sync log</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button id="syncAttendance" class="btn btn-primary btn-sm px-3 shadow-sm rounded-2">
+                    <i class="fa fa-sync-alt me-1"></i> Sync Attendance
+                </button>
+                <button id="lockAttendanceBtn" class="btn btn-outline-secondary btn-sm px-3 shadow-sm rounded-2">
+                    <i class="fa fa-lock me-1"></i> Lock {{ $selectedMonthName }} Attendance
+                </button>
+            </div>
+        </div>
 
         <!-- Filters Section -->
-        <form method="GET" action="{{ route('employeeattendance') }}" class="mb-4">
-            <div class="row">
-                {{-- <div class="col-md-4">
-                    <label for="start_date">Start Date:</label>
-                    <input type="date" name="start_date" id="start_date" class="form-control"
-                        value="{{ request('start_date', $startDate) }}">
-                </div>
-                <div class="col-md-4">
-                    <label for="end_date">End Date:</label>
-                    <input type="date" name="end_date" id="end_date" class="form-control"
-                        value="{{ request('end_date', $endDate) }}">
-                </div> --}}
-                <div class="col-md-4">
-                    <label for="month">Month:</label>
-                    <select name="month" id="month" class="form-control">
+        <div class="card border-0 shadow-sm mb-3 rounded-3" style="background: #ffffff;">
+            <div class="card-body p-3">
+                <form method="GET" action="{{ route('employeeattendance') }}" class="mb-0">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label for="month" class="form-label font-weight-bold small text-secondary">Month</label>
+                            <select name="month" id="month" class="form-control form-control-sm">
+                                @foreach ($months as $key => $value)
+                                    <option value="{{ $key }}" {{ $selectedMonth == $key ? 'selected' : '' }}>
+                                        {{ $value }}</option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                        @foreach ($months as $key => $value)
-                            <option value="{{ $key }}" {{ $selectedMonth == $key ? 'selected' : '' }}>
-                                {{ $value }}</option>
-                        @endforeach
-                    </select>
-                </div>
+                        <div class="col-md-3">
+                            <label for="Attendanceyear" class="form-label font-weight-bold small text-secondary">Year</label>
+                            <select name="Attendanceyear" id="Attendanceyear" class="form-control form-control-sm">
+                                @php
+                                    $startYear = 2021;
+                                    $endYear = 2030;
+                                    $selectedYear = request('Attendanceyear', request('year', date('Y')));
+                                @endphp
+                                @for ($year = $startYear; $year <= $endYear; $year++)
+                                    <option value="{{ $year }}" {{ $selectedYear == $year ? 'selected' : '' }}>
+                                        {{ $year }}</option>
+                                @endfor
+                            </select>
+                        </div>
 
-                <div class="col-md-4">
-                    <label for="Attendanceyear">Year:</label>
-                    <select name="Attendanceyear" id="Attendanceyear" class="form-control">
-                        @php
-                            $startYear = 2021;
-                            $endYear = 2030;
-                            $selectedYear = request('year', date('Y')); // Default to current year
-                        @endphp
-                        @for ($year = $startYear; $year <= $endYear; $year++)
-                            <option value="{{ $year }}" {{ $selectedYear == $year ? 'selected' : '' }}>
-                                {{ $year }}</option>
-                        @endfor
-                    </select>
-                </div>
+                        <div class="col-md-4">
+                            <label for="employee_id" class="form-label font-weight-bold small text-secondary">Employee</label>
+                            <select name="employee_id" id="employee_id" class="form-control form-control-sm">
+                                <option value="">All Employees</option>
+                                @foreach ($employees as $employee)
+                                    <option value="{{ $employee->id }}"
+                                        {{ request('employee_id') == $employee->id ? 'selected' : '' }}>
+                                        {{ $employee->first_name }} {{ $employee->last_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                <div class="col-md-4">
-                    <label for="employee_id">Select Employee:</label>
-                    <select name="employee_id" id="employee_id" class="form-control">
-                        <option value="">All Employees</option>
-                        @foreach ($employees as $employee)
-                            <option value="{{ $employee->id }}"
-                                {{ request('employee_id') == $employee->id ? 'selected' : '' }}>
-                                {{ $employee->first_name }} {{ $employee->last_name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100 font-weight-bold">
+                                <i class="fa fa-filter me-1"></i> Filter
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
-            <button type="submit" class="btn btn-primary mt-3" >Filter</button>
-        </form>
+        </div>
 
         <!-- Legend Badge Bar -->
-        <div class="card mb-3 shadow-sm border-0">
-            <div class="card-body py-2 px-3 bg-light rounded d-flex flex-wrap align-items-center gap-2" style="font-size: 13px;">
-                <strong class="me-2">Attendance Badges Legend:</strong>
-                <span class="badge badge-success" style="padding: 4px 6px; background-color: #28a745; color: #fff;">On Time In / Out</span>
-                <span class="badge badge-danger" style="padding: 4px 6px; background-color: #dc3545; color: #fff;">Late (Xm)</span>
-                <span class="badge badge-warning" style="padding: 4px 6px; background-color: #ffc107; color: #212529;">Early Out (Xm)</span>
-                <span class="badge badge-info" style="padding: 4px 6px; background-color: #17a2b8; color: #fff;">Extra (Xm) [After Shift End]</span>
-                <span class="badge badge-secondary" style="padding: 4px 6px; background-color: #6c757d; color: #fff;">No Out Punch</span>
-                <span class="badge badge-primary" style="padding: 4px 6px; background-color: #007bff; color: #fff;">Half Day / Leave</span>
+        <div class="card mb-3 border-0 shadow-sm rounded-3">
+            <div class="card-body py-2 px-3 bg-white rounded-3 d-flex flex-wrap align-items-center justify-content-between gap-2" style="font-size: 12px;">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <strong class="text-secondary me-1"><i class="fa fa-info-circle me-1"></i> Legend:</strong>
+                    <span class="badge-chip badge-chip-present">Present</span>
+                    <span class="badge-chip badge-chip-late">Late</span>
+                    <span class="badge-chip badge-chip-early">Early</span>
+                    <span class="badge-chip badge-chip-extra">Extra</span>
+                    <span class="badge-chip badge-chip-noout">No Out Punch</span>
+                    <span class="badge-chip badge-chip-leave">Leave / Half Day</span>
+                    <span class="badge-chip badge-chip-holiday">Holiday</span>
+                    <span class="badge-chip badge-chip-sunday">Sunday</span>
+                    <span class="badge-chip badge-chip-absent">Absent</span>
+                </div>
+                <div class="text-muted small d-none d-md-block">
+                    <i class="fa fa-mouse-pointer me-1"></i> Hover over cell for details
+                </div>
             </div>
         </div>
 
         <!-- Attendance Table -->
-        <div id="attendanceTable">
+        <div id="attendanceTable" class="att-card">
             <div class="table-responsive">
-                <table class="table table-bordered">
-                    <thead class="thead-dark">
+                <table class="table table-bordered mb-0">
+                    <thead>
                         <tr>
                             <th>Employee Name</th>
                             @foreach (Carbon\CarbonPeriod::create($startDate, $endDate) as $date)
-                                <th>{{ $date->format('d-M') }}</th>
+                                <th class="{{ $date->isSunday() ? 'header-weekend' : '' }}">
+                                    <div style="font-size: 13px; font-weight: 700; line-height: 1.1;">{{ $date->format('d') }}</div>
+                                    <div style="font-size: 10px; opacity: 0.85; text-transform: uppercase;">{{ $date->format('D') }}</div>
+                                </th>
                             @endforeach
                         </tr>
                     </thead>
@@ -186,18 +312,30 @@
                         @if ($attendanceData->isEmpty())
                             <tr>
                                 <td colspan="{{ \Carbon\CarbonPeriod::create($startDate, $endDate)->count() + 1 }}"
-                                    class="text-center text-muted">
-                                    No attendance records found for the selected filters.
+                                    class="text-center text-muted py-4">
+                                    No attendance records found for the selected month & filters.
                                 </td>
                             </tr>
                         @else
                             @foreach ($attendanceData as $employeeId => $records)
                                 @php
-                                    $employee = $employees->firstWhere('id', $employeeId);
+                                    $employee = $employees->firstWhere('id', $employeeId) ?? ($records->first() ? $records->first()->employee : null);
                                     $employeeName = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                                    if (!$employee || !$employeeName) {
+                                        continue;
+                                    }
                                 @endphp
                                 <tr>
-                                    <td>{{ $employeeName ?: '--' }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 26px; height: 26px; font-size: 11px; font-weight: 700; flex-shrink: 0;">
+                                                {{ strtoupper(substr($employeeName ?: 'E', 0, 1)) }}
+                                            </div>
+                                            <div style="font-weight: 600; font-size: 12.5px; color: #1e293b; line-height: 1.2;">
+                                                {{ $employeeName ?: '--' }}
+                                            </div>
+                                        </div>
+                                    </td>
                                     @foreach (Carbon\CarbonPeriod::create($startDate, $endDate) as $date)
                                         @php
                                             $record = $records->firstWhere('log_date', $date->toDateString());
@@ -259,62 +397,92 @@
                                                     $missingOut = true;
                                                 }
                                             }
+
+                                            // Cell class & tooltip
+                                            $cellClass = 'att-cell';
+                                            if ($isWeekendOff) $cellClass .= ' cell-weekend';
+                                            elseif ($holiday) $cellClass .= ' cell-holiday';
+                                            elseif (!$record && !$approvedLeave) $cellClass .= ' cell-absent';
+
+                                            $tooltipText = "Employee: " . ($employeeName ?: '--') . " | Date: " . $date->format('d M Y (D)');
+                                            if ($record) {
+                                                $tooltipText .= "\nStatus: " . ucfirst($record->status);
+                                                if ($shift && $shift->start_time && $shift->end_time) {
+                                                    $tooltipText .= "\nShift: " . $shift->start_time . ' - ' . $shift->end_time;
+                                                }
+                                                $tooltipText .= "\nIn: " . ($record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : 'N/A');
+                                                if ($isLateIn) $tooltipText .= " (Late by " . formatDurationInHoursAndMinutes($lateMinutes) . ")";
+                                                $tooltipText .= "\nOut: " . ($record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : 'N/A');
+                                                if ($isEarlyOut) $tooltipText .= " (Early by " . formatDurationInHoursAndMinutes($earlyMinutes) . ")";
+                                                if ($isExtraOut) $tooltipText .= " (Extra " . formatDurationInHoursAndMinutes($extraMinutes) . ")";
+                                                if ($missingOut) $tooltipText .= " (No Out Punch)";
+                                            } elseif ($holiday) {
+                                                $tooltipText .= "\nHoliday: " . ($holiday->HolidayName ?? 'Public Holiday');
+                                            } elseif ($isWeekendOff) {
+                                                $tooltipText .= "\nSunday Off";
+                                            } else {
+                                                $tooltipText .= "\nStatus: Absent";
+                                            }
                                         @endphp
-                                        <td style="min-width: 145px; padding: 6px 8px;">
+                                        <td class="{{ $cellClass }}" title="{{ $tooltipText }}">
                                             @if ($record)
-                                                <!-- STATUS BADGES FIRST IN FRONT -->
-                                                <div class="mb-1" style="display: flex; flex-wrap: wrap; gap: 3px; align-items: center;">
-                                                    <span class="badge {{ $record->status == 'present' ? 'badge-success' : ($record->status == 'on-official-work' ? 'badge-info' : 'badge-danger') }}" style="font-size: 11px; padding: 4px 6px;">
-                                                        {{ ucfirst($record->status) }}
-                                                    </span>
+                                                <div class="d-flex flex-column align-items-center justify-content-center gap-1">
+                                                    <!-- Exception / Status Badge Chips -->
+                                                    @php $hasException = false; @endphp
 
                                                     @if ($isLateIn)
-                                                        <span class="badge badge-danger" style="font-size: 11px; padding: 4px 6px; background-color: #dc3545; color: #fff;" title="Late In by {{ formatDurationInHoursAndMinutes($lateMinutes) }}">
-                                                            Late ({{ formatDurationInHoursAndMinutes($lateMinutes) }})
-                                                        </span>
-                                                    @elseif ($isOnTimeIn)
-                                                        <span class="badge badge-success" style="font-size: 11px; padding: 4px 6px; background-color: #28a745; color: #fff;" title="On Time Entry">
-                                                            On Time In
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-late" title="Late by {{ formatDurationInHoursAndMinutes($lateMinutes) }}">
+                                                            Late
                                                         </span>
                                                     @endif
 
                                                     @if ($isEarlyOut)
-                                                        <span class="badge badge-warning" style="font-size: 11px; padding: 4px 6px; background-color: #ffc107; color: #212529;" title="Left {{ formatDurationInHoursAndMinutes($earlyMinutes) }} before shift end">
-                                                            Early Out ({{ formatDurationInHoursAndMinutes($earlyMinutes) }})
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-early" title="Left {{ formatDurationInHoursAndMinutes($earlyMinutes) }} early">
+                                                            Early
                                                         </span>
                                                     @elseif ($isExtraOut)
-                                                        <span class="badge badge-info" style="font-size: 11px; padding: 4px 6px; background-color: #17a2b8; color: #fff;" title="Punched Out {{ formatDurationInHoursAndMinutes($extraMinutes) }} after shift end">
-                                                            Extra ({{ formatDurationInHoursAndMinutes($extraMinutes) }})
-                                                        </span>
-                                                    @elseif ($isOnTimeOut)
-                                                        <span class="badge badge-success" style="font-size: 11px; padding: 4px 6px; background-color: #28a745; color: #fff;" title="Punched Out On Time">
-                                                            On Time Out
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-extra" title="Extra {{ formatDurationInHoursAndMinutes($extraMinutes) }}">
+                                                            Extra
                                                         </span>
                                                     @elseif ($missingOut)
-                                                        <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 6px; background-color: #6c757d; color: #fff;" title="No Out Punch Recorded">
-                                                            No Out Punch
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-noout" title="No Out Punch Recorded">
+                                                            No Out
                                                         </span>
                                                     @endif
 
                                                     @if ($approvedLeave)
-                                                        <span class="badge badge-primary" style="font-size: 11px; padding: 4px 6px; background-color: #007bff; color: #fff;">
-                                                            {{ $approvedLeave->is_half_day ? 'Half Day Leave' : 'Leave' }}
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-leave">
+                                                            {{ $approvedLeave->is_half_day ? 'Half Day' : 'Leave' }}
                                                         </span>
                                                     @endif
-                                                </div>
 
-                                                <!-- TIMINGS DISPLAY -->
-                                                <div style="font-size: 12px; line-height: 1.4;">
-                                                    <span style="color: #28a745; font-weight: 600;">In:</span> {{ $record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : '--' }}
-                                                    <br>
-                                                    <span style="color: #dc3545; font-weight: 600;">Out:</span> {{ $record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : '--' }}
+                                                    @if (!$hasException)
+                                                        <span class="badge-chip badge-chip-present">
+                                                            {{ $record->status == 'on-official-work' ? 'Official' : 'Present' }}
+                                                        </span>
+                                                    @endif
+
+                                                    <!-- Timings -->
+                                                    <div class="punch-times">
+                                                        <div class="punch-row punch-in">
+                                                            <span class="lbl-in">I:</span> {{ $record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : '--' }}
+                                                        </div>
+                                                        <div class="punch-row punch-out">
+                                                            <span class="lbl-out">O:</span> {{ $record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : '--' }}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             @elseif($holiday)
-                                                <span class="badge badge-info" style="font-size: 11px; padding: 4px 6px;">Holiday</span>
+                                                <span class="badge-chip badge-chip-holiday" title="{{ $holiday->HolidayName ?? 'Holiday' }}">Holiday</span>
                                             @elseif($isWeekendOff)
-                                                <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 6px;">Sunday</span>
+                                                <span class="badge-chip badge-chip-sunday">Sunday</span>
                                             @else
-                                                <span class="badge badge-danger" style="font-size: 11px; padding: 4px 6px;">Absent</span>
+                                                <span class="badge-chip badge-chip-absent">Absent</span>
                                             @endif
                                         </td>
                                     @endforeach
@@ -342,8 +510,10 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var select = document.getElementById('employee_id');
-            for (var i = 0; i < select.options.length; i++) {
-                select.options[i].innerText = capitalizeFirstLetter(select.options[i].innerText);
+            if (select) {
+                for (var i = 0; i < select.options.length; i++) {
+                    select.options[i].innerText = capitalizeFirstLetter(select.options[i].innerText);
+                }
             }
         });
 
@@ -365,10 +535,10 @@
         $(document).ready(function() {
             $("#syncAttendance").click(function() {
                 if (confirm("Are you sure you want to sync attendance from ESSL?")) {
-                    let $btn = $(this); // Store reference to the button
-                    let originalText = $btn.html(); // Store the original text
+                    let $btn = $(this);
+                    let originalText = $btn.html();
 
-                    $btn.html("⏳ Syncing...").prop("disabled", true); // Change text & disable button
+                    $btn.html("⏳ Syncing...").prop("disabled", true);
                     let Attendanceyear = $('#Attendanceyear').val();
                     let month = $('#month').val();
                     $.ajax({
@@ -383,7 +553,7 @@
                         },
                         success: function(response) {
                             alert(response.message);
-                            location.reload(); // Reload the page to update attendance data
+                            location.reload();
                         },
                         error: function(xhr) {
                             alert(xhr.responseJSON.message ||
@@ -391,11 +561,11 @@
                             $btn.html(originalText).prop("disabled", false);
                         }
                     }).always(function() {
-                        $btn.html(originalText).prop("disabled",
-                        false); // Ensure button resets after AJAX call
+                        $btn.html(originalText).prop("disabled", false);
                     });
                 }
             });
+
             $('#lockAttendanceBtn').click(function() {
                 let Attendanceyear = $('#Attendanceyear').val();
                 let month = $('#month').val();
@@ -408,26 +578,28 @@
                     .done(response => alert(response.success))
                     .fail(error => alert(error.responseJSON.error));
             });
-
         });
+
         document.addEventListener("DOMContentLoaded", function() {
             let monthDropdown = document.getElementById("month");
             let lockButton = document.getElementById("lockAttendanceBtn");
-
             let monthNames = @json($months);
 
-            monthDropdown.addEventListener("change", function() {
-                let selectedMonth = monthDropdown.value;
-                lockButton.innerHTML = "🔒 Lock " + monthNames[selectedMonth] + " Attendance";
-            });
+            if (monthDropdown && lockButton) {
+                monthDropdown.addEventListener("change", function() {
+                    let selectedMonth = monthDropdown.value;
+                    lockButton.innerHTML = "🔒 Lock " + monthNames[selectedMonth] + " Attendance";
+                });
+            }
         });
 
         $(document).ready(function () {
-        $("form").on("submit", function () {
-            $("#loader").show();
-            $("#attendanceTable").hide();
+            $("form").on("submit", function () {
+                $("#loader").show();
+                $("#attendanceTable").hide();
+            });
         });
-    });
     </script>
 
 @endsection
+

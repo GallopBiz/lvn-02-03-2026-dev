@@ -56,21 +56,21 @@ class EmployeeAttendanceController extends Controller
         // $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $employeeId = $request->input('employee_id');
 
-        // Fetch all employees
-        $employees = HrmsEmployee::orderBy('first_name')->get();
-        // // Fetch attendance data with filters
-        // $query = HrmsEmployeeAttendance::whereBetween('log_date', [$startDate, $endDate]);
+        // Fetch all employees in alphabetical order
+        $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
 
-        // if ($employeeId) {
-        //     $query->where('employee_id', $employeeId);
-        // }
-
-        // $attendanceData = $query->get()->groupBy('employee_id');
         $attendanceData = HrmsEmployeeAttendance::with('employee')
-        ->whereBetween('log_date', [$startDate, $endDate])
-        ->when($employeeId, fn($query) => $query->where('employee_id', $employeeId))
-        ->get()
-        ->groupBy('employee_id');
+            ->whereNotNull('employee_id')
+            ->where('employee_id', '!=', 0)
+            ->whereBetween('log_date', [$startDate, $endDate])
+            ->when($employeeId, fn($query) => $query->where('employee_id', $employeeId))
+            ->get()
+            ->groupBy('employee_id')
+            ->sortBy(function ($records) {
+                $firstRecord = $records->first();
+                $employee = $firstRecord ? $firstRecord->employee : null;
+                return strtolower(trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '')));
+            });
 
         $leaveRequests = \App\Models\HrmsLeaveRequest::whereIn('status', ['Approved', 'approved'])
             ->whereDate('start_date', '<=', $endDate)
@@ -191,21 +191,30 @@ class EmployeeAttendanceController extends Controller
 				$logDate = date('Y-m-d', strtotime($timestamp));
 				$logTime = date('H:i:s', strtotime($timestamp));
 
+				$empId = HrmsBiometricDetail::where('ess_emp_code', $userId)->value('employee_id');
+
 				$existingLog = HrmsEmployeeAttendance::where('ess_emp_code', $userId)
 					->where('log_date', $logDate)
 					->first();
 
 				if ($existingLog) {
+					$updateData = [];
 					if ($logTime < $existingLog->in_time) {
-						$existingLog->update(['in_time' => $logTime]);
+						$updateData['in_time'] = $logTime;
 					}
 					if (!$existingLog->out_time || $logTime > $existingLog->out_time) {
-						$existingLog->update(['out_time' => $logTime]);
+						$updateData['out_time'] = $logTime;
+					}
+					if (!$existingLog->employee_id && $empId) {
+						$updateData['employee_id'] = $empId;
+					}
+					if (!empty($updateData)) {
+						$existingLog->update($updateData);
 					}
 				} else {
 					HrmsEmployeeAttendance::insert([
 						'ess_emp_code' => $userId,
-						'employee_id' => HrmsBiometricDetail::where('ess_emp_code', $userId)->value('employee_id'),
+						'employee_id' => $empId ?: null,
 						'log_date' => $logDate,
 						'in_time' => $logTime,
 					]);
