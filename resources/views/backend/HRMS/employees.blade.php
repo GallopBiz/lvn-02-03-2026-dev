@@ -1476,6 +1476,9 @@
 
         // Function to save form data to localStorage
         function saveFormData() {
+            @if (!empty($stream_master))
+                return;
+            @endif
             const formData = {};
             const inputs = document.querySelectorAll('#stepper-form input, #stepper-form select, #stepper-form textarea');
             inputs.forEach(input => {
@@ -1490,6 +1493,10 @@
 
         // Function to load form data from localStorage
         function loadFormData() {
+            @if (!empty($stream_master))
+                localStorage.removeItem('stepperFormData');
+                return;
+            @endif
             const savedData = localStorage.getItem('stepperFormData');
             if (savedData) {
                 const formData = JSON.parse(savedData);
@@ -1645,7 +1652,17 @@
     <script>
         $(document).ready(function() {
             $('#smartwizard').smartWizard({
-                selected: 0,
+                selected: (function() {
+                    let hash = window.location.hash;
+                    if (hash) {
+                        let stepEl = $('#smartwizard > div > .step' + hash);
+                        if (stepEl.length) {
+                            let idx = $('#smartwizard > div > .step').index(stepEl);
+                            return idx >= 0 ? idx : 0;
+                        }
+                    }
+                    return 0;
+                })(),
                 keyNavigation: false,
                 enableAllSteps: false,
                 lang: {

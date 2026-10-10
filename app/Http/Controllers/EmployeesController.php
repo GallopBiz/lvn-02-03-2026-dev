@@ -386,7 +386,21 @@ class EmployeesController extends Controller
 
     public function view($id)
     {
-        $stream_master = HrmsEmployee::where('id', $id)->get();
+        $stream_master = HrmsEmployee::with([
+            'addresses',
+            'emergencyContacts',
+            'educationalQualifications',
+            'biometricDetails',
+            'documents',
+            'bankDetails',
+            'statutoryInformation',
+            'workExperiences'
+        ])->where('id', $id)->get();
+
+        if ($stream_master->isEmpty()) {
+            return redirect()->route('employee')->with('error', 'Employee not found.');
+        }
+
         $stream = HrmsEmployee::all();
         $deparments = HrmsDepartment::all();
 
@@ -547,6 +561,7 @@ class EmployeesController extends Controller
             ]
         );
         if ($validator->fails()) {
+            DB::rollBack();
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();

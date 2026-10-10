@@ -101,7 +101,8 @@ class EmployeePayrollController extends Controller
 				$status = strtolower(trim((string) $leaveRequest->status));
 				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
 
-				if ($status !== 'approved' || !$isHalfDay) {
+				$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
+				if ($status !== 'approved' || !$isHalfDay || $isPaid == 0) {
 					return false;
 				}
 
@@ -118,6 +119,37 @@ class EmployeePayrollController extends Controller
 			->unique()
 			->values()
 			->toArray();
+	}
+
+	private function getRejectedOrUnpaidHalfDayCount(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
+	{
+		$halfDayCount = 0;
+		foreach ($employee->leaveRequest as $leaveRequest) {
+			$status = strtolower(trim((string) $leaveRequest->status));
+			$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+
+			if (!$isHalfDay) {
+				continue;
+			}
+
+			$leaveStart = Carbon::parse($leaveRequest->start_date);
+			$leaveEnd = Carbon::parse($leaveRequest->end_date);
+			$isWithinRange = ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+				|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+				|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
+
+			if (!$isWithinRange) {
+				continue;
+			}
+
+			$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
+
+			if ($status === 'rejected' || ($status === 'approved' && $isPaid == 0)) {
+				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
+				$halfDayCount += count(collect($period)) * 0.5;
+			}
+		}
+		return $halfDayCount;
 	}
 
 	public function GenerateJson(Request $request)
@@ -225,19 +257,35 @@ class EmployeePayrollController extends Controller
 					}
 					$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 					$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
+					$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
 					$lateComingCount = 0;
+					$unapprovedHalfDaysFromBiometric = 0;
 					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
 							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-							if (in_array($logDate, $holidayDates) || in_array($logDate, $approvedHalfDayDates)) continue;
+							if (in_array($logDate, $holidayDates)) continue;
 							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
 							if (!$employeeShift) continue;
 							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-							$inTime = strtotime($logDate . ' ' . $log->in_time);
-							if ($inTime > $shiftStart) {
+							$shiftEnd = strtotime($logDate . ' ' . $employeeShift->end_time);
+							$expectedDuration = max(1, $shiftEnd - $shiftStart);
+							$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
+							$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
+							if (!in_array($logDate, $approvedHalfDayDates)) {
+								if ($inTime && $inTime > $shiftStart) {
 								$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
 								if ($lateMinutes > $employeeShift->late_coming_threshold) {
 									$lateComingCount++;
+								}
+								}
+
+								if ($inTime && $outTime) {
+									$actualDuration = $outTime - $inTime;
+									if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
+										$unapprovedHalfDaysFromBiometric += 0.5;
+									}
+								} elseif ($inTime && !$outTime) {
+									$unapprovedHalfDaysFromBiometric += 0.5;
 								}
 							}
 						}
@@ -344,6 +392,7 @@ class EmployeePayrollController extends Controller
 							}
 						}
 					}
+					$unApplyLeave += $rejectedOrUnpaidHalfDays + $unapprovedHalfDaysFromBiometric;
 					$lwp += $unApplyLeave;
 					$workingDaysRatio = ($monthDays - $lwp) / $monthDays;
 					$esicSalary = round($esicgrossSalary * $workingDaysRatio, 2);
@@ -373,7 +422,7 @@ class EmployeePayrollController extends Controller
 							->where('status', 'pending')
 							->update(['status' => 'paid']);
 					}
-					$halfDayLeaveDeductionAmount = round($halfDayLeaveDays * ($grossSalary / $monthDays), 2);
+					$halfDayLeaveDeductionAmount = 0;
 					$totalLeaveDeduction = $halfDayLeaveDeductionAmount;
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);
 					$lateDeductionAmount = 0;
@@ -579,22 +628,38 @@ class EmployeePayrollController extends Controller
 
 				$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 				$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
+				$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
 				$lateComingCount = 0;
+				$unapprovedHalfDaysFromBiometric = 0;
 
 				if ($biometricRequired) {
 					foreach ($EmpAttandanceLog as $log) {
 						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-						if (in_array($logDate, $holidayDates) || in_array($logDate, $approvedHalfDayDates)) continue;
+						if (in_array($logDate, $holidayDates)) continue;
 						$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
 						if (!$employeeShift) continue;
 
 						$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-						$inTime = strtotime($logDate . ' ' . $log->in_time);
-						if ($inTime > $shiftStart) {
+						$shiftEnd = strtotime($logDate . ' ' . $employeeShift->end_time);
+						$expectedDuration = max(1, $shiftEnd - $shiftStart);
+						$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
+						$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
+						if (!in_array($logDate, $approvedHalfDayDates)) {
+							if ($inTime && $inTime > $shiftStart) {
 							$lateMinutes = round(($inTime - $shiftStart) / 60, 2);
 							if ($lateMinutes > $employeeShift->late_coming_threshold) {
 								$lateComingCount++;
 								\Log::info("Late Entry on $logDate: $lateMinutes minutes.");
+							}
+							}
+
+							if ($inTime && $outTime) {
+								$actualDuration = $outTime - $inTime;
+								if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
+									$unapprovedHalfDaysFromBiometric += 0.5;
+								}
+							} elseif ($inTime && !$outTime) {
+								$unapprovedHalfDaysFromBiometric += 0.5;
 							}
 						}
 					}
@@ -791,6 +856,7 @@ class EmployeePayrollController extends Controller
 					}
 
 
+					$unApplyLeave += $rejectedOrUnpaidHalfDays + $unapprovedHalfDaysFromBiometric;
 					$lwp += $unApplyLeave;
 					\Log::info("LWP: $lwp (Late: $lateComingCount, Unapproved Leave: $unApplyLeave)");
 
@@ -841,7 +907,7 @@ class EmployeePayrollController extends Controller
 							->update(['status' => 'paid']);
 					}
 					// No leave type deduction, handled by sandwich logic
-					$halfDayLeaveDeductionAmount = round($halfDayLeaveDays * ($grossSalary / $monthDays), 2);
+					$halfDayLeaveDeductionAmount = 0;
 					$totalLeaveDeduction = $halfDayLeaveDeductionAmount;
 
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);

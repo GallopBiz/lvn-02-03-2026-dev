@@ -2,6 +2,23 @@
 
 @section('main-container')
 
+@php
+    if (!function_exists('formatDurationInHoursAndMinutes')) {
+        function formatDurationInHoursAndMinutes($minutes) {
+            $minutes = (int) $minutes;
+            if ($minutes < 60) {
+                return $minutes . 'm';
+            }
+            $hours = floor($minutes / 60);
+            $remMinutes = $minutes % 60;
+            if ($remMinutes > 0) {
+                return $hours . 'hr ' . $remMinutes . 'm';
+            }
+            return $hours . 'hr';
+        }
+    }
+@endphp
+
     <style>
         .uperletter {
             text-transform: capitalize;
@@ -140,6 +157,19 @@
             <button type="submit" class="btn btn-primary mt-3" >Filter</button>
         </form>
 
+        <!-- Legend Badge Bar -->
+        <div class="card mb-3 shadow-sm border-0">
+            <div class="card-body py-2 px-3 bg-light rounded d-flex flex-wrap align-items-center gap-2" style="font-size: 13px;">
+                <strong class="me-2">Attendance Badges Legend:</strong>
+                <span class="badge badge-success" style="padding: 4px 6px; background-color: #28a745; color: #fff;">On Time In / Out</span>
+                <span class="badge badge-danger" style="padding: 4px 6px; background-color: #dc3545; color: #fff;">Late (Xm)</span>
+                <span class="badge badge-warning" style="padding: 4px 6px; background-color: #ffc107; color: #212529;">Early Out (Xm)</span>
+                <span class="badge badge-info" style="padding: 4px 6px; background-color: #17a2b8; color: #fff;">Extra (Xm) [After Shift End]</span>
+                <span class="badge badge-secondary" style="padding: 4px 6px; background-color: #6c757d; color: #fff;">No Out Punch</span>
+                <span class="badge badge-primary" style="padding: 4px 6px; background-color: #007bff; color: #fff;">Half Day / Leave</span>
+            </div>
+        </div>
+
         <!-- Attendance Table -->
         <div id="attendanceTable">
             <div class="table-responsive">
@@ -175,21 +205,116 @@
                                                 ->whereDate('HolidayEndDate', '>=', $date)
                                                 ->first();
                                             $isWeekendOff = $date->isSunday();
+
+                                            $shift = $employee ? \App\Services\Hrms\ShiftResolver::getApplicableShift($employee, $date->toDateString()) : null;
+
+                                            $approvedLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
+                                                return $lr->employee_id == $employeeId
+                                                    && \Carbon\Carbon::parse($lr->start_date)->lte($date)
+                                                    && \Carbon\Carbon::parse($lr->end_date)->gte($date);
+                                            }) : null;
+
+                                            $isLateIn = false;
+                                            $isOnTimeIn = false;
+                                            $lateMinutes = 0;
+
+                                            $isEarlyOut = false;
+                                            $earlyMinutes = 0;
+                                            $isExtraOut = false;
+                                            $extraMinutes = 0;
+                                            $isOnTimeOut = false;
+                                            $missingOut = false;
+
+                                            if ($record && $shift && $shift->start_time && $shift->end_time) {
+                                                $dateStr = $date->toDateString();
+                                                $shiftStart = strtotime($dateStr . ' ' . $shift->start_time);
+                                                $shiftEnd = strtotime($dateStr . ' ' . $shift->end_time);
+                                                $threshold = (int) ($shift->late_coming_threshold ?? 0);
+
+                                                if ($record->in_time) {
+                                                    $inTime = strtotime($dateStr . ' ' . $record->in_time);
+                                                    if ($inTime > ($shiftStart + ($threshold * 60))) {
+                                                        $isLateIn = true;
+                                                        $lateMinutes = (int) round(($inTime - $shiftStart) / 60);
+                                                    } else {
+                                                        $isOnTimeIn = true;
+                                                    }
+                                                }
+
+                                                if ($record->out_time) {
+                                                    $outTime = strtotime($dateStr . ' ' . $record->out_time);
+                                                    if ($outTime < $shiftEnd) {
+                                                        $isEarlyOut = true;
+                                                        $earlyMinutes = (int) round(($shiftEnd - $outTime) / 60);
+                                                    } else {
+                                                        $extraDiff = (int) round(($outTime - $shiftEnd) / 60);
+                                                        if ($extraDiff >= 15) {
+                                                            $isExtraOut = true;
+                                                            $extraMinutes = $extraDiff;
+                                                        } else {
+                                                            $isOnTimeOut = true;
+                                                        }
+                                                    }
+                                                } elseif ($record->in_time && !$record->out_time) {
+                                                    $missingOut = true;
+                                                }
+                                            }
                                         @endphp
-                                        <td>
+                                        <td style="min-width: 145px; padding: 6px 8px;">
                                             @if ($record)
-                                                In: {{ $record->in_time ?? '--' }} <br>
-                                                Out: {{ $record->out_time ?? '--' }} <br>
-                                                Status: <span
-                                                    class="badge badge-{{ $record->status == 'present' ? 'success' : ($record->status == 'on-official-work' ? 'info' : 'danger') }}">
-                                                    {{ ucfirst($record->status) }}
-                                                </span>
+                                                <!-- STATUS BADGES FIRST IN FRONT -->
+                                                <div class="mb-1" style="display: flex; flex-wrap: wrap; gap: 3px; align-items: center;">
+                                                    <span class="badge {{ $record->status == 'present' ? 'badge-success' : ($record->status == 'on-official-work' ? 'badge-info' : 'badge-danger') }}" style="font-size: 11px; padding: 4px 6px;">
+                                                        {{ ucfirst($record->status) }}
+                                                    </span>
+
+                                                    @if ($isLateIn)
+                                                        <span class="badge badge-danger" style="font-size: 11px; padding: 4px 6px; background-color: #dc3545; color: #fff;" title="Late In by {{ formatDurationInHoursAndMinutes($lateMinutes) }}">
+                                                            Late ({{ formatDurationInHoursAndMinutes($lateMinutes) }})
+                                                        </span>
+                                                    @elseif ($isOnTimeIn)
+                                                        <span class="badge badge-success" style="font-size: 11px; padding: 4px 6px; background-color: #28a745; color: #fff;" title="On Time Entry">
+                                                            On Time In
+                                                        </span>
+                                                    @endif
+
+                                                    @if ($isEarlyOut)
+                                                        <span class="badge badge-warning" style="font-size: 11px; padding: 4px 6px; background-color: #ffc107; color: #212529;" title="Left {{ formatDurationInHoursAndMinutes($earlyMinutes) }} before shift end">
+                                                            Early Out ({{ formatDurationInHoursAndMinutes($earlyMinutes) }})
+                                                        </span>
+                                                    @elseif ($isExtraOut)
+                                                        <span class="badge badge-info" style="font-size: 11px; padding: 4px 6px; background-color: #17a2b8; color: #fff;" title="Punched Out {{ formatDurationInHoursAndMinutes($extraMinutes) }} after shift end">
+                                                            Extra ({{ formatDurationInHoursAndMinutes($extraMinutes) }})
+                                                        </span>
+                                                    @elseif ($isOnTimeOut)
+                                                        <span class="badge badge-success" style="font-size: 11px; padding: 4px 6px; background-color: #28a745; color: #fff;" title="Punched Out On Time">
+                                                            On Time Out
+                                                        </span>
+                                                    @elseif ($missingOut)
+                                                        <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 6px; background-color: #6c757d; color: #fff;" title="No Out Punch Recorded">
+                                                            No Out Punch
+                                                        </span>
+                                                    @endif
+
+                                                    @if ($approvedLeave)
+                                                        <span class="badge badge-primary" style="font-size: 11px; padding: 4px 6px; background-color: #007bff; color: #fff;">
+                                                            {{ $approvedLeave->is_half_day ? 'Half Day Leave' : 'Leave' }}
+                                                        </span>
+                                                    @endif
+                                                </div>
+
+                                                <!-- TIMINGS DISPLAY -->
+                                                <div style="font-size: 12px; line-height: 1.4;">
+                                                    <span style="color: #28a745; font-weight: 600;">In:</span> {{ $record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : '--' }}
+                                                    <br>
+                                                    <span style="color: #dc3545; font-weight: 600;">Out:</span> {{ $record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : '--' }}
+                                                </div>
                                             @elseif($holiday)
-                                                <span>Holiday</span>
+                                                <span class="badge badge-info" style="font-size: 11px; padding: 4px 6px;">Holiday</span>
                                             @elseif($isWeekendOff)
-                                                <span>Sunday</span>
+                                                <span class="badge badge-secondary" style="font-size: 11px; padding: 4px 6px;">Sunday</span>
                                             @else
-                                                <span style="color: red">Absent</span>
+                                                <span class="badge badge-danger" style="font-size: 11px; padding: 4px 6px;">Absent</span>
                                             @endif
                                         </td>
                                     @endforeach

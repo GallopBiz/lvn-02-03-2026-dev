@@ -71,7 +71,14 @@ class EmployeeAttendanceController extends Controller
         ->when($employeeId, fn($query) => $query->where('employee_id', $employeeId))
         ->get()
         ->groupBy('employee_id');
-        return view('backend.HRMS.employeeattendance', compact('attendanceData', 'employees', 'startDate', 'endDate'));
+
+        $leaveRequests = \App\Models\HrmsLeaveRequest::whereIn('status', ['Approved', 'approved'])
+            ->whereDate('start_date', '<=', $endDate)
+            ->whereDate('end_date', '>=', $startDate)
+            ->when($employeeId, fn($q) => $q->where('employee_id', $employeeId))
+            ->get();
+
+        return view('backend.HRMS.employeeattendance', compact('attendanceData', 'employees', 'startDate', 'endDate', 'leaveRequests'));
     }
 
     public function sync(Request $request)
