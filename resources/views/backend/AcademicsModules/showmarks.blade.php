@@ -54,9 +54,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           </div> 
                            <div class="col-md-2 form-group mb-3">
                               <label for="firstName1">Section :</label>
-                              <select required name="section_name" class="form-control" id="section_name" required>
+                              <select required name="section_name" class="form-control" id="section_name">
                                 <option value=""> -- Please select -- </option>
-                                @if (!empty($section_name))
+                                @if(!empty($sections) && count($sections) > 0)
+                                  @foreach($sections as $sec)
+                                    <option value="{{ $sec }}" {{ (!empty($section_name) && $section_name == $sec) ? 'selected' : '' }}>{{ $sec }}</option>
+                                  @endforeach
+                                @elseif (!empty($section_name))
                                   <option selected value="{{$section_name}}">{{$section_name}}</option>
                                 @endif
                             </select>
@@ -70,10 +74,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                                 {{ $c_stream = $s_item->exam_name }}
                                 @endforeach
                                 @endif
-                                @foreach ($examslist as $examItem)
-                                <option {{( (!empty($term_name)) && ($term_name==$examItem->exam_name)) ? 'selected' :
-                                                    '' }} value="{{ $examItem->exam_name }}">{{ $examItem->exam_name }}</option>
-                                @endforeach
+                                @if(!empty($examslist))
+                                    @foreach(collect($examslist)->pluck('exam_name')->filter(function($v) { return !empty(trim((string)$v)); })->unique()->values() as $eName)
+                                        <option value="{{ $eName }}" {{ (!empty($term_name) && $term_name == $eName) ? 'selected' : '' }}>{{ $eName }}</option>
+                                    @endforeach
+                                @endif
                             </select>
                             </div>
 
@@ -111,18 +116,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                                 <option value="consolidated_percent_wise">Consolidated Percent Wise</option>
                                 <option value="result_analysis">Result Analysis</option>
                             </select> -->
-                            </div>
-
-                            <div class="col-md-2 form-group mb-3">
-                                <label for="firstName1">Exam Title :</label>
-                                <select name="exam_title" class="form-control" id="exam_title">
-                                    <option value="">-- Please select --</option>
-                                    @if(!empty($examslist))
-                                        @foreach(collect($examslist)->pluck('exam_title')->filter()->unique() as $title)
-                                            <option value="{{ $title }}" {{ (!empty($exam_title) && $exam_title == $title) ? 'selected' : '' }}>{{ $title }}</option>
-                                        @endforeach
-                                    @endif
-                                </select>
                             </div>
                             <div class="col-md-1 form-group mb-1">
                                 <span><label for="firstName1">Best of two :</label></span><br>
@@ -178,7 +171,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <?php } ?>
                           <th>Science <?php echo (!empty($subject['Science']) ? $subject['Science'] : ''); ?></th>
                           <th>Social Science <?php echo (!empty($subject['Social Science']) ? $subject['Social Science'] : ''); ?></th>
-                          <th>Total <br>Obtained Percent Grade</th>
+                          <th>Total</th>
+                          <th>Grade</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -214,24 +208,25 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                               echo '<td>' . $studentName . '</td>';
                               echo '<td>' . (isset($subjectMarks['scholar_no']) ? $subjectMarks['scholar_no'] : '') . '</td>';
                               if(!empty($subjectMarks['Computer Science'])){
-                                echo '<td>' . $cs .' '. $studentmarks_grade[$studentName]['Computer Science'].'</td>';
+                                echo '<td>' . $cs . '</td>';
                               }
-                              echo '<td>' . $eng .' '. $studentmarks_grade[$studentName]['English'].'</td>';
-                              echo '<td>' . $hindi .' '. $studentmarks_grade[$studentName]['Hindi']. '</td>';
-                              echo '<td>' . $math .' '. $studentmarks_grade[$studentName]['Mathematics']. '</td>';
+                              echo '<td>' . $eng . '</td>';
+                              echo '<td>' . $hindi . '</td>';
+                              echo '<td>' . $math . '</td>';
                               if(!empty($subjectMarks['Sanskrit'])){
-                                echo '<td>' . $san .' '. $studentmarks_grade[$studentName]['Sanskrit'].'</td>';
+                                echo '<td>' . $san . '</td>';
                               }
-                              echo '<td>' . $sci .' '. $studentmarks_grade[$studentName]['Science']. '</td>';
-                              echo '<td>' . $sosci .' '. $studentmarks_grade[$studentName]['Social Science']. '</td>';
-                              echo '<td> '. (floatval($eng) + floatval($hindi) + floatval($math) + floatval($sci) + floatval($sosci)) . ' <b>'. number_format((floatval($eng) + floatval($hindi) + floatval($math) + floatval($sci) + floatval($sosci)) / floatval($studentmarks_total_sum_max[$studentName]) * 100, 2) .' '. $student_grade[$studentName]. '</b></td>';
+                              echo '<td>' . $sci . '</td>';
+                              echo '<td>' . $sosci . '</td>';
+                              echo '<td>' . (floatval($eng) + floatval($hindi) + floatval($math) + floatval($sci) + floatval($sosci)) . '</td>';
+                              echo '<td><b>' . $student_grade[$studentName] . '</b></td>';
                               echo '</tr>';
                           }
                           ?>
                           
                         @else
                         
-                        <tr><td colspan="9" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
+                        <tr><td colspan="12" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
                         @endif
                       </tbody>
                       <tfoot>
@@ -251,7 +246,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <?php } ?>
                           <th>Science <?php echo (!empty($subject['Science']) ? $subject['Science'] : ''); ?></th>
                           <th>Social Science <?php echo (!empty($subject['Social Science']) ? $subject['Social Science'] : ''); ?></th>
-                          <th>Total <br>Obtained Percent Grade</th>
+                          <th>Total</th>
+                          <th>Grade</th>
                         </tr>
                       </tfoot>
                     </table>

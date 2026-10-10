@@ -6,6 +6,7 @@ use App\Models\Marks;
 use App\Models\Subject;
 use App\Models\Teachers;
 use App\Models\Classname;
+use App\Models\Classes;
 use App\Models\Tablemarks;
 use App\Models\CommanModel;
 use Illuminate\Http\Request;
@@ -397,6 +398,16 @@ class MarksController extends Controller
             $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         }
 
+        $sections = collect();
+        if ($class_name) {
+            $sections = DB::connection('dynamic')->table('classes')
+                ->where('class_name', $class_name)
+                ->pluck('section_name')
+                ->filter()
+                ->unique()
+                ->values();
+        }
+
         $classId = Classname::where('class_name', $class_name)->value('id');
         $studentMarksTable = $this->studentMarksTable();
 
@@ -406,28 +417,49 @@ class MarksController extends Controller
             ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
             ->leftJoin('academic_exam', 'previosly_saved_marks_entry.exam_id', '=', 'academic_exam.id')
             ->leftJoin('classes', 'previosly_saved_marks_entry.class_id', '=', 'classes.id')
-            ->leftJoin('subjectmaster', 'previosly_saved_marks_entry.subject_id', '=', 'subjectmaster.id')
-            ->where('previosly_saved_marks_entry.is_delete', 0);
+            ->leftJoin('subjectmaster', 'previosly_saved_marks_entry.subject_id', '=', 'subjectmaster.id');
 
-        if ($classId) {
-            $query->where('previosly_saved_marks_entry.class_id', $classId);
-        } elseif ($class_name) {
-            $query->where('classes.class_name', $class_name);
+        if (Schema::connection('dynamic')->hasColumn('previosly_saved_marks_entry', 'is_delete')) {
+            $query->where(function ($q) {
+                $q->where('previosly_saved_marks_entry.is_delete', 0)
+                  ->orWhereNull('previosly_saved_marks_entry.is_delete');
+            });
+        }
+
+        if (Schema::connection('dynamic')->hasColumn($studentMarksTable, 'is_delete')) {
+            $query->where(function ($q) use ($studentMarksTable) {
+                $q->where($studentMarksTable . '.is_delete', 0)
+                  ->orWhereNull($studentMarksTable . '.is_delete');
+            });
+        }
+
+        if ($class_name) {
+            $possibleClassIds = collect([$class_name])
+                ->concat(\App\Models\Classname::where('class_name', $class_name)->pluck('id'))
+                ->concat(\App\Models\Classes::where('class_name', $class_name)->pluck('id'))
+                ->filter()
+                ->unique()
+                ->map(fn($v) => (string)$v)
+                ->values()
+                ->all();
+
+            $query->where(function ($q) use ($class_name, $possibleClassIds) {
+                $q->whereIn('previosly_saved_marks_entry.class_id', $possibleClassIds)
+                  ->orWhere('classes.class_name', $class_name);
+            });
         }
 
         if ($section_name) {
             $query->where('previosly_saved_marks_entry.section_name', $section_name);
         }
 
-        if ($term_name) {
-            $query->where(function ($q) use ($term_name) {
-                $q->where('academic_exam.exam_name', $term_name)
-                  ->orWhere('academic_exam.exam_title', $term_name);
+        $selectedExamTerm = $term_name ?: $exam_title;
+        if ($selectedExamTerm) {
+            $query->where(function ($q) use ($selectedExamTerm) {
+                $q->where('academic_exam.exam_name', $selectedExamTerm)
+                  ->orWhere('academic_exam.exam_title', $selectedExamTerm)
+                  ->orWhere('previosly_saved_marks_entry.exam_id', $selectedExamTerm);
             });
-        }
-
-        if ($exam_title) {
-            $query->where('academic_exam.exam_title', $exam_title);
         }
 
         $query->where(function ($q) {
@@ -440,9 +472,10 @@ class MarksController extends Controller
             $studentMarksTable . '.*',
             'student_registration.student_name',
             'student_registration.scholar_no',
-            'subjectmaster.subject_name',
+            DB::raw('COALESCE(subjectmaster.subject_name, previosly_saved_marks_entry.subject_id) as subject_name'),
             'academic_exam.exam_name',
             'academic_exam.exam_title',
+            DB::raw('COALESCE(' . $studentMarksTable . '.total_marks, ' . $studentMarksTable . '.subject_marks, 0) as total_marks'),
             DB::raw('COALESCE(academic_exam.max_marks_theory, 0) + COALESCE(academic_exam.max_marks_practical, 0) as max_marks')
         )->get();
 
@@ -494,7 +527,7 @@ class MarksController extends Controller
             $studentmarks_total[$student->student_name][$student->subject_name] = $maxM;
         }
 
-        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks'));
+        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks','sections'));
     }
 
     public function check_grade($number){
