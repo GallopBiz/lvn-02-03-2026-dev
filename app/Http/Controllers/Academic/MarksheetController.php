@@ -34,7 +34,7 @@ class MarksheetController extends Controller
                         ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.exam_name')) LIKE ?", [$like]);
                 });
             })
-            ->latest('id')
+            ->orderByRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.student_name')) ASC")
             ->paginate(20)
             ->appends($request->only('generated_search', 'generated_class_id', 'generated_exam_id', 'class_id'));
         $classes = Classes::query()
@@ -123,8 +123,21 @@ class MarksheetController extends Controller
         $examId = $request->integer('exam_id') ?: null;
         $studentId = $request->integer('student_id') ?: null;
         $template = $this->fixedTemplate();
-        $printData = $this->buildPrintData($classId, $examId, $studentId, $request);
-        $sheets = [compact('template', 'printData')];
+        if ($classId && !$studentId) {
+            $students = $this->studentsForClass($classId);
+            if ($students->isEmpty()) {
+                return redirect()->route('marksheet', ['class_id' => $classId])->with('error', 'No students found for this class.');
+            }
+            $sheets = $students->map(function ($student) use ($classId, $examId, $request, $template) {
+                $printData = $this->buildPrintData($classId, $examId, (int) $student->id, $request);
+                return compact('template', 'printData');
+            })->all();
+            $printData = $sheets[0]['printData'] ?? [];
+        } else {
+            $printData = $this->buildPrintData($classId, $examId, $studentId, $request);
+            $sheets = [compact('template', 'printData')];
+        }
+
 
         return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
     }
@@ -168,8 +181,11 @@ class MarksheetController extends Controller
     {
         $marksheets = Marksheet::query()
             ->whereIn('id', $marksheetIds)
-            ->latest('id')
-            ->get();
+            ->get()
+            ->sortBy(function ($marksheet) {
+                return strtolower($marksheet->snapshot['student_name'] ?? $marksheet->snapshot['print_data']['student_meta']['student_name'] ?? '');
+            }, SORT_NATURAL)
+            ->values();
 
         if ($marksheets->isEmpty()) {
             return redirect()->route('marksheet')->with('error', 'Please select at least one generated marksheet to print.');

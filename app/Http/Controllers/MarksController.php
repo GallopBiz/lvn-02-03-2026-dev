@@ -383,61 +383,118 @@ class MarksController extends Controller
         $exam_title = $request->post('exam_title');
         $best_of_two = $request->post('best_of_two');
         $pdf_check = $request->post('pdf_check');
+
         if ($this->isStaffMarksUser() && !$this->canAccessClassSectionByName($class_name, $section_name)) {
             abort(403, 'You are not allowed to view marks for this class/section.');
         }
-        if (!empty($pdf_check)){
-            echo "yes";
+
+        if ($this->isStaffMarksUser()) {
+            $classIds = $this->accessibleClassIds();
+            $classlist = Classname::select('id', 'class_name')->whereIn('id', $classIds)->get();
+            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         } else {
-            echo "no";
+            $classlist = Classname::select('id', 'class_name')->where('is_delete', 0)->get();
+            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         }
-        die();
-        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-        $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
-        $studentmarkss = DB::connection('dynamic')
-                ->table('previosly_saved_marks_entry')
-                ->join($this->studentMarksTable(), 'previosly_saved_marks_entry.id', '=', $this->studentMarksTable() . '.marks_id')
-                ->join('student_registration', $this->studentMarksTable() . '.student_id', '=', 'student_registration.id')
-                ->where('previosly_saved_marks_entry.class_name', '=', $class_name)
-                ->where('previosly_saved_marks_entry.section_name', '=', $section_name)
-                ->Where('previosly_saved_marks_entry.exam_name', '=', $term_name)
-                ->where(function ($query) {
-                    $query->where('student_registration.is_archived', 0)
-                        ->orWhereNull('student_registration.is_archived');
+
+        $classId = Classname::where('class_name', $class_name)->value('id');
+        $studentMarksTable = $this->studentMarksTable();
+
+        $query = DB::connection('dynamic')
+            ->table('previosly_saved_marks_entry')
+            ->join($studentMarksTable, 'previosly_saved_marks_entry.id', '=', $studentMarksTable . '.marks_id')
+            ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
+            ->leftJoin('academic_exam', 'previosly_saved_marks_entry.exam_id', '=', 'academic_exam.id')
+            ->leftJoin('classes', 'previosly_saved_marks_entry.class_id', '=', 'classes.id')
+            ->leftJoin('subjectmaster', 'previosly_saved_marks_entry.subject_id', '=', 'subjectmaster.id')
+            ->where('previosly_saved_marks_entry.is_delete', 0);
+
+        if ($classId) {
+            $query->where('previosly_saved_marks_entry.class_id', $classId);
+        } elseif ($class_name) {
+            $query->where('classes.class_name', $class_name);
+        }
+
+        if ($section_name) {
+            $query->where('previosly_saved_marks_entry.section_name', $section_name);
+        }
+
+        if ($term_name) {
+            $query->where(function ($q) use ($term_name) {
+                $q->where('academic_exam.exam_name', $term_name)
+                  ->orWhere('academic_exam.exam_title', $term_name);
+            });
+        }
+
+        if ($exam_title) {
+            $query->where('academic_exam.exam_title', $exam_title);
+        }
+
+        $query->where(function ($q) {
+            $q->where('student_registration.is_archived', 0)
+              ->orWhereNull('student_registration.is_archived');
+        });
+
+        $studentmarkss = $query->select(
+            'previosly_saved_marks_entry.*',
+            $studentMarksTable . '.*',
+            'student_registration.student_name',
+            'student_registration.scholar_no',
+            'subjectmaster.subject_name',
+            'academic_exam.exam_name',
+            'academic_exam.exam_title',
+            DB::raw('COALESCE(academic_exam.max_marks_theory, 0) + COALESCE(academic_exam.max_marks_practical, 0) as max_marks')
+        )->get();
+
+        $class_teacher = null;
+        if ($classId) {
+            $classTeacherRecord = TeacherSubject::with('Teacher')
+                ->where('is_delete', 0)
+                ->where('class_id', $classId)
+                ->where(function ($q) use ($section_name) {
+                    if ($section_name) {
+                        $q->where('section_name', $section_name)->orWhere('section_name', 'All');
+                    }
                 })
-                ->get();
-        $class_teacher = DB::connection('dynamic')->table('teacher_subjects')->select('teacher_name')
-        ->where('class_name','=',$class_name)
-        ->where('role','=','Class Teacher')
-        ->first();
+                ->where('role', 'Class Teacher')
+                ->first();
+
+            if ($classTeacherRecord && $classTeacherRecord->Teacher) {
+                $t = $classTeacherRecord->Teacher;
+                $tName = trim(($t->first_name ?? '') . ' ' . ($t->last_name ?? ''));
+                if (empty($tName)) {
+                    $tName = $t->teacher_name ?? $t->name ?? '';
+                }
+                $class_teacher = (object) ['teacher_name' => $tName];
+            }
+        }
+
         $studentmarks = [];
         $studentmarks_grade = [];
         $studentmarks_total = [];
         $subject = [];
-        $total = 0;
-        $sum_marks = 0;
-        // echo '<pre>';
         $studentmarks_total_sum = [];
         $studentmarks_total_sum_max = [];
         $student_grade = [];
+
         foreach($studentmarkss as $key => $student){
-            $subject[$student->subject_name] = $student->max_marks;
+            $maxM = $student->max_marks > 0 ? $student->max_marks : 100;
+            $subject[$student->subject_name] = $maxM;
             $studentmarks[$student->student_name][$student->subject_name] = $student->total_marks;
             $studentmarks_grade[$student->student_name][$student->subject_name] = $student->grade;
             if($student->subject_name != 'Sanskrit' && $student->subject_name != 'Computer Science'){
                 $studentmarks[$student->student_name]['total'][] = $student->total_marks;
-                $studentmarks[$student->student_name]['max_total'][] = $student->max_marks;
+                $studentmarks[$student->student_name]['max_total'][] = $maxM;
             }
             $studentmarks[$student->student_name]['scholar_no'] = $student->scholar_no;
-            $studentmarks_total_sum[$student->student_name] = array_sum($studentmarks[$student->student_name]['total']);
-            $studentmarks_total_sum_max[$student->student_name] = array_sum($studentmarks[$student->student_name]['max_total']);
-            $student_grade[$student->student_name] = $this->check_grade(($studentmarks_total_sum[$student->student_name] / $studentmarks_total_sum_max[$student->student_name]) * 100);
-            $studentmarks_total[$student->student_name][$student->subject_name] = $student->max_marks;
+            $studentmarks_total_sum[$student->student_name] = array_sum($studentmarks[$student->student_name]['total'] ?? [0]);
+            $studentmarks_total_sum_max[$student->student_name] = array_sum($studentmarks[$student->student_name]['max_total'] ?? [100]);
+            $pct = ($studentmarks_total_sum_max[$student->student_name] > 0) ? ($studentmarks_total_sum[$student->student_name] / $studentmarks_total_sum_max[$student->student_name]) * 100 : 0;
+            $student_grade[$student->student_name] = $this->check_grade($pct);
+            $studentmarks_total[$student->student_name][$student->subject_name] = $maxM;
         }
-        // print_r($studentmarks);die();
-        // print_r($studentmarks_total_sum_max);
 
-        return view('backend.AcademicsModules.showmarks',compact('report_type','term_name','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks'));
+        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks'));
     }
 
     public function check_grade($number){

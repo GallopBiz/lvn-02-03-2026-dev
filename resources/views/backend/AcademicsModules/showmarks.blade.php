@@ -70,9 +70,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                                 {{ $c_stream = $s_item->exam_name }}
                                 @endforeach
                                 @endif
-                                @foreach ($examslist as $examslist)
-                                <option {{( (!empty($term_name)) && ($term_name==$examslist->exam_name)) ? 'selected' :
-                                                    '' }} value="{{ $examslist->exam_name }}">{{ $examslist->exam_name }}</option>
+                                @foreach ($examslist as $examItem)
+                                <option {{( (!empty($term_name)) && ($term_name==$examItem->exam_name)) ? 'selected' :
+                                                    '' }} value="{{ $examItem->exam_name }}">{{ $examItem->exam_name }}</option>
                                 @endforeach
                             </select>
                             </div>
@@ -115,8 +115,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
                             <div class="col-md-2 form-group mb-3">
                                 <label for="firstName1">Exam Title :</label>
-                                <select required name="exam_title" class="form-control" id="exam_title">
+                                <select name="exam_title" class="form-control" id="exam_title">
                                     <option value="">-- Please select --</option>
+                                    @if(!empty($examslist))
+                                        @foreach(collect($examslist)->pluck('exam_title')->filter()->unique() as $title)
+                                            <option value="{{ $title }}" {{ (!empty($exam_title) && $exam_title == $title) ? 'selected' : '' }}>{{ $title }}</option>
+                                        @endforeach
+                                    @endif
                                 </select>
                             </div>
                             <div class="col-md-1 form-group mb-1">
