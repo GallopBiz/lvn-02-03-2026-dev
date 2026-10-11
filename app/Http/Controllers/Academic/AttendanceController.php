@@ -15,6 +15,7 @@ use App\Models\TeacherSubject;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
@@ -282,8 +283,13 @@ class AttendanceController extends Controller
         ];
 
         $students = $this->studentOptions($filters['class_id'], $filters['section_name'], trim((string) $request->query('student_search', '')));
-        $monthWiseReport = ($filters['class_id'] && $filters['section_name'] && $filters['month'])
-            ? $this->monthWiseAttendanceMatrix($filters)
+        $effectiveMonth = $filters['month']
+            ?: ($filters['from_date'] ? Carbon::parse($filters['from_date'])->format('Y-m') : null)
+            ?: ($filters['to_date'] ? Carbon::parse($filters['to_date'])->format('Y-m') : null)
+            ?: now()->format('Y-m');
+
+        $monthWiseReport = ($filters['class_id'] && $filters['section_name'])
+            ? $this->monthWiseAttendanceMatrix(array_merge($filters, ['month' => $effectiveMonth]))
             : null;
 
         return view('backend.AcademicsModules.Attandencereports', compact(
@@ -450,8 +456,6 @@ class AttendanceController extends Controller
 
     private function filters(Request $request): array
     {
-        $month = $request->query('month', now()->format('Y-m'));
-
         return [
             'class_id' => $request->query('class_id', $request->query('classname')),
             'section_name' => $request->query('section_name', $request->query('Section')),
@@ -459,8 +463,8 @@ class AttendanceController extends Controller
             'date' => $request->query('date', now()->format('Y-m-d')),
             'from_date' => $request->query('from_date', $request->query('fromdate')),
             'to_date' => $request->query('to_date', $request->query('todate')),
-            'month' => $month,
-            'academic_session' => $request->query('academic_session', $this->defaultSession()),
+            'month' => $request->query('month'),
+            'academic_session' => $this->defaultSession($request),
         ];
     }
 
@@ -585,7 +589,11 @@ class AttendanceController extends Controller
 
     private function monthWiseAttendanceMatrix(array $filters, ?int $onlyStudentId = null): array
     {
-        $month = Carbon::createFromFormat('Y-m', $filters['month']);
+        $monthStr = $filters['month']
+            ?: ($filters['from_date'] ? Carbon::parse($filters['from_date'])->format('Y-m') : null)
+            ?: ($filters['to_date'] ? Carbon::parse($filters['to_date'])->format('Y-m') : null)
+            ?: now()->format('Y-m');
+        $month = Carbon::createFromFormat('Y-m', $monthStr);
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
         $days = range(1, (int) $end->format('d'));
@@ -809,13 +817,30 @@ class AttendanceController extends Controller
     private function applyAttendanceFilters($query, array $filters): void
     {
         $query->when($filters['class_id'], fn ($q) => $q->where('class_id', $filters['class_id']))
-            ->when($filters['section_name'], fn ($q) => $q->where('section_name', $filters['section_name']))
-            ->when($filters['academic_session'], fn ($q) => $q->where('academic_session', $filters['academic_session']));
+            ->when($filters['section_name'], fn ($q) => $q->where('section_name', $filters['section_name']));
+
+        if (!empty($filters['academic_session'])) {
+            $session = $filters['academic_session'];
+            $variants = array_unique([
+                $session,
+                str_replace('_', '-', $session),
+                str_replace('-', '_', $session),
+            ]);
+
+            $hasMatching = DB::connection('dynamic')->table('academic_attendance')
+                ->where('is_delete', 0)
+                ->whereIn('academic_session', $variants)
+                ->exists();
+
+            if ($hasMatching) {
+                $query->whereIn('academic_session', $variants);
+            }
+        }
 
         if ($filters['from_date'] || $filters['to_date']) {
             $query->when($filters['from_date'], fn ($q) => $q->whereDate('attendance_date', '>=', $filters['from_date']))
                 ->when($filters['to_date'], fn ($q) => $q->whereDate('attendance_date', '<=', $filters['to_date']));
-        } elseif ($filters['month']) {
+        } elseif (!empty($filters['month'])) {
             $date = Carbon::createFromFormat('Y-m', $filters['month']);
             $query->whereBetween('attendance_date', [$date->copy()->startOfMonth(), $date->copy()->endOfMonth()]);
         }
@@ -856,8 +881,26 @@ class AttendanceController extends Controller
         ];
     }
 
-    private function defaultSession(): string
+    private function defaultSession(?Request $request = null): string
     {
+        $request = $request ?: request();
+        $selected = $request->query('academic_session')
+            ?: ($request->cookie('selectedYear')
+                ?: ($_COOKIE['selectedYear'] ?? null)
+                ?: ($request->hasSession() ? $request->session()->get('selectedYear') : null)
+                ?: ($request->hasSession() ? $request->session()->get('db_names') : null)
+                ?: Config::get('database.connections.dynamic.database')
+                ?: Config::get('database.connections.mysql.database'));
+
+        if (is_string($selected) && preg_match('/^(\d{4})[-_](\d{4})$/', trim($selected), $m)) {
+            return $m[1] . '-' . $m[2];
+        }
+
+        if (is_string($selected) && preg_match('/^(\d{4})/', trim($selected), $m)) {
+            $start = (int) $m[1];
+            return $start . '-' . ($start + 1);
+        }
+
         $year = (int) now()->format('Y');
         $month = (int) now()->format('m');
         $start = $month >= 4 ? $year : $year - 1;

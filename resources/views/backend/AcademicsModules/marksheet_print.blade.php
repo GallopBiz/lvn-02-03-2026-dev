@@ -55,13 +55,13 @@
 
     .date {
         text-align: right;
-        font-size: 11px;
+        font-size: 12px;
     }
 
     .title {
         text-align: center;
         font-weight: bold;
-        font-size: 15px;
+        font-size: 16px;
         line-height: 1.35;
         margin: 1mm 0 2mm;
     }
@@ -71,7 +71,7 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         padding: 2mm 4mm;
-        font-size: 13px;
+        font-size: 14px;
         line-height: 1.35;
     }
 
@@ -90,7 +90,7 @@
         max-width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 11.5px;
+        font-size: 12.5px;
         line-height: 1.08;
     }
 
@@ -132,7 +132,7 @@
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .co-table th,
@@ -153,7 +153,7 @@
         grid-template-columns: 1fr 32mm 34mm 32mm;
         gap: 5mm;
         align-items: center;
-        font-size: 13px;
+        font-size: 14px;
         margin-top: 3mm;
     }
 
@@ -325,7 +325,7 @@
                             @endforeach
                         </tr>
                     </thead>
-                    <tbodnpm run devy>
+                    <tbody>
                         @forelse($scholasticRows as $row)
                         @php
                         $subjectName = $row['subject'] ?? '';

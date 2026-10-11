@@ -29,7 +29,12 @@
 
 <div class="main-content attendance-page pt-4">
     <div class="breadcrumb d-flex justify-content-between align-items-center flex-wrap">
-        <h2 class="mb-2">Attendance Reports</h2>
+        <div class="d-flex align-items-center flex-wrap mb-2">
+            <h2 class="mb-0 mr-3">Attendance Reports</h2>
+            <span class="badge badge-primary px-2 py-1 font-weight-bold" style="font-size: 13px;">
+                Session: {{ $filters['academic_session'] }}
+            </span>
+        </div>
         <div class="no-print">
             <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">Print / PDF</button>
             <button class="btn btn-outline-success btn-sm" onclick="exportTable('attendanceReportTable','attendance-report.xls')">Excel</button>
@@ -40,23 +45,15 @@
     <div class="attendance-panel mb-3 no-print">
         <form method="GET" action="{{ route('Attandencereports') }}">
             <div class="row">
-                <div class="col-lg-2 col-md-4 form-group">
-                    <label>Academic Session</label>
-                    <input type="text" name="academic_session" value="{{ $filters['academic_session'] }}" class="form-control">
-                </div>
-                <div class="col-lg-2 col-md-4 form-group">
-                    <label>Month</label>
-                    <input type="month" name="month" value="{{ $filters['month'] }}" class="form-control">
-                </div>
-                <div class="col-lg-2 col-md-4 form-group">
-                    <label>From</label>
+                <div class="col-lg-3 col-md-6 form-group">
+                    <label>From Date</label>
                     <input type="date" name="from_date" value="{{ $filters['from_date'] }}" class="form-control">
                 </div>
-                <div class="col-lg-2 col-md-4 form-group">
-                    <label>To</label>
+                <div class="col-lg-3 col-md-6 form-group">
+                    <label>To Date</label>
                     <input type="date" name="to_date" value="{{ $filters['to_date'] }}" class="form-control">
                 </div>
-                <div class="col-lg-2 col-md-4 form-group">
+                <div class="col-lg-3 col-md-6 form-group">
                     <label>Class</label>
                     <select name="class_id" class="form-control" onchange="this.form.submit()">
                         <option value="">All</option>
@@ -65,7 +62,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-2 col-md-4 form-group">
+                <div class="col-lg-3 col-md-6 form-group">
                     <label>Section</label>
                     <select name="section_name" class="form-control">
                         <option value="">All</option>
@@ -74,7 +71,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-4 col-md-6 form-group">
+                <div class="col-lg-6 col-md-6 form-group">
                     <label>Student</label>
                     <select name="student_id" class="form-control">
                         <option value="">Class wise report</option>
@@ -85,7 +82,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-4 col-md-6 form-group d-flex align-items-end">
+                <div class="col-lg-6 col-md-6 form-group d-flex align-items-end">
                     <button class="btn btn-primary mr-2">Generate</button>
                     <a class="btn btn-outline-primary mr-2" href="#dailyMonthWiseReport">Show Day Wise Report</a>
                     <a class="btn btn-outline-secondary" href="{{ route('Attandencereports') }}">Reset</a>
@@ -210,7 +207,7 @@
                             </tr>
                         @endforeach
                     @else
-                        <tr><td colspan="40" class="text-center text-muted">Select Class, Section and Month, then click Generate.</td></tr>
+                        <tr><td colspan="40" class="text-center text-muted">Select Class and Section, then click Generate.</td></tr>
                     @endif
                 </tbody>
             </table>
