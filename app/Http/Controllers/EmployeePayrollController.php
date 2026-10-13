@@ -403,10 +403,16 @@ class EmployeePayrollController extends Controller
 					} else {
 						$esic = round($esicSalary * (config('payroll.esic_percentage', 0.75) / 100), 2);
 					}
+					// PF Salary = (Basic + DA) * (Month Days - LWP) / Month Days
+					$effectivePFSalary = round($PFSalary * $workingDaysRatio, 2);
 					$efpaPercentage = config('payroll.efpa_percentage', 12);
-					$efpa = round($PFSalary * ($workingDaysRatio * ($efpaPercentage / 100)), 2);
-					if ($efpa > 1800) {
-						$efpa = 1800;
+					if ($effectivePFSalary > 25000) {
+						$efpa = 3000;
+					} else {
+						$efpa = round($effectivePFSalary * ($efpaPercentage / 100), 2);
+					}
+					if ($efpa > 3000) {
+						$efpa = 3000;
 					}
 					$totalEmiDeduction = 0;
 					foreach ($employee->loans as $loan) {
@@ -876,18 +882,17 @@ class EmployeePayrollController extends Controller
 						$esic = round($esicSalary * (config('payroll.esic_percentage', 0.75) / 100), 2);
 					}
 
+					// PF Salary = (Basic + DA) * (Month Days - LWP) / Month Days
+					$effectivePFSalary = round($PFSalary * $workingDaysRatio, 2);
 					$efpaPercentage = config('payroll.efpa_percentage', 12);
-					$efpa = round($PFSalary * ($workingDaysRatio * ($efpaPercentage / 100)), 2);
-					if ($efpa > 1800) {
-						$efpa = 1800;
+					if ($effectivePFSalary > 25000) {
+						$efpa = 3000;
+					} else {
+						$efpa = round($effectivePFSalary * ($efpaPercentage / 100), 2);
 					}
-
-					\Log::info("ESIC: $esic, EFPA: $efpa");
-
-
-					$efpaPercentage = config('payroll.efpa_percentage', 12);
-					$efpa = round($PFSalary * ($workingDaysRatio * ($efpaPercentage / 100)), 2);
-					if ($efpa > 1800) $efpa = 1800;
+					if ($efpa > 3000) {
+						$efpa = 3000;
+					}
 
 					\Log::info("ESIC: $esic, EFPA: $efpa");
 
