@@ -24,6 +24,18 @@ class Term1MarksheetController extends Controller
         $generatedClassId = $request->integer('generated_class_id') ?: null;
         $generatedExamId = $request->integer('generated_exam_id') ?: null;
 
+        $filterExamIds = [];
+        if ($generatedExamId) {
+            $filterExamIds = [$generatedExamId];
+            $selExam = Exam::find($generatedExamId);
+            if ($selExam && !empty($selExam->exam_group_id)) {
+                $filterExamIds = Exam::where('exam_group_id', $selExam->exam_group_id)
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+            }
+        }
+
         $generatedMarksheets = Marksheet::query()
             ->where(function ($query) {
                 $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.marksheet_type')) = 'term_1'")
@@ -34,7 +46,7 @@ class Term1MarksheetController extends Controller
                 $like = '%' . $generatedClassName . '%';
                 $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.class_name')) LIKE ?", [$like]);
             })
-            ->when($generatedExamId, fn ($query) => $query->where('exam_id', $generatedExamId))
+            ->when(!empty($filterExamIds), fn ($query) => $query->whereIn('exam_id', $filterExamIds))
             ->when($generatedSearch !== '', function ($query) use ($generatedSearch) {
                 $like = '%' . str_replace(' ', '%', $generatedSearch) . '%';
                 $query->where(function ($inner) use ($like) {
@@ -50,7 +62,7 @@ class Term1MarksheetController extends Controller
             ->paginate(20)
             ->appends($request->only('generated_search', 'generated_class_name', 'generated_class_id', 'generated_exam_id', 'class_name', 'section_name', 'exam_id'));
 
-        // 1. Fetch actual available classes
+        // 1. Fetch actual available classes (master list for filters)
         $classes = Classname::where('is_delete', 0)
             ->whereNotIn('class_name', ['Test', 'testing', '12th out', 'xyz'])
             ->orderBy('id')
@@ -73,8 +85,8 @@ class Term1MarksheetController extends Controller
             })
             ->toArray();
 
-        // 3. Exams
-        $exams = Exam::with('classInfo')
+        // 3. Exams grouped so each exam appears ONLY ONCE
+        $rawExams = Exam::with('classInfo')
             ->where(function ($q) {
                 $q->whereIn('exam_type', ['PT 1', 'PT-1', 'Term 1', 'Term-1', 'Half Yearly', 'Half-Yearly'])
                     ->orWhere('exam_name', 'like', '%PT 1%')
@@ -84,14 +96,73 @@ class Term1MarksheetController extends Controller
             ->latest('id')
             ->get();
 
-        if ($exams->isEmpty()) {
-            $exams = Exam::with('classInfo')->latest('id')->get();
+        if ($rawExams->isEmpty()) {
+            $rawExams = Exam::with('classInfo')->latest('id')->get();
         }
 
+        $groupedExams = $rawExams->groupBy(function ($exam) {
+            return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
+        })->map(function ($group) {
+            $first = $group->first();
+
+            $classesData = [];
+            foreach ($group as $examItem) {
+                $cName = optional($examItem->classInfo)->class_name;
+                if ($cName) {
+                    $classesData[] = [
+                        'exam_id' => (int) $examItem->id,
+                        'class_id' => (int) $examItem->class_id,
+                        'class_name' => (string) $cName,
+                        'display_name' => (string) $cName,
+                    ];
+                }
+            }
+
+            $uniqueClasses = collect($classesData)->unique('class_name')->values()->all();
+            usort($uniqueClasses, function ($a, $b) {
+                return strnatcasecmp($a['class_name'], $b['class_name']);
+            });
+
+            return [
+                'id' => (int) $first->id,
+                'group_key' => (string) ($first->exam_group_id ?: $first->id),
+                'exam_name' => (string) $first->exam_name,
+                'exam_title' => (string) ($first->exam_title ?: $first->exam_name),
+                'exam_type' => (string) ($first->exam_type ?: ''),
+                'display_name' => (string) ($first->exam_name . ($first->exam_type ? ' - ' . $first->exam_type : '')),
+                'classes' => $uniqueClasses,
+                'all_exam_ids' => $group->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            ];
+        })->values();
+
+        $selectedExamId = $request->integer('exam_id') ?: null;
         $selectedClassName = $request->input('class_name') ?: null;
         $selectedSectionName = $request->input('section_name') ?: null;
-        $selectedExamId = $request->integer('exam_id') ?: null;
         $selectedStudentId = $request->integer('student_id') ?: null;
+
+        $selectedGroup = null;
+        if ($selectedExamId) {
+            $selectedGroup = $groupedExams->first(function ($g) use ($selectedExamId) {
+                return (int) $g['id'] === (int) $selectedExamId || in_array((int) $selectedExamId, $g['all_exam_ids'], true);
+            });
+            if ($selectedGroup) {
+                $selectedExamId = $selectedGroup['id'];
+            }
+        }
+
+        $availableClasses = $selectedGroup ? $selectedGroup['classes'] : [];
+
+        // If a class was requested, verify it exists for the selected exam
+        if ($selectedGroup && $selectedClassName) {
+            $isValidClass = collect($availableClasses)->contains(function ($c) use ($selectedClassName) {
+                return (string) $c['class_name'] === (string) $selectedClassName
+                    || ltrim((string) $c['class_name'], '0') === ltrim((string) $selectedClassName, '0');
+            });
+            if (!$isValidClass) {
+                $selectedClassName = null;
+                $selectedSectionName = null;
+            }
+        }
 
         $sections = collect();
         if ($selectedClassName) {
@@ -102,6 +173,9 @@ class Term1MarksheetController extends Controller
             ? $this->studentsForClass($selectedClassName, $selectedSectionName)
             : collect();
 
+        // Pass groupedExams as exams as well for backwards compatibility
+        $exams = $groupedExams;
+
         return view('backend.AcademicsModules.term1_marksheet', compact(
             'generatedMarksheets',
             'generatedSearch',
@@ -109,9 +183,11 @@ class Term1MarksheetController extends Controller
             'generatedClassId',
             'generatedExamId',
             'classes',
+            'availableClasses',
             'sections',
             'sectionsByClass',
             'exams',
+            'groupedExams',
             'students',
             'selectedClassName',
             'selectedSectionName',
@@ -151,6 +227,7 @@ class Term1MarksheetController extends Controller
             'section_name' => 'nullable|string',
             'class_id' => 'nullable|integer',
             'exam_id' => 'nullable|integer',
+            'resolved_exam_id' => 'nullable|integer',
             'student_id' => 'nullable|integer',
             'remarks' => 'nullable|string|max:255',
         ]);
@@ -158,23 +235,43 @@ class Term1MarksheetController extends Controller
         $className = $request->input('class_name') ?: null;
         $sectionName = $request->input('section_name') ?: null;
         $classId = !empty($validated['class_id']) ? (int) $validated['class_id'] : null;
-        $examId = !empty($validated['exam_id']) ? (int) $validated['exam_id'] : null;
+        $examId = !empty($validated['resolved_exam_id']) ? (int) $validated['resolved_exam_id'] : (!empty($validated['exam_id']) ? (int) $validated['exam_id'] : null);
         $studentId = !empty($validated['student_id']) ? (int) $validated['student_id'] : null;
         $template = (object) ['name' => 'LVN Term 1 Report Card'];
+
+        if (!$examId) {
+            return redirect()->back()->withInput()->with('error', 'Please select an Exam.');
+        }
+
+        if (!$className && !$studentId) {
+            return redirect()->back()->withInput()->with('error', 'Please select a Class.');
+        }
+
+        if ($className) {
+            $classExam = $this->resolveExamForClass($examId, $classId, $className);
+            if (!$classExam) {
+                $examObj = Exam::find($examId);
+                $examName = $examObj ? $examObj->exam_name : 'The selected exam';
+                return redirect()->back()->withInput()->with('error', "{$examName} is not available for {$className}.");
+            }
+        }
 
         $students = $studentId
             ? collect([$this->studentById($studentId)])->filter()
             : $this->studentsForClass($className, $sectionName, $classId);
 
         if ($students->isEmpty()) {
-            return redirect()->route('academic.term1-marksheet.index', array_filter(['class_name' => $className, 'section_name' => $sectionName]))
+            return redirect()->route('academic.term1-marksheet.index', array_filter(['class_name' => $className, 'section_name' => $sectionName, 'exam_id' => $examId]))
                 ->with('error', 'No students found for this class / section.');
         }
 
         $count = 0;
         foreach ($students as $student) {
             $studentClassId = (int) ($student->class_id ?: ($classId ?: $this->resolveClassIdForStudent($student)));
-            $printData = $this->buildPrintData($studentClassId, $examId, (int) $student->id, $request);
+            $targetExam = $this->resolveExamForClass($examId, $studentClassId, $className ?: optional($student)->class_name);
+            $studentExamId = $targetExam ? (int) $targetExam->id : $examId;
+
+            $printData = $this->buildPrintData($studentClassId, $studentExamId, (int) $student->id, $request);
             $snapshotPrintData = $printData;
             $snapshotPrintData['student'] = null;
             $snapshotPrintData['class'] = ['class_name' => optional($printData['class'])->class_name];
@@ -184,7 +281,7 @@ class Term1MarksheetController extends Controller
                 [
                     'student_id' => (int) $student->id,
                     'class_id' => $studentClassId,
-                    'exam_id' => $examId,
+                    'exam_id' => $studentExamId,
                     'session_year' => $printData['session_year'],
                 ],
                 [
@@ -217,29 +314,57 @@ class Term1MarksheetController extends Controller
         $className = $request->input('class_name') ?: null;
         $sectionName = $request->input('section_name') ?: null;
         $classId = $request->integer('class_id') ?: null;
-        $examId = $request->integer('exam_id') ?: null;
+        $examId = $request->integer('resolved_exam_id') ?: ($request->integer('exam_id') ?: null);
         $studentId = $request->integer('student_id') ?: null;
         $template = (object) ['name' => 'Term 1 Report Card'];
+
+        if (!$examId) {
+            return redirect()->route('academic.term1-marksheet.index', array_filter(['class_name' => $className, 'section_name' => $sectionName]))
+                ->with('error', 'Please select an Exam first.');
+        }
+
+        if (!$className && !$studentId && !$classId) {
+            return redirect()->route('academic.term1-marksheet.index', array_filter(['exam_id' => $examId]))
+                ->with('error', 'Please select a Class first.');
+        }
+
+        if ($className) {
+            $classExam = $this->resolveExamForClass($examId, $classId, $className);
+            if (!$classExam) {
+                $examObj = Exam::find($examId);
+                $examName = $examObj ? $examObj->exam_name : 'The selected exam';
+                return redirect()->route('academic.term1-marksheet.index', array_filter(['exam_id' => $examId]))
+                    ->with('error', "{$examName} is not available for {$className}.");
+            }
+        }
 
         if ($studentId) {
             $student = $this->studentById($studentId);
             $studentClassId = (int) ($student->class_id ?? ($classId ?: $this->resolveClassIdForStudent($student)));
-            $printData = $this->buildPrintData($studentClassId, $examId, $studentId, $request);
+            $targetExam = $this->resolveExamForClass($examId, $studentClassId, $className ?: optional($student)->class_name);
+            $studentExamId = $targetExam ? (int) $targetExam->id : $examId;
+
+            $printData = $this->buildPrintData($studentClassId, $studentExamId, $studentId, $request);
             $sheets = [compact('template', 'printData')];
         } elseif ($className || $classId) {
             $students = $this->studentsForClass($className, $sectionName, $classId);
             if ($students->isEmpty()) {
-                return redirect()->route('academic.term1-marksheet.index', array_filter(['class_name' => $className, 'section_name' => $sectionName]))
+                return redirect()->route('academic.term1-marksheet.index', array_filter(['class_name' => $className, 'section_name' => $sectionName, 'exam_id' => $examId]))
                     ->with('error', 'No students found for this class / section.');
             }
-            $sheets = $students->map(function ($student) use ($classId, $examId, $request, $template) {
+            $sheets = $students->map(function ($student) use ($classId, $className, $examId, $request, $template) {
                 $studentClassId = (int) ($student->class_id ?: ($classId ?: $this->resolveClassIdForStudent($student)));
-                $printData = $this->buildPrintData($studentClassId, $examId, (int) $student->id, $request);
+                $targetExam = $this->resolveExamForClass($examId, $studentClassId, $className ?: optional($student)->class_name);
+                $studentExamId = $targetExam ? (int) $targetExam->id : $examId;
+
+                $printData = $this->buildPrintData($studentClassId, $studentExamId, (int) $student->id, $request);
                 return compact('template', 'printData');
             })->all();
             $printData = $sheets[0]['printData'] ?? [];
         } else {
-            $printData = $this->buildPrintData($classId, $examId, null, $request);
+            $targetExam = $this->resolveExamForClass($examId, $classId, $className);
+            $studentExamId = $targetExam ? (int) $targetExam->id : $examId;
+            $printData = $this->buildPrintData($classId, $studentExamId, null, $request);
             $sheets = [compact('template', 'printData')];
         }
 
@@ -1018,6 +1143,66 @@ class Term1MarksheetController extends Controller
     private function normalizeExamType(?string $type): string
     {
         return Str::lower(str_replace([' ', '-'], '', (string) $type));
+    }
+
+    private function resolveExamForClass(?int $examId, ?int $classId = null, ?string $className = null): ?Exam
+    {
+        if (!$examId) {
+            return null;
+        }
+
+        $exam = Exam::with('classInfo')->find($examId);
+        if (!$exam) {
+            return null;
+        }
+
+        // 1. If exam directly matches class_id
+        if ($classId && (int) $exam->class_id === (int) $classId) {
+            return $exam;
+        }
+
+        // 2. If exam directly matches class_name
+        $examClassName = optional($exam->classInfo)->class_name;
+        if ($className && $examClassName && (
+            (string) $examClassName === (string) $className ||
+            ltrim((string) $examClassName, '0') === ltrim((string) $className, '0')
+        )) {
+            return $exam;
+        }
+
+        // 3. Search siblings in the same exam group or with identical exam_name and exam_type
+        $siblingQuery = Exam::with('classInfo')->where('id', '!=', $examId);
+
+        if (!empty($exam->exam_group_id)) {
+            $siblingQuery->where('exam_group_id', $exam->exam_group_id);
+        } else {
+            $siblingQuery->where('exam_name', $exam->exam_name);
+            if (!empty($exam->exam_type)) {
+                $siblingQuery->where('exam_type', $exam->exam_type);
+            }
+        }
+
+        $siblings = $siblingQuery->get();
+
+        foreach ($siblings as $sibling) {
+            if ($classId && (int) $sibling->class_id === (int) $classId) {
+                return $sibling;
+            }
+            $sibClassName = optional($sibling->classInfo)->class_name;
+            if ($className && $sibClassName && (
+                (string) $sibClassName === (string) $className ||
+                ltrim((string) $sibClassName, '0') === ltrim((string) $className, '0')
+            )) {
+                return $sibling;
+            }
+        }
+
+        // 4. If neither classId nor className was passed, return the original exam
+        if (!$classId && !$className) {
+            return $exam;
+        }
+
+        return null;
     }
 
     private function marksClassIdsFor(?int $classId): array

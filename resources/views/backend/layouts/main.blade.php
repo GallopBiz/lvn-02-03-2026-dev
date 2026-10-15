@@ -78,6 +78,7 @@
          <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
          <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
          <script src="{{url('assets/backend')}}/js/plugins/bootstrap.bundle.min.js"></script>
+         <script src="{{url('assets/backend')}}/js/plugins/jquery.smartWizard.min.js"></script>
          <script src="{{url('assets/backend')}}/js/plugins/perfect-scrollbar.min.js"></script>
          <script src="{{url('assets/backend')}}/js/scripts/script.min.js"></script>
          <script src="{{url('assets/backend')}}/js/scripts/sidebar.large.script.min.js"></script>
@@ -87,38 +88,38 @@
          <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
          <script>
             $(document).ready(function() {
-               $('select.select2, select.deductions').each(function() {
-                  var select = $(this);
-                  var isMultiple = select.prop('multiple');
-                  var placeholder = select.data('placeholder') || select.attr('placeholder') || '';
+               if ($.fn.select2) {
+                  $('select.select2, select.deductions').each(function() {
+                     var select = $(this);
+                     var isMultiple = select.prop('multiple');
+                     var placeholder = select.data('placeholder') || select.attr('placeholder') || '';
 
-                  if (!placeholder) {
-                     var emptyOption = select.find('option[value=""], option[disabled]').first();
-                     placeholder = emptyOption.length ? emptyOption.text().trim() : (isMultiple ? 'Select options' : 'Select option');
-                  }
+                     if (!placeholder) {
+                        var emptyOption = select.find('option[value=""], option[disabled]').first();
+                        placeholder = emptyOption.length ? emptyOption.text().trim() : (isMultiple ? 'Select options' : 'Select option');
+                     }
 
-                  if (select.data('select2')) {
-                     select.select2('destroy');
-                  }
+                     if (select.data('select2')) {
+                        select.select2('destroy');
+                     }
 
-                  select.select2({
-                     width: '100%',
-                     placeholder: placeholder,
-                     allowClear: !isMultiple,
-                     closeOnSelect: !isMultiple
+                     select.select2({
+                        width: '100%',
+                        placeholder: placeholder,
+                        allowClear: !isMultiple,
+                        closeOnSelect: !isMultiple
+                     });
                   });
-               });
+               }
             });
          </script>
-      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
+      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
       <script src="{{url('assets/backend')}}/js/scripts/tooltip.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/script_2.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/feather.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/metisMenu.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/layout-sidebar-vertical.min.js"></script>
     <script src="{{url('assets/backend')}}/js/scripts/sidebar.compact.script.min.js"></script>
-    <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
-
     @endif
 
     @if(Request::segment(1)=='inquiry-data-show' || Request::segment(1)=='users' || Request::segment(1)=='fees-type-master'
@@ -153,27 +154,29 @@
     <script src="{{url('assets/backend/')}}/js/scripts/datatables.script.min.js"></script>
 
     @endif
-      <script src="{{url('assets/backend')}}/js/plugins/jquery.smartWizard.min.js"></script>
+      @if(Request::segment(1)!='admin-enquiryform' && Request::segment(1)!='edit_enquiry' && Request::segment(1)!='edit_followupdate')
       <script src="{{url('assets/backend')}}/js/scripts/smart.wizard.script.min.js"></script>
+      @endif
       <script src="{{url('assets/backend')}}/js/scripts/form.validation.script.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/sidebar.compact.script.min.js"></script>
-      <script src="{{url('assets/backend')}}/js/scripts/customizer.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/toastr.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/toastr.script.min.js"></script>
 
-
 <script>
     $(document).ready(function() {
-        $('#classes').select2({
-            tags: false,
-            width: 'resolve'
-        });
-    });
-    $(document).ready(function() {
-        $('#stream').select2({
-            tags: false,
-            width: 'resolve'
-        });
+        if ($.fn.select2) {
+            if ($('#classes').length) {
+                $('#classes').select2({
+                    tags: false,
+                    width: 'resolve'
+                });
+            }
+            if ($('#stream').length) {
+                $('#stream').select2({
+                    tags: false,
+                    width: 'resolve'
+                });
+            }
+        }
     });
 </script>
    </body>

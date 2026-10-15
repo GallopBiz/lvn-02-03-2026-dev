@@ -31,7 +31,7 @@
             </button>
         </div>
     @endif
-    @if($errors->any())
+    @if(isset($errors) && $errors->any())
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             {{ $errors->first() }}
             <button type="button" class="close" data-dismiss="alert" aria-label="Close">
@@ -50,16 +50,29 @@
             <form method="POST" action="{{ route('academic.term1-marksheet.generate') }}" id="term1MarksheetForm">
                 @csrf
 
-                <!-- Row 1: Horizontal Filter Options -->
+                <!-- Row 1: Horizontal Filter Options (Exam first, then Class, Section, Student) -->
                 <div class="row">
                     <div class="col-md-3 col-sm-6 form-group">
+                        <label class="font-weight-bold">Exam Name <span class="text-danger">*</span></label>
+                        <select class="form-control" name="exam_id" id="t1_exam_id" required>
+                            <option value="">-- Select Exam --</option>
+                            @foreach($groupedExams as $gExam)
+                                <option value="{{ $gExam['id'] }}" {{ (string) $selectedExamId === (string) $gExam['id'] || in_array((int)$selectedExamId, $gExam['all_exam_ids']) ? 'selected' : '' }}>
+                                    {{ $gExam['display_name'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <input type="hidden" name="resolved_exam_id" id="t1_resolved_exam_id" value="{{ $selectedExamId }}">
+                    </div>
+
+                    <div class="col-md-3 col-sm-6 form-group">
                         <label class="font-weight-bold">Class <span class="text-danger">*</span></label>
-                        <select class="form-control" name="class_name" id="t1_class_name" required>
-                            <option value="">-- Select Class --</option>
-                            @foreach($classes as $c)
-                                @php $cName = $c->class_name; @endphp
-                                <option value="{{ $cName }}" {{ (string) $selectedClassName === (string) $cName ? 'selected' : '' }}>
-                                    {{ in_array($cName, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2']) ? $cName : 'Class ' . (is_numeric($cName) ? (int)$cName : $cName) }}
+                        <select class="form-control" name="class_name" id="t1_class_name" required {{ empty($selectedExamId) ? 'disabled' : '' }}>
+                            <option value="">{{ !empty($selectedExamId) ? '-- Select Class --' : '-- Select Exam First --' }}</option>
+                            @foreach($availableClasses as $c)
+                                @php $cName = $c['class_name']; @endphp
+                                <option value="{{ $cName }}" data-exam-id="{{ $c['exam_id'] }}" {{ (string) $selectedClassName === (string) $cName ? 'selected' : '' }}>
+                                    {{ $cName }}
                                 </option>
                             @endforeach
                         </select>
@@ -72,18 +85,6 @@
                             @foreach($sections as $sec)
                                 <option value="{{ $sec }}" {{ (string) $selectedSectionName === (string) $sec ? 'selected' : '' }}>
                                     {{ $sec }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="col-md-3 col-sm-6 form-group">
-                        <label class="font-weight-bold">Exam Name</label>
-                        <select class="form-control" name="exam_id" id="t1_exam_id">
-                            <option value="">Auto-detect (Term 1 / Half Yearly / PT 1)</option>
-                            @foreach($exams as $exam)
-                                <option value="{{ $exam->id }}" {{ (string) $selectedExamId === (string) $exam->id ? 'selected' : '' }}>
-                                    {{ $exam->exam_name }}{{ $exam->exam_type ? ' - '.$exam->exam_type : '' }}
                                 </option>
                             @endforeach
                         </select>
@@ -148,7 +149,7 @@
                         @foreach($classes as $c)
                             @php $cName = $c->class_name; @endphp
                             <option value="{{ $cName }}" {{ (string) $generatedClassName === (string) $cName ? 'selected' : '' }}>
-                                {{ in_array($cName, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2']) ? $cName : 'Class ' . (is_numeric($cName) ? (int)$cName : $cName) }}
+                                {{ $cName }}
                             </option>
                         @endforeach
                     </select>
@@ -157,16 +158,16 @@
                     <label class="font-weight-bold small">Filter Exam</label>
                     <select class="form-control" name="generated_exam_id">
                         <option value="">All Exams</option>
-                        @foreach($exams as $exam)
-                            <option value="{{ $exam->id }}" {{ (string) $generatedExamId === (string) $exam->id ? 'selected' : '' }}>
-                                {{ $exam->exam_name }}{{ $exam->exam_type ? ' - '.$exam->exam_type : '' }}
+                        @foreach($groupedExams as $gExam)
+                            <option value="{{ $gExam['id'] }}" {{ (string) $generatedExamId === (string) $gExam['id'] || in_array((int)$generatedExamId, $gExam['all_exam_ids']) ? 'selected' : '' }}>
+                                {{ $gExam['display_name'] }}
                             </option>
                         @endforeach
                     </select>
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary btn-block" type="submit">Filter</button>
-                    <a class="btn btn-outline-secondary btn-block mt-1" href="{{ route('academic.term1-marksheet.index', array_filter(['class_name' => $selectedClassName, 'section_name' => $selectedSectionName])) }}">Reset</a>
+                    <a class="btn btn-outline-secondary btn-block mt-1" href="{{ route('academic.term1-marksheet.index', array_filter(['exam_id' => $selectedExamId, 'class_name' => $selectedClassName, 'section_name' => $selectedSectionName])) }}">Reset</a>
                 </div>
             </form>
 
@@ -251,18 +252,151 @@
 </div>
 
 <script>
+    var groupedExams = @json($groupedExams);
     var sectionsByClass = @json($sectionsByClass);
     var studentsDataUrl = '{{ route('academic.term1-marksheet.students-data') }}';
 
+    var examSelect = document.getElementById('t1_exam_id');
     var classSelect = document.getElementById('t1_class_name');
     var sectionSelect = document.getElementById('t1_section_name');
     var studentSelect = document.getElementById('t1_student_id');
+    var resolvedExamInput = document.getElementById('t1_resolved_exam_id');
+
+    function getSelectedExamData(examId) {
+        if (!examId) return null;
+        return groupedExams.find(function (g) {
+            return String(g.id) === String(examId) ||
+                (g.all_exam_ids && g.all_exam_ids.map(String).indexOf(String(examId)) !== -1);
+        });
+    }
+
+    function onExamChange(isInitial) {
+        var selectedExamId = examSelect ? examSelect.value : '';
+        if (!selectedExamId) {
+            if (classSelect) {
+                classSelect.innerHTML = '<option value="">-- Select Exam First --</option>';
+                classSelect.disabled = true;
+                classSelect.value = '';
+            }
+            if (sectionSelect) {
+                sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                sectionSelect.value = '';
+            }
+            if (studentSelect) {
+                studentSelect.innerHTML = '<option value="">All students in selected class/section</option>';
+                studentSelect.value = '';
+            }
+            if (resolvedExamInput) resolvedExamInput.value = '';
+            return;
+        }
+
+        var selectedExam = getSelectedExamData(selectedExamId);
+        if (!selectedExam) return;
+
+        var previouslySelectedClass = classSelect ? classSelect.value : '';
+        var classes = selectedExam.classes || [];
+
+        // Check if previously selected class exists for this exam
+        var matchingClassItem = null;
+        if (previouslySelectedClass) {
+            matchingClassItem = classes.find(function (c) {
+                return String(c.class_name) === String(previouslySelectedClass)
+                    || String(c.class_name).replace(/^0+/, '') === String(previouslySelectedClass).replace(/^0+/, '');
+            });
+        }
+
+        if (classSelect) {
+            classSelect.disabled = false;
+            classSelect.innerHTML = '<option value="">-- Select Class --</option>';
+
+            classes.forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = c.class_name;
+                opt.textContent = c.class_name;
+                opt.dataset.examId = c.exam_id;
+                opt.dataset.classId = c.class_id;
+                if (previouslySelectedClass && (
+                    String(c.class_name) === String(previouslySelectedClass) ||
+                    String(c.class_name).replace(/^0+/, '') === String(previouslySelectedClass).replace(/^0+/, '')
+                )) {
+                    opt.selected = true;
+                }
+                classSelect.appendChild(opt);
+            });
+
+            // If a class was previously chosen but is not configured for this exam, alert!
+            if (previouslySelectedClass && !matchingClassItem && !isInitial) {
+                alert('The exam "' + selectedExam.display_name + '" is not available for ' + previouslySelectedClass + '. Please select an available class.');
+                classSelect.value = '';
+                if (sectionSelect) {
+                    sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                    sectionSelect.value = '';
+                }
+                if (studentSelect) {
+                    studentSelect.innerHTML = '<option value="">All students in selected class/section</option>';
+                    studentSelect.value = '';
+                }
+                if (resolvedExamInput) resolvedExamInput.value = '';
+            } else if (matchingClassItem) {
+                if (resolvedExamInput) resolvedExamInput.value = matchingClassItem.exam_id;
+                populateSections(classSelect.value);
+            }
+        }
+    }
+
+    if (examSelect) {
+        examSelect.addEventListener('change', function () {
+            onExamChange(false);
+        });
+    }
 
     if (classSelect) {
+        // Prevent interaction if exam has not been selected yet
+        classSelect.addEventListener('mousedown', function (e) {
+            if (!examSelect || !examSelect.value) {
+                e.preventDefault();
+                alert('Please select an Exam first.');
+                if (examSelect) examSelect.focus();
+            }
+        });
+
         classSelect.addEventListener('change', function () {
             var selectedClass = this.value;
+            if (!selectedClass) {
+                if (sectionSelect) sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                if (studentSelect) studentSelect.innerHTML = '<option value="">All students in selected class/section</option>';
+                if (resolvedExamInput && examSelect) resolvedExamInput.value = examSelect.value;
+                return;
+            }
+
+            if (!examSelect || !examSelect.value) {
+                alert('Please select an Exam first.');
+                this.value = '';
+                if (examSelect) examSelect.focus();
+                return;
+            }
+
+            var selectedExam = getSelectedExamData(examSelect.value);
+            var matchedItem = null;
+            if (selectedExam && selectedExam.classes) {
+                matchedItem = selectedExam.classes.find(function (c) {
+                    return String(c.class_name) === String(selectedClass) ||
+                           String(c.class_name).replace(/^0+/, '') === String(selectedClass).replace(/^0+/, '');
+                });
+            }
+
+            if (!matchedItem) {
+                alert('The selected exam is not configured for ' + selectedClass + '.');
+                this.value = '';
+                return;
+            }
+
+            if (resolvedExamInput) {
+                resolvedExamInput.value = matchedItem.exam_id;
+            }
+
             populateSections(selectedClass);
-            loadStudents(selectedClass, sectionSelect.value);
+            loadStudents(selectedClass, sectionSelect ? sectionSelect.value : '');
         });
     }
 
@@ -334,29 +468,82 @@
     }
 
     function openTerm1Preview() {
+        var examVal = examSelect ? examSelect.value : '';
+        if (!examVal) {
+            alert('Please select an Exam first.');
+            if (examSelect) examSelect.focus();
+            return;
+        }
+
         var classVal = classSelect ? classSelect.value : '';
         if (!classVal) {
-            alert('Please select a Class first.');
+            alert('Please select a Class.');
             if (classSelect) classSelect.focus();
             return;
         }
 
+        var selectedExam = getSelectedExamData(examVal);
+        var matchedItem = selectedExam && selectedExam.classes ? selectedExam.classes.find(function (c) {
+            return String(c.class_name) === String(classVal) ||
+                   String(c.class_name).replace(/^0+/, '') === String(classVal).replace(/^0+/, '');
+        }) : null;
+
+        if (!matchedItem) {
+            alert('The selected exam is not available for ' + classVal + '.');
+            return;
+        }
+
+        var targetExamId = matchedItem.exam_id || (resolvedExamInput ? resolvedExamInput.value : examVal);
+
         var params = new URLSearchParams();
-        ['class_name', 'section_name', 'exam_id', 'student_id', 'remarks'].forEach(function (name) {
-            var input = document.querySelector('#term1MarksheetForm [name="' + name + '"]');
-            if (input && input.value) {
-                params.set(name, input.value);
-            }
-        });
+        params.set('exam_id', targetExamId);
+        params.set('class_name', classVal);
+
+        if (sectionSelect && sectionSelect.value) {
+            params.set('section_name', sectionSelect.value);
+        }
+        if (studentSelect && studentSelect.value) {
+            params.set('student_id', studentSelect.value);
+        }
+        var remarksInput = document.getElementById('t1_remarks');
+        if (remarksInput && remarksInput.value) {
+            params.set('remarks', remarksInput.value);
+        }
+
         window.open('{{ route('academic.term1-marksheet.print') }}?' + params.toString(), '_blank');
     }
 
     document.getElementById('term1MarksheetForm').addEventListener('submit', function (e) {
+        var examVal = examSelect ? examSelect.value : '';
+        if (!examVal) {
+            e.preventDefault();
+            alert('Please select an Exam first.');
+            if (examSelect) examSelect.focus();
+            return false;
+        }
+
         var classVal = classSelect ? classSelect.value : '';
         if (!classVal) {
             e.preventDefault();
-            alert('Please select a Class first.');
+            alert('Please select a Class.');
             if (classSelect) classSelect.focus();
+            return false;
+        }
+
+        var selectedExam = getSelectedExamData(examVal);
+        var matchedItem = selectedExam && selectedExam.classes ? selectedExam.classes.find(function (c) {
+            return String(c.class_name) === String(classVal) ||
+                   String(c.class_name).replace(/^0+/, '') === String(classVal).replace(/^0+/, '');
+        }) : null;
+
+        if (!matchedItem) {
+            e.preventDefault();
+            alert('The selected exam is not available for ' + classVal + '.');
+            return false;
+        }
+
+        if (matchedItem && resolvedExamInput) {
+            resolvedExamInput.value = matchedItem.exam_id;
         }
     });
 

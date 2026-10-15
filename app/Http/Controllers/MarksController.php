@@ -365,15 +365,45 @@ class MarksController extends Controller
     }
 
     public function showmarks(){
+        $allAccessibleExams = $this->accessibleAcademicExams();
+        $examslist = $allAccessibleExams->pluck('exam_name')->filter(fn($v) => !empty(trim((string)$v)))->unique()->values();
+        $examClassesMap = $this->examClassesMap();
+        $sectionsByClass = $this->sectionsByClassMap();
+
         if ($this->isStaffMarksUser()) {
             $classIds = $this->accessibleClassIds();
             $classlist = Classname::select('id','class_name')->whereIn('id', $classIds)->get();
-            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         } else {
             $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         }
-        return view('backend.AcademicsModules.showmarks',compact('classlist','examslist'));
+
+        $term_name = (string) request('term_name', '');
+        $class_name = (string) (request('classname') ?: request('class_name', ''));
+        $section_name = (string) request('section_name', '');
+
+        $filteredClasslist = collect();
+        if (!empty($term_name) && isset($examClassesMap[$term_name])) {
+            $filteredClasslist = collect($examClassesMap[$term_name]);
+        } elseif (!empty($term_name)) {
+            $filteredClasslist = $classlist->pluck('class_name')->unique()->values();
+        }
+
+        $sections = collect();
+        if (!empty($class_name) && isset($sectionsByClass[$class_name])) {
+            $sections = collect($sectionsByClass[$class_name]);
+        }
+
+        return view('backend.AcademicsModules.showmarks', compact(
+            'classlist',
+            'examslist',
+            'examClassesMap',
+            'sectionsByClass',
+            'filteredClasslist',
+            'term_name',
+            'class_name',
+            'section_name',
+            'sections'
+        ));
     }
 
     public function show_report_markss(Request $request){
@@ -389,13 +419,23 @@ class MarksController extends Controller
             abort(403, 'You are not allowed to view marks for this class/section.');
         }
 
+        $allAccessibleExams = $this->accessibleAcademicExams();
+        $examslist = $allAccessibleExams->pluck('exam_name')->filter(fn($v) => !empty(trim((string)$v)))->unique()->values();
+        $examClassesMap = $this->examClassesMap();
+        $sectionsByClass = $this->sectionsByClassMap();
+
         if ($this->isStaffMarksUser()) {
             $classIds = $this->accessibleClassIds();
             $classlist = Classname::select('id', 'class_name')->whereIn('id', $classIds)->get();
-            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
         } else {
             $classlist = Classname::select('id', 'class_name')->where('is_delete', 0)->get();
-            $examslist = $this->accessibleAcademicExams()->unique('exam_name')->values();
+        }
+
+        $filteredClasslist = collect();
+        if (!empty($term_name) && isset($examClassesMap[$term_name])) {
+            $filteredClasslist = collect($examClassesMap[$term_name]);
+        } elseif (!empty($term_name)) {
+            $filteredClasslist = $classlist->pluck('class_name')->unique()->values();
         }
 
         $sections = collect();
@@ -532,7 +572,7 @@ class MarksController extends Controller
             $consolidated_reports = app(\App\Http\Controllers\Academic\ConsolidatedMarksheetController::class)->buildReports($request);
         }
 
-        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','studentmarks','sections','consolidated_reports'));
+        return view('backend.AcademicsModules.showmarks', compact('report_type','term_name','exam_title','class_name','section_name','class_teacher','studentmarks_grade','student_grade','studentmarks_total_sum_max','subject','classlist','examslist','examClassesMap','sectionsByClass','filteredClasslist','studentmarks','sections','consolidated_reports'));
     }
 
     public function check_grade($number){
@@ -872,6 +912,38 @@ class MarksController extends Controller
         return $query
             ->orderBy('ae.id', 'desc')
             ->get();
+    }
+
+    private function examClassesMap()
+    {
+        $allAccessibleExams = $this->accessibleAcademicExams();
+        $examClassesMap = [];
+        foreach ($allAccessibleExams as $exam) {
+            $examName = trim((string) ($exam->exam_name ?? ''));
+            $className = trim((string) ($exam->class_name_text ?? ''));
+            if ($examName !== '' && $className !== '') {
+                $examClassesMap[$examName][] = $className;
+            }
+        }
+        foreach ($examClassesMap as $k => $arr) {
+            $examClassesMap[$k] = array_values(array_unique($arr));
+            natcasesort($examClassesMap[$k]);
+            $examClassesMap[$k] = array_values($examClassesMap[$k]);
+        }
+        return $examClassesMap;
+    }
+
+    private function sectionsByClassMap()
+    {
+        return DB::connection('dynamic')->table('classes')
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '')
+            ->get()
+            ->groupBy('class_name')
+            ->map(function ($items) {
+                return $items->pluck('section_name')->unique()->values()->all();
+            })
+            ->toArray();
     }
 
     private function accessibleClassIds()

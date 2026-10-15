@@ -218,7 +218,7 @@
                   </div>
                   <div class="col-md-4 form-group mb-3">
                     <label for="phone">Father Mobile No.</label>
-                    <input class="form-control" id="fathermobile" placeholder="" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check();" placeholder="Enter father mobile no" name="fathermobile" return false;" /><span class="application_for_msg validation_err" id="validation_err"></span>
+                    <input class="form-control" id="fathermobile" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check();" placeholder="Enter father mobile no" name="fathermobile" /><span class="application_for_msg validation_err" id="validation_err"></span>
                     <span class="fathermobile_msg validation_err"></span>
                   </div>
                   <div class="col-md-4 form-group mb-3">
@@ -253,7 +253,7 @@
                   </div>
                   <div class="col-md-4 form-group mb-3">
                     <label for="phone2">Mother Mobile No.</label>
-                    <input class="form-control" id="mothermobile" placeholder="" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check2();" placeholder="Enter mother mobile no" name="mothermobile" return false;" /><span class="application_for_msg validation_err" id="validation_err2"></span>
+                    <input class="form-control" id="mothermobile" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check2();" placeholder="Enter mother mobile no" name="mothermobile" /><span class="application_for_msg validation_err" id="validation_err2"></span>
                   </div>
 
                   <div class="col-md-4 form-group mb-3">
@@ -447,7 +447,7 @@
                     <label for="presentlyclass">Reference Number</label>
                     <input class="form-control" type="text" id="desc" name="reference_number" required>
                   </div>
-                  <div id="amount" name="amount" class="col-md-3 form-group mb-3">
+                  <div id="amount_wrapper" name="amount" class="col-md-3 form-group mb-3">
                     <label for="presentlyclass">Amount</label>
                     <input class="form-control" type="text" placeholder="Add Amount" id="amount" name="amount" required>
                   </div>
@@ -475,7 +475,7 @@
                   </div>
                   <div class="col-md-6 form-group mb-3">
                     <label for="follow-up-date">Follow Up Date</label>
-                    <input class="form-control" type="date" id="picker2-" type="text" placeholder="dd-mm-yyyy" name="follow_up_date" max="9999-12-31">
+                    <input class="form-control" type="date" id="follow_up_date" placeholder="dd-mm-yyyy" name="follow_up_date" max="9999-12-31">
                   </div>
                   <div class="col-md-6 form-group mb-3">
                     <label for="enquiry_through">Enquiry through</label>
@@ -517,11 +517,7 @@
 
                     <span class="allinput_msg validation_err"></span>
 
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-                    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.2/css/bootstrap.min.css" rel="stylesheet"/> -->
                     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
-
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.0/js/bootstrap.min.js"></script>
 
                     <div class="group_wrapper">
 
@@ -553,8 +549,8 @@
                                 <span class="siblings_section_second_msg validation_err"></span>
                               </td>
                               <td>
-                                <label for="siblings_school_second">Date Of Birth</label>
-                                <input class="form-control" id="picker2-" type="text" placeholder="dd-mm-yyyy" name="siblings_bod_second[0]" max="9999-12-31" value="">
+                                <label for="siblings_bod_second_0">Date Of Birth</label>
+                                <input class="form-control" id="siblings_bod_second_0" type="date" placeholder="dd-mm-yyyy" name="siblings_bod_second[0]" max="9999-12-31" value="">
                                 <span class="siblings_bod_second_msg validation_err"></span>
                               </td>
                             </tr>
@@ -597,7 +593,7 @@
                     </div>
                     <div class="separator-breadcrumb border-top"></div>
                     <div class="col-md-12">
-                      <input type="hidden" name="iid" value="" name="">
+                      <input type="hidden" id="iid" name="iid" value="">
                       <!-- <input type="submit" name="submit" value="Submit" class="btn btn-primary submit_btn" id="submitbutton"> -->
                       <button class="btn btn-primary submit_btn btn-submit" type="submit">Submit</button>
                     </div>
@@ -612,11 +608,9 @@
         </div>
       </div>
     </div>
+  </div>
+  <!-- end of main-content -->
 </form>
-<!-- </div>
-            </div> -->
-<!-- end of main-content -->
-<!-- </div> -->
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {

@@ -43,7 +43,7 @@ class InquiryEntryController extends Controller
             if (isset($_COOKIE['selectedYear'])) {
                 $db_name = $_COOKIE['selectedYear'];
             } else {
-                $db_name = "2024_2025";
+                $db_name = Config::get('database.connections.dynamic.database') ?: env('DB_DATABASE', '2025_2026');
             }
             
         }
@@ -1633,19 +1633,23 @@ public function perstudueamount($id){
             foreach($statename as $state){
                 $statename = $state->name;
             } 
+        $studentName = $this->formatFullName($request->studentname);
+        $fatherName = $this->formatFullName($request->fathername);
+        $motherName = $this->formatFullName($request->mothername);
+
         $jsonArr = [
             'enquiryno'=>$request->formno,
             'formno'=>$request->formno,
             'enquirydate'=>$request->enquirydate,
             'date_of_birth'=>$request->student_dob,
             'studentname_prefix'=>$request->studentname_prefix,
-            'student_name'=>$request->studentname,
+            'student_name'=>$studentName,
             'student_dob'=>$request->student_dob,
             'fathername_prefix'=>$request->fathername_prefix,
-            'fathername'=>$request->fathername,
+            'fathername'=>$fatherName,
             'fathermobile'=>$request->fathermobile,
             'mothername_prefix'=>$request->mothername_prefix,
-            'mothername'=>$request->mothername,
+            'mothername'=>$motherName,
             'mothermobile'=>$request->mothermobile,
             'gender'=>$request->gender,
             'admission_type'=>$request->admission_type,
@@ -1663,7 +1667,7 @@ public function perstudueamount($id){
             'form_number'=>$request->formno,
             'date_of_birth'=>$request->student_dob,
             'class_name'=>$request->classname,
-            'student_name'=>$request->studentname,
+            'student_name'=>$studentName,
             'session_name'=>$request->session,
             'json_str'=> $jsonStr,
             'gender'=>$request->gender,
@@ -1811,11 +1815,14 @@ public function perstudueamount($id){
 	}
 	private function formatFullName($name)
 	{
-		return collect(explode(' ', trim(preg_replace('/\s+/', ' ', $name))))
-			->map(function ($part) {
-				return ucfirst(strtolower($part));
-			})
-			->implode(' ');
+		$trimmed = trim(preg_replace('/\s+/', ' ', (string) $name));
+		if ($trimmed === '') {
+			return '';
+		}
+
+		return preg_replace_callback('/(^|[\s.\'-])([a-zA-Z\x{00C0}-\x{017F}])/u', function ($matches) {
+			return $matches[1] . mb_strtoupper($matches[2], 'UTF-8');
+		}, mb_strtolower($trimmed, 'UTF-8'));
 	}
 
 	

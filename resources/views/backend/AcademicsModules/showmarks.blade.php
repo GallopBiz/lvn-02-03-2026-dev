@@ -39,23 +39,37 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                         @csrf
                         <div class="row">
                            <div class="col-md-2 form-group mb-3">
-                            <label for="firstName1">Class Name</label>
-                            <select id="class_name" class="form-control" name="classname" autocomplete="" required>
-                               <option value="" selected>Please select</option>
-                               @foreach($classlist as $each)
-                                @if(!empty($class_name) && $class_name == $each->class_name)
-                                  <option selected value="{{$each->class_name}}">{{$each->class_name}}</option>
-                                @else
-                                  <option value="{{$each->class_name}}">{{$each->class_name}}</option>
+                            <label for="term_name">Exam :</label>
+                            <select name="term_name" class="form-control" id="term_name" required>
+                                <option value="">-- Please select --</option>
+                                @if(!empty($examslist))
+                                    @foreach(collect($examslist)->filter(function($v) { return !empty(trim((string)(is_object($v) ? ($v->exam_name ?? '') : $v))); })->map(function($v) { return is_object($v) ? ($v->exam_name ?? '') : (string)$v; })->unique()->values() as $eName)
+                                        <option value="{{ $eName }}" {{ (!empty($term_name) && $term_name == $eName) ? 'selected' : '' }}>{{ $eName }}</option>
+                                    @endforeach
                                 @endif
-                               @endforeach
+                            </select>
+                           </div>
+
+                           <div class="col-md-2 form-group mb-3">
+                            <label for="class_name">Class Name</label>
+                            <select id="class_name" class="form-control" name="classname" required>
+                               <option value="">{{ !empty($term_name) ? '-- Please select --' : '-- Select Exam first --' }}</option>
+                               @if(!empty($filteredClasslist) && count($filteredClasslist) > 0)
+                                 @foreach($filteredClasslist as $eachClass)
+                                   @php $cVal = is_object($eachClass) ? ($eachClass->class_name ?? '') : (string)$eachClass; @endphp
+                                   @if(!empty(trim($cVal)))
+                                     <option value="{{ $cVal }}" {{ (!empty($class_name) && $class_name == $cVal) ? 'selected' : '' }}>{{ $cVal }}</option>
+                                   @endif
+                                 @endforeach
+                               @endif
                             </select>
                             <span class="classname_msg validation_err"></span>
                           </div> 
+
                            <div class="col-md-2 form-group mb-3">
-                              <label for="firstName1">Section :</label>
+                              <label for="section_name">Section :</label>
                               <select required name="section_name" class="form-control" id="section_name">
-                                <option value=""> -- Please select -- </option>
+                                <option value="">{{ !empty($class_name) ? '-- Please select --' : '-- Select Class first --' }}</option>
                                 @if(!empty($sections) && count($sections) > 0)
                                   @foreach($sections as $sec)
                                     <option value="{{ $sec }}" {{ (!empty($section_name) && $section_name == $sec) ? 'selected' : '' }}>{{ $sec }}</option>
@@ -65,22 +79,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                                 @endif
                             </select>
                            </div>
-                            <div class="col-md-2 form-group mb-3">
-                            <label for="firstName1">Term :</label>
-                            <select name="term_name" class="form-control" id="term_name">
-                                <option value="">-- Please select --</option>
-                                @if (!empty($stream_master))
-                                @foreach ($stream_master as $s_item)
-                                {{ $c_stream = $s_item->exam_name }}
-                                @endforeach
-                                @endif
-                                @if(!empty($examslist))
-                                    @foreach(collect($examslist)->pluck('exam_name')->filter(function($v) { return !empty(trim((string)$v)); })->unique()->values() as $eName)
-                                        <option value="{{ $eName }}" {{ (!empty($term_name) && $term_name == $eName) ? 'selected' : '' }}>{{ $eName }}</option>
-                                    @endforeach
-                                @endif
-                            </select>
-                            </div>
 
                             <div class="col-md-2 form-group mb-3">
                             <label for="firstName1">Report Type :</label>
@@ -464,49 +462,150 @@ input[type="date"]::-webkit-calendar-picker-indicator {
         }
     });
   };
-  $('#class_name').on('change', function() {
-    var iso2 = $("#class_name").val();
-    let token = document.getElementsByName("_token")[0].value
-    console.log(iso2);
-    if (iso2) {
-        $.ajax({
-            data: {
-                id: iso2
-            }
-            , url: "{{url('classsection-view')}}/" + iso2
-            , headers: {
-                'X-CSRF-TOKEN': token
-            }
-            , method: "POST"
-            , dataType: 'json'
-            , success: function(data) {
-                console.log(data);
-                $('#section_name').html('<option value=""> -- Select All -- </option>');
-                for (var i = 0; i < data.length; i++) {
-                    var studentData = data[i].section_name;
-                    // alert(studentData);
-                    <?php if(!empty($section_name)){ ?>
-                        if ('<?php echo $section_name; ?>' === studentData) {
-                            $('#section_name').append('<option value="' + studentData + '" selected >' + studentData + '</option>');
-                        } else {
-                            $('#section_name').append('<option value="' + studentData + '">' + studentData + '</option>');
-                        }
-                    <?php } else { ?>
-                        $('#section_name').append('<option value="' + studentData + '">' + studentData + '</option>');
-                    <?php } ?>  
-                    // console.log(studentData, ' ', selected_section);                            
-                    
-                }
-            }
-            , error: function(xhr, status, error) {
-                console.error(error);
-            }
-        });
+  var examClassesMap = @json($examClassesMap ?? []);
+  var sectionsByClass = @json($sectionsByClass ?? []);
+  var currentSelectedClass = @json($class_name ?? '');
+  var currentSelectedSection = @json($section_name ?? '');
 
-    } else {
-        $('#section_name').html('<option value="">Select class first</option>');
+  function populateClassDropdown(classesList, preserveVal) {
+    var classSelect = $('#class_name');
+    classSelect.empty();
+    if (!classesList || classesList.length === 0) {
+      classSelect.html('<option value="">-- No classes available --</option>');
+      return false;
     }
-});
+    classSelect.html('<option value="">-- Please select --</option>');
+    var selectedFound = false;
+    classesList.forEach(function(cName) {
+      var isSel = (preserveVal && String(preserveVal) === String(cName));
+      if (isSel) selectedFound = true;
+      classSelect.append('<option value="' + cName + '"' + (isSel ? ' selected' : '') + '>' + cName + '</option>');
+    });
+    return selectedFound;
+  }
+
+  function populateSectionDropdown(sectionsList, preserveVal) {
+    var sectionSelect = $('#section_name');
+    sectionSelect.empty().html('<option value="">-- Please select --</option>');
+    if (sectionsList && sectionsList.length > 0) {
+      sectionsList.forEach(function(sec) {
+        var isSel = (preserveVal && String(preserveVal) === String(sec));
+        sectionSelect.append('<option value="' + sec + '"' + (isSel ? ' selected' : '') + '>' + sec + '</option>');
+      });
+    }
+  }
+
+  function loadSectionsForClass(className, preserveVal) {
+    if (!className) {
+      $('#section_name').empty().html('<option value="">-- Select Class first --</option>');
+      return;
+    }
+    var directSections = sectionsByClass[className] || [];
+    if (directSections.length > 0) {
+      populateSectionDropdown(directSections, preserveVal);
+      return;
+    }
+
+    var token = document.getElementsByName("_token")[0] ? document.getElementsByName("_token")[0].value : '';
+    $.ajax({
+      data: { id: className },
+      url: "{{url('classsection-view')}}/" + className,
+      headers: { 'X-CSRF-TOKEN': token },
+      method: "POST",
+      dataType: 'json',
+      success: function(data) {
+        var sectionSelect = $('#section_name');
+        sectionSelect.empty().html('<option value="">-- Please select --</option>');
+        if (Array.isArray(data)) {
+          data.forEach(function(item) {
+            var studentData = item.section_name;
+            if (studentData) {
+              var isSel = (preserveVal && String(preserveVal) === String(studentData));
+              sectionSelect.append('<option value="' + studentData + '"' + (isSel ? ' selected' : '') + '>' + studentData + '</option>');
+            }
+          });
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error(error);
+      }
+    });
+  }
+
+  $('#term_name').on('change', function() {
+    var selectedExam = $(this).val();
+    var classSelect = $('#class_name');
+    var sectionSelect = $('#section_name');
+
+    if (!selectedExam) {
+      classSelect.empty().html('<option value="">-- Select Exam first --</option>');
+      sectionSelect.empty().html('<option value="">-- Select Class first --</option>');
+      currentSelectedClass = '';
+      currentSelectedSection = '';
+      return;
+    }
+
+    var classesForExam = examClassesMap[selectedExam] || [];
+    var hadSelected = populateClassDropdown(classesForExam, currentSelectedClass);
+
+    if (hadSelected && currentSelectedClass) {
+      loadSectionsForClass(currentSelectedClass, currentSelectedSection);
+    } else {
+      sectionSelect.empty().html('<option value="">-- Select Class first --</option>');
+      currentSelectedClass = '';
+      currentSelectedSection = '';
+    }
+  });
+
+  $('#class_name').on('mousedown', function(e) {
+    if (!$('#term_name').val()) {
+      e.preventDefault();
+      alert('Please select an Exam first.');
+      $('#term_name').focus();
+    }
+  });
+
+  $('#class_name').on('change', function() {
+    var selectedClass = $(this).val();
+    if (!selectedClass) {
+      $('#section_name').empty().html('<option value="">-- Select Class first --</option>');
+      currentSelectedClass = '';
+      currentSelectedSection = '';
+      return;
+    }
+
+    if (!$('#term_name').val()) {
+      alert('Please select an Exam first.');
+      $(this).val('');
+      $('#term_name').focus();
+      return;
+    }
+
+    currentSelectedClass = selectedClass;
+    loadSectionsForClass(selectedClass, currentSelectedSection);
+  });
+
+  $('#section_name').on('mousedown', function(e) {
+    if (!$('#term_name').val()) {
+      e.preventDefault();
+      alert('Please select an Exam first.');
+      $('#term_name').focus();
+    } else if (!$('#class_name').val()) {
+      e.preventDefault();
+      alert('Please select a Class first.');
+      $('#class_name').focus();
+    }
+  });
+
+  $('input[type="reset"]').on('click', function() {
+    setTimeout(function() {
+      $('#term_name').val('');
+      $('#class_name').empty().html('<option value="">-- Select Exam first --</option>');
+      $('#section_name').empty().html('<option value="">-- Select Class first --</option>');
+      currentSelectedClass = '';
+      currentSelectedSection = '';
+    }, 50);
+  });
 
 function printConsolidatedReport() {
     var contentNode = document.querySelector('.consolidated-print-area');

@@ -359,6 +359,18 @@ $(".submit_btn").on('click', function (e) {
 
       e.preventDefault();
 
+      if (typeof cleanAndFormatPersonName === 'function') {
+          ['studentname', 'fathername', 'mothername'].forEach(function (id) {
+              var el = document.getElementById(id);
+              if (el) {
+                  el.value = cleanAndFormatPersonName(el.value);
+              }
+          });
+          $('input[name*="siblings_namesecond"]').each(function () {
+              this.value = cleanAndFormatPersonName(this.value);
+          });
+      }
+
       var session = $('input[name="session"]').val();
       var studentname = $('input[name="studentname"]').val();
       var enquiryno = $('input[name="enquiryno"]').val();
@@ -436,42 +448,90 @@ $(".submit_btn").on('click', function (e) {
 
 
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
+  function formatPersonName(val) {
+      if (!val) return '';
+      return val.toLowerCase().replace(/(^|[\s.'-])([a-zA-Z\u00C0-\u017F])/g, function (match, sep, letter) {
+          return sep + letter.toUpperCase();
+      });
+  }
+
+  function cleanAndFormatPersonName(val) {
+      if (!val) return '';
+      return formatPersonName(val.replace(/\s+/g, ' ').trim());
+  }
+
+  function attachNameFormatter(field) {
+      if (!field || field._nameFormatterAttached) return;
+      field._nameFormatterAttached = true;
+
+      function onInput() {
+          var cursor = field.selectionStart;
+          var oldVal = field.value;
+          var newVal = formatPersonName(oldVal);
+          if (oldVal !== newVal) {
+              field.value = newVal;
+              if (cursor !== null) {
+                  field.setSelectionRange(cursor, cursor);
+              }
+          }
+      }
+
+      function onBlur() {
+          field.value = cleanAndFormatPersonName(field.value);
+      }
+
+      field.addEventListener('input', onInput);
+      field.addEventListener('change', onInput);
+      field.addEventListener('keyup', onInput);
+      field.addEventListener('paste', function () {
+          setTimeout(onInput, 0);
+      });
+      field.addEventListener('blur', onBlur);
+
+      if (field.value) {
+          field.value = cleanAndFormatPersonName(field.value);
+      }
+  }
+
+  function initNameFormatters() {
       ['studentname', 'fathername', 'mothername'].forEach(function (fieldId) {
           var field = document.getElementById(fieldId);
-
-          if (!field) {
-              return;
+          if (field) {
+              attachNameFormatter(field);
           }
-
-          function normalizeName() {
-              var cursorPosition = field.selectionStart;
-              field.value = field.value.toLowerCase().replace(/(^|[\s'-])([\p{L}])/gu, function (match, separator, letter) {
-                  return separator + letter.toUpperCase();
-              });
-              field.setSelectionRange(cursorPosition, cursorPosition);
-          }
-
-          field.addEventListener('input', normalizeName);
-          normalizeName();
       });
 
       var select = document.getElementById('state-dd');
-      for (var i = 0; i < select.options.length; i++) {
-          select.options[i].innerText = capitalizeFirstLetter(select.options[i].innerText);
+      if (select) {
+          for (var i = 0; i < select.options.length; i++) {
+              select.options[i].innerText = cleanAndFormatPersonName(select.options[i].innerText);
+          }
+      }
+  }
+
+  if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initNameFormatters);
+  } else {
+      initNameFormatters();
+  }
+
+  // Also bind via jQuery delegation for dynamic fields (e.g., siblings) and static inputs
+  $(document).on('input keyup change', '#studentname, #fathername, #mothername, input[name*="siblings_namesecond"]', function () {
+      var cursor = this.selectionStart;
+      var oldVal = this.value;
+      var newVal = formatPersonName(oldVal);
+      if (oldVal !== newVal) {
+          this.value = newVal;
+          if (cursor !== null) {
+              this.setSelectionRange(cursor, cursor);
+          }
       }
   });
 
-  function capitalizeFirstLetter(str) {
-      var words = str.toLowerCase().split(' ');
-      for (var i = 0; i < words.length; i++) {
-          words[i] = words[i].charAt(0).toUpperCase() + words[i].substring(1);
-      }
-      return words.join(' ');
-  }
+  $(document).on('blur', '#studentname, #fathername, #mothername, input[name*="siblings_namesecond"]', function () {
+      this.value = cleanAndFormatPersonName(this.value);
+  });
 </script>
-
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 
     <script>
         $(document).ready(function () {
@@ -588,7 +648,6 @@ $(".submit_btn").on('click', function (e) {
         });
     
 </script>    
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
   $(document).ready(function() {
     // Function to handle the date input
