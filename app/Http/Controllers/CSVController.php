@@ -7,6 +7,8 @@ use Illuminate\Http\Response;
 use App\Models\Inquiry_registration;
 use DB;
 
+use Illuminate\Support\Facades\Schema;
+
 class CSVController extends Controller
 {
     public function export(Request $request)
@@ -16,16 +18,42 @@ class CSVController extends Controller
         $start_date = $request->input('start_date');
         $end_date = $request->input('end_date');
  
-        // print_r('start_date '.$start_date);
-        // print_r('end_date '.$end_date);
-        // die();
-        // Fetch data from the specified table and columns
-        $data = DB::table($tableName)
-            ->select($columnNames)
-            // ->where('is_delete', 0)
-            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.enquirydate')) BETWEEN ? AND ?", [$start_date, $end_date])
-            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.amount')) = ?", [500])
-            ->get();
+        // If table doesn't have json_str column, export columns directly
+        $hasJsonStr = !empty($tableName) && Schema::hasTable($tableName) && Schema::hasColumn($tableName, 'json_str');
+
+        if (!$hasJsonStr && !empty($tableName) && Schema::hasTable($tableName)) {
+            $query = DB::table($tableName);
+            if (!empty($columnNames) && is_array($columnNames)) {
+                $query->select($columnNames);
+            }
+            $data = $query->get();
+
+            $csv = Writer::createFromFileObject(new \SplTempFileObject());
+            $headers = !empty($columnNames) && is_array($columnNames) ? $columnNames : [];
+            if (!empty($headers)) {
+                $csv->insertOne($headers);
+            }
+            foreach ($data as $item) {
+                $row = [];
+                foreach ($headers as $col) {
+                    $row[] = $item->$col ?? '';
+                }
+                $csv->insertOne($row);
+            }
+
+            return response($csv->getContent(), 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename=' . ($tableName ?: 'export') . '.csv',
+            ]);
+        }
+
+        // Fetch data from the specified table and columns with json_str
+        $query = DB::table($tableName)->select($columnNames);
+        if (!empty($start_date) && !empty($end_date)) {
+            $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.enquirydate')) BETWEEN ? AND ?", [$start_date, $end_date])
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(json_str, '$.amount')) = ?", [500]);
+        }
+        $data = $query->get();
         // Fetch data from the database
         // $data = AddVehial::all();
         
@@ -206,6 +234,118 @@ class CSVController extends Controller
         return response($csv->getContent(), 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename=Registered_Students_Detail_Report.csv',
+        ]);
+    }
+
+    public function export_selection_process(Request $request)
+    {
+        $session_name = $request->input('session_name');
+        $form_number = $request->input('form_number');
+        $save_status = $request->input('save_status');
+        $class_name = $request->input('class_name') ?: $request->input('classname');
+        $gender = $request->input('gender');
+        $student_name = $request->input('student_name') ?: $request->input('studentname');
+
+        $query = DB::connection('dynamic')->table('inquiry_registration')
+            ->where('status', 'i')
+            ->where(function ($q) {
+                $q->where('is_delete', 0)
+                  ->orWhereNull('is_delete');
+            })
+            ->orderBy('id', 'desc');
+
+        if (!empty($session_name)) {
+            $query->where('session_name', $session_name);
+        }
+        if (!empty($form_number)) {
+            $query->where('form_number', $form_number);
+        }
+        if (!empty($save_status)) {
+            if ($save_status === 'Pending') {
+                $query->where(function ($q) {
+                    $q->whereNull('save_status')
+                      ->orWhere('save_status', '')
+                      ->orWhere('save_status', 'Pending');
+                });
+            } else {
+                $query->where('save_status', $save_status);
+            }
+        }
+        if (!empty($class_name)) {
+            $query->where('class_name', $class_name);
+        }
+        if (!empty($gender)) {
+            $query->where('gender', $gender);
+        }
+        if (!empty($student_name)) {
+            $query->where('student_name', 'like', '%' . $student_name . '%');
+        }
+
+        $data = $query->get();
+
+        $csv = Writer::createFromFileObject(new \SplTempFileObject());
+
+        $csv->insertOne([
+            'Sr no',
+            'Form Date',
+            'Form No.',
+            'Class Name',
+            'Session Name',
+            'Student Name',
+            'Father Name',
+            'Mobile Number',
+            'Mother Name',
+            'Gender',
+            'Save Status',
+            'Updated by',
+        ]);
+
+        foreach ($data as $index => $item) {
+            $jsonData = !empty($item->json_str) ? json_decode($item->json_str, true) : [];
+            $jsonData = is_array($jsonData) ? $jsonData : [];
+
+            $formDate = $this->formatCsvDate($item->created_at ?? null);
+            $formNo = $item->form_number ?? ($jsonData['formno'] ?? ($jsonData['enquiryno'] ?? ''));
+            $className = $item->class_name ?? ($jsonData['class_name'] ?? '');
+            $sessionName = $item->session_name ?? ($jsonData['batch'] ?? ($jsonData['intended_session'] ?? ''));
+
+            $studentPrefix = !empty($jsonData['studentname_prefix']) ? trim($jsonData['studentname_prefix']) . ' ' : '';
+            $studentRaw = $item->student_name ?? ($jsonData['student_name'] ?? '');
+            $studentName = trim($studentPrefix . ucwords($studentRaw));
+
+            $fatherPrefix = !empty($jsonData['fathername_prefix']) ? trim($jsonData['fathername_prefix']) . ' ' : '';
+            $fatherRaw = $jsonData['fathername'] ?? '';
+            $fatherName = trim($fatherPrefix . ucwords($fatherRaw));
+
+            $mobileNumber = $item->mobile_number ?? ($jsonData['fathermobile'] ?? ($jsonData['mobile_number'] ?? ''));
+
+            $motherPrefix = !empty($jsonData['mothername_prefix']) ? trim($jsonData['mothername_prefix']) . ' ' : '';
+            $motherRaw = $jsonData['mothername'] ?? '';
+            $motherName = trim($motherPrefix . ucwords($motherRaw));
+
+            $genderVal = $item->gender ?? ($jsonData['gender'] ?? '');
+            $saveStatus = !empty($item->save_status) ? $item->save_status : 'Pending';
+            $updatedBy = 'Admin';
+
+            $csv->insertOne([
+                $index + 1,
+                $formDate,
+                $formNo,
+                $className,
+                $sessionName,
+                $studentName,
+                $fatherName,
+                $mobileNumber,
+                $motherName,
+                $genderVal,
+                $saveStatus,
+                $updatedBy,
+            ]);
+        }
+
+        return response($csv->getContent(), 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="Student_Selection_Process.csv"',
         ]);
     }
 

@@ -204,19 +204,14 @@ font-size: 0.813rem;
               <div class="card text-start">
                 <div class="card-body">
                   <div class="table-responsive">
-                  <div class="card-title mb-3 text-end"><form method="POST" action="{{ route('export.csv') }}">
+                  <div class="card-title mb-3 text-end"><form method="POST" id="export_selection_process_form" action="{{ route('export_selection_process.csv') }}">
                       @csrf
-                      <input type="hidden" name="column_names[]" value="student_id_select_p">
-                      <input type="hidden" name="column_names[]" value="pick_shedule_name">
-                      <input type="hidden" name="column_names[]" value="pick_up_routes">
-                      <input type="hidden" name="column_names[]" value="pickup_area_name">
-                      <input type="hidden" name="column_names[]" value="pickup_bus_stop_names">
-                      <input type="hidden" name="column_names[]" value="pickup_bus_no">
-                      <input type="hidden" name="column_names[]" value="drop_shedule_name">
-                      <input type="hidden" name="column_names[]" value="drop_up_route">
-                      <input type="hidden" name="column_names[]" value="drop_area_name">
-                      <input type="hidden" name="column_names[]" value="drop_bus_stop_name">
-                      <input type="hidden" name="table_name" value="teacherbusassign">
+                      <input type="hidden" name="form_number" value="{{ $jsonArr['form_number'] ?? '' }}">
+                      <input type="hidden" name="student_name" value="{{ $jsonArr['studentname'] ?? ($jsonArr['student_name'] ?? '') }}">
+                      <input type="hidden" name="save_status" value="{{ $jsonArr['save_status'] ?? '' }}">
+                      <input type="hidden" name="class_name" value="{{ $jsonArr['class_name'] ?? ($classname ?? '') }}">
+                      <input type="hidden" name="gender" value="{{ $jsonArr['gender'] ?? '' }}">
+                      <input type="hidden" name="session_name" value="{{ $jsonArr['session_name'] ?? '' }}">
                       <button type="submit" class="btn btn-raised ripple btn-raised-warning m-1">Export CSV</button>
                   </form></div>
                     <table class="display table table-striped table-bordered" id="zero_configuration_table" style="width: 100%">
@@ -456,6 +451,22 @@ for (i=1; i<= count; i++){
                 ];
                 $( "#studentname" ).autocomplete({
                     source: availableTags2
+                });
+
+                $('#export_selection_process_form').on('submit', function() {
+                    var sess = $('#session_name').val();
+                    var formNo = $('#form_number').val();
+                    var stuName = $('#studentname').val();
+                    var saveStat = $('#save_status').val();
+                    var clsName = $('#classname').val();
+                    var gen = $('#gender').val();
+
+                    if (sess) $(this).find('input[name="session_name"]').val(sess);
+                    if (formNo) $(this).find('input[name="form_number"]').val(formNo);
+                    if (stuName) $(this).find('input[name="student_name"]').val(stuName);
+                    if (saveStat) $(this).find('input[name="save_status"]').val(saveStat);
+                    if (clsName) $(this).find('input[name="class_name"]').val(clsName);
+                    if (gen) $(this).find('input[name="gender"]').val(gen);
                 });
             });
         </script> 

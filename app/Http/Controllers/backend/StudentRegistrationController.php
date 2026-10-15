@@ -682,7 +682,8 @@ public function downloadcertificate($id)
          $totalPending = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Pending')->get();
          $totalCancel = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Cancel')->get();
          $totaladmission = DB::connection('dynamic')->table('student_registration')->where("status","=", "r")->get();
-        return view('backend.student_registrations.selection_process',compact('all_inquiry','totalPending','totalCancel','totaladmission'));
+         $datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+         return view('backend.student_registrations.selection_process',compact('all_inquiry','totalPending','totalCancel','totaladmission', 'datas'));
     }
 
 
@@ -710,36 +711,49 @@ public function downloadcertificate($id)
         $studentname = $request->post('student_name');
         $jsonArr = [
             'session_name'=>$request->post('session_name'),
-             'studentname'=>$request->post('student_name'),
+            'studentname'=>$request->post('student_name'),
             'save_status'=> $request->post('save_status'),
             'gender'=> $request->post('gender'),
             'class_name'=>$request->post('classname'),
             'form_number'=>$request->post('form_number'),
-            
         ];
-        ## Add custom filter conditions || !empty($class_name) || !empty($gender) || !empty($studentname)
+
+        $records1 = DB::connection('dynamic')->table('inquiry_registration')
+            ->where("status", "=", "i")
+            ->orderBy('id', 'desc');
+
         if(!empty($session_name)){
-            $records1 = DB::connection('dynamic')->table('inquiry_registration')//::select('*')
-            ->where("session_name","=", $session_name)->orderBy('id', 'desc');
-            }
+            $records1->where("session_name","=", $session_name);
+        }
         if(!empty($form_number)){
-            $records1->where("form_number","=", $form_number)->orderBy('id', 'desc');
+            $records1->where("form_number","=", $form_number);
         }
         if(!empty($save_status)){
-            $records1->where("save_status","=", $save_status)->orderBy('id', 'desc');
+            if ($save_status === 'Pending') {
+                $records1->where(function($q) {
+                    $q->whereNull('save_status')->orWhere('save_status', '')->orWhere('save_status', 'Pending');
+                });
+            } else {
+                $records1->where("save_status","=", $save_status);
+            }
         }
         if(!empty($class_name)){
-            $records1->where("class_name","=", $class_name)->orderBy('id', 'desc');
+            $records1->where("class_name","=", $class_name);
         }
         if(!empty($gender)){
-            $records1->where("gender","=", $gender)->orderBy('id', 'desc');
+            $records1->where("gender","=", $gender);
         }
         if(!empty($studentname)){
-            $records1->where("student_name","=", $studentname)->orderBy('id', 'desc');
+            $records1->where("student_name","like", '%' . $studentname . '%');
         }
         $all_inquiry = $records1->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-        return view('backend.student_registrations.selection_process',compact('all_inquiry','jsonArr', 'classlist'));
+        $datas = $classlist;
+        $classname = $class_name;
+        $totalPending = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Pending')->get();
+        $totalCancel = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Cancel')->get();
+        $totaladmission = DB::connection('dynamic')->table('student_registration')->where("status","=", "r")->get();
+        return view('backend.student_registrations.selection_process',compact('all_inquiry','jsonArr', 'classlist', 'datas', 'classname', 'totalPending', 'totalCancel', 'totaladmission'));
     }
 
     

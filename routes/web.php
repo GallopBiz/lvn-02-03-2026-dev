@@ -327,6 +327,7 @@ Route::group(['middleware' => ['auth', 'admin']], function() {
     Route::post('getDataByFormNumberstudent_registration', [StudentRegistrationController::class, 'getDataByFormNumberstudent_registration']);
     /* csv export */
     Route::post('/export_registrations.csv', [CSVController::class, 'export_registrations'])->name('export_registrations.csv');
+    Route::match(['get', 'post'], '/export_selection_process.csv', [CSVController::class, 'export_selection_process'])->name('export_selection_process.csv');
     Route::post('/export-csv', [CSVController::class, 'export'])->name('export.csv');
     Route::get('/enquiry-csv', [CSVController::class, 'exportenquiry'])->name('enquirycsv');
     Route::get('/filter-enquiry-csv', [CSVController::class, 'filterexportenquiry'])->name('filterenquirycsv');
