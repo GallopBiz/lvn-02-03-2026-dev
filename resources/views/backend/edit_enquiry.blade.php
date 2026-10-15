@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('backend.layouts.main')
 @section('main-container')
 <style type="text/css">
    .validation_err{
@@ -9,34 +9,20 @@
     -webkit-appearance: textfield;
     -moz-appearance: textfield;
 }
-input[type="date"] {
+input {
     position: relative;
 }
-
-input[type="date"]:after {
-    content: "\25BC"; 
-    color: #555;
-    padding: 0 10px;
-}
 input[type="date"]::-webkit-calendar-picker-indicator {
-    position: absolute;
-    top: 10px;
-    left: 0px;
-    right: 0;
+    background-position: right;
+    background-size: auto;
+    cursor: pointer;
+    position: absolute;    
     bottom: 0;
+    left: 0;
+    right: 0;
+    top: 7px;
     width: auto;
-    height: auto;
-    color: transparent;
-    background: transparent;
 }
-
-input[type="date"]::-webkit-inner-spin-button {
-    z-index: 1;
-}
-
- input[type="date"]::-webkit-clear-button {
-     z-index: 1;
- }
 .s1{
   background-color: #ff4c51;
 } 
@@ -65,14 +51,11 @@ font-size: 0.813rem;
 
 }
 .ui-autocomplete {
-    max-height: 150px;
+    max-height: 200px;
     overflow-y: auto;
     overflow-x: hidden;
-
-    padding-right: 20px;
-}
- html .ui-autocomplete {
-    height: 150px;
+    padding-right: 10px;
+    z-index: 9999 !important;
 }
 </style>
 @if (count($errors) > 0)
@@ -205,20 +188,20 @@ font-size: 0.813rem;
                            /><span class="formno_msg validation_err"></span>
                          </div>
                          <div class="col-md-4 form-group mb-3">
-                           <label for="picker2">Enquiry Date</label>
+                           <label for="enquirydate">Enquiry Date</label>
                            <input
-                             class="form-control "
-                             id="picker2"
+                             class="form-control"
+                             id="enquirydate"
                              placeholder="dd-mm-yyyy" max="9999-12-31"
                              name="enquirydate" type="date" value="<?php if(!empty($notificationData['enquirydate'])){ echo $notificationData['enquirydate'];} ?>"
                            />
                          </div>
                          
                          <div class="col-md-6 form-group mb-3">
-                           <label for="picker2">Date Of Birth</label>
+                           <label for="student_dob">Date Of Birth</label>
                            <input
-                             class="form-control "
-                             id="picker2"
+                             class="form-control"
+                             id="student_dob"
                              placeholder="dd-mm-yyyy" max="9999-12-31" data-rule-required="true"
                              name="student_dob"  type="date" value="<?php if(!empty($notificationData['student_dob'])){ echo $notificationData['student_dob'];}?>"
                            />
@@ -540,8 +523,8 @@ font-size: 0.813rem;
                             <input class="form-control" type="date"  id="picker2-" type="text" placeholder="dd-mm-yyyy"  name="follow_up_date" >
                          </div> -->
                          <div class="col-md-6 form-group mb-3">
-                           <label for="follow-up-date">Follow Up Date</label>
-                            <input class="form-control" type="date"  id="picker2-" type="text" placeholder="dd-mm-yyyy"  name="follow_up_date" max="9999-12-31" value="<?php if(!empty($notificationData['follow_up_date'])){ echo $notificationData['follow_up_date'];}?>">
+                           <label for="follow_up_date">Follow Up Date</label>
+                           <input class="form-control" id="follow_up_date" type="date" placeholder="dd-mm-yyyy" name="follow_up_date" max="9999-12-31" value="<?php if(!empty($notificationData['follow_up_date'])){ echo $notificationData['follow_up_date'];}?>">
                          </div>
                          <div class="col-md-6 form-group mb-3">
                            <label for="enquiry_through">Enquiry through</label>
@@ -596,11 +579,6 @@ font-size: 0.813rem;
                          </div>
                       <span class="allinput_msg validation_err"></span>
                       
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-            <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.2/css/bootstrap.min.css" rel="stylesheet"/> -->
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet"/>
-
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.0/js/bootstrap.min.js"></script>
 
         <div class="group_wrapper">
            <div class="gethtml">  
@@ -646,16 +624,6 @@ font-size: 0.813rem;
                    </div>
                  </div>
                    </form> 
-<script type="text/javascript">
-    $('.date').datepicker({  
-       format: 'dd-mm-yyyy'
-     }); 
-     $('.date1').datepicker({  
-       format: 'dd-mm-yyyy'
-     });  
-   
-</script>
-<script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
 <script type="text/javascript">
     $('input[type="checkbox"]').on('change', function() {
     $('input[name="' + this.name + '"]').not(this).prop('checked', false);
@@ -773,7 +741,6 @@ $(".submit_btn").on('click', function (e) {
 
 </script>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script>
         $(document).ready(function () {
           setTimeout(function() {
@@ -940,14 +907,10 @@ $('#smartwizard').smartWizard({
 
 
 </script> 
-<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-                 <script type="text/javascript">$.noConflict();</script> 
-
-        <script src="//code.jquery.com/jquery-1.10.2.js"></script>
-        <script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
-        <script>
-            $.noConflict();
-           jQuery(document).ready(function($){
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<script>
+    jQuery(document).ready(function($){
                 var availableTags = [
                     <?php foreach($caste as $each){ ?>
                         "<?php echo $each->caste_name;?>",

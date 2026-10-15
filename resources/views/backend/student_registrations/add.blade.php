@@ -29,12 +29,23 @@
         width: auto;
     }
 
-    .select2-container--default .select2-selection--single {
+    .select2-container .select2-selection--single {
         background-color: #f3f4f6 !important;
+        border: 1px solid #ced4da !important;
+        height: 34px !important;
+        border-radius: 4px !important;
     }
-
-    .select2-hidden-accessible {
-        position: relative !important;
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 34px !important;
+        color: #47404f !important;
+        padding-left: 10px !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 34px !important;
+        top: 0 !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__placeholder {
+        color: #6c757d !important;
     }
 </style>
 
@@ -174,8 +185,9 @@
                                         <input name="amount" class="form-control "  id="amount" placeholder="Scholar Number" type="hidden" />
                                     </div>
                                     <div class="col-md-6 form-group mb-3">
-										<label for="registration_date">Registration Date</label>
-										<input type="date" name="registration_date" class="form-control" id="registration_date" required>
+										<label for="registration_date">Registration Date<b class="validation_err">*</b></label>
+										<input type="date" name="registration_date" class="form-control" id="registration_date" value="{{ date('Y-m-d') }}" required>
+										<span class="registration_date_msg validation_err"></span>
 									</div>
                                     <div class="col-md-6 form-group mb-3">
                                         <label for="firstName1">Application Type<b class="validation_err">*</b></label>
@@ -240,10 +252,17 @@
                                     <div class="col-md-4 form-group mb-3">
                                         <label for="Caste">Caste<b class="validation_err">*</b></label>
                                         <!-- <input class="form-control Caste" id="Caste" placeholder="Student Caste" name="student_caste" /> -->
-                                        <select id="Caste" class="form-control " name="student_caste">
+                                        <select id="Caste" class="form-control select2" name="student_caste" data-placeholder="Please select caste">
                                             <option value="" disabled selected>Please select</option>
-                                            @foreach($caste as $each)
-                                            <option value="{{$each->caste_name}}">{{$each->caste_name}}</option>
+                                            @php
+                                                $sortedCaste = collect($caste)->sortBy(function($item) {
+                                                    return strtolower(trim($item->caste_name));
+                                                });
+                                            @endphp
+                                            @foreach($sortedCaste as $each)
+                                                @if(!empty(trim($each->caste_name)))
+                                                <option value="{{$each->caste_name}}">{{$each->caste_name}}</option>
+                                                @endif
                                             @endforeach
                                         </select>
                                         <span class="student_caste_msg validation_err"></span>
@@ -294,7 +313,7 @@
                                         </div> -->
                                     <div class="col-md-4 form-group mb-3">
                                         <label for="firstName1">Session Name<b class="validation_err">*</b></label>
-                                        <input type="text" readonly id="session_name" class="form-control" value="" name="session_name">
+                                        <input type="text" readonly id="session_name" class="form-control" value="{{ session('db_names') ?? ($_COOKIE['selectedYear'] ?? '2026_2027') }}" name="session_name">
                                         <!-- <select id="session_name" class="form-control" name="session_name"
                                                 autocomplete="" required>
                                                 <option disabled selected>Please select</option>
@@ -485,14 +504,14 @@
                                                         <div class="col-md-3 form-group mb-3">
                                                             <label for="remark">Driver Name</label>
                                                             <select name="driver_name" id="driver_name" class="form-control staff_selection" style="width:100%;">
-                                                                <option>Select Staff</option>
-                                                                <?php
-                                                                foreach ($drivername as $eachStudent) {
-                                                                    // Check if the 'type' column has the value 't'
-
-                                                                    echo '<option value="' . $eachStudent->ename . '">' . $eachStudent->ename . '</option>';
-                                                                }
-                                                                ?>
+                                                                <option value="">Select Staff</option>
+                                                                @if (!empty($drivername))
+                                                                    @foreach ($drivername as $eachStudent)
+                                                                        @if (!empty(trim($eachStudent->ename)))
+                                                                            <option value="{{ trim($eachStudent->ename) }}">{{ trim($eachStudent->ename) }}</option>
+                                                                        @endif
+                                                                    @endforeach
+                                                                @endif
                                                             </select>
                                                             <?php $newdate = date('d-m-Y'); ?>
                                                             <input type="hidden" name="bus_facility_start_date" value="<?php echo $newdate; ?>">
@@ -517,15 +536,21 @@
                                                         <div class="col-md-3 form-group mb-3">
                                                             <label for="remark">Staff Name</label>
                                                             <select name="staff_name[]" id="staff_name" class="form-control staff_selection" style="width:100%;">
-                                                                <option>Select Staff</option>
-                                                                <?php
-                                                                foreach ($stutdentsArr as $eachStudent) {
-                                                                    // Check if the 'type' column has the value 't'
-                                                                    if ($eachStudent->type == 't') {
-                                                                        echo '<option value="' . $eachStudent->staff_name . '" data-form_number="' . $eachStudent->form_number . '" data-class_name="' . $eachStudent->class_name . '">' . $eachStudent->staff_name . '</option>';
-                                                                    }
-                                                                }
-                                                                ?>
+                                                                <option value="">Select Staff</option>
+                                                                @if (!empty($staffList) && count($staffList) > 0)
+                                                                    @foreach ($staffList as $eachStaff)
+                                                                        @php $staffFullName = trim($eachStaff->full_name); @endphp
+                                                                        @if (!empty($staffFullName))
+                                                                            <option value="{{ $staffFullName }}">{{ $staffFullName }}</option>
+                                                                        @endif
+                                                                    @endforeach
+                                                                @elseif (!empty($stutdentsArr))
+                                                                    @foreach ($stutdentsArr as $eachStudent)
+                                                                        @if (isset($eachStudent->type) && $eachStudent->type == 't' && !empty($eachStudent->staff_name))
+                                                                            <option value="{{ $eachStudent->staff_name }}">{{ $eachStudent->staff_name }}</option>
+                                                                        @endif
+                                                                    @endforeach
+                                                                @endif
                                                             </select>
                                                         </div>
                                                     </div>
@@ -862,7 +887,7 @@
 
                             <div class="col-md-12">
                                 <input type="hidden" name="iid" value="">
-                                <input type="submit" name="submit" value="Submit" class="btn btn-primary ">
+                                <input type="submit" name="btn_submit" value="Submit" class="btn btn-primary submit_btn">
                             </div>
                             </form>
 
@@ -971,12 +996,6 @@
 
 
 
-<!-- jQuery 3.6.0 (only once, before plugins) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-<!-- Select2 CSS & JS CDN (after jQuery) -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
-
 
 <script type="text/javascript">
     $(window).ready(function() {
@@ -993,7 +1012,78 @@
                 width: '100%',
                 placeholder: 'Select or search student...'
             });
+            $('#Caste.select2').select2({
+                width: '100%',
+                placeholder: 'Please select caste',
+                allowClear: true
+            });
+            $('#Caste').on('change', function() {
+                if ($(this).val()) {
+                    $('.student_caste_msg').text("");
+                }
+            });
+            $('#registration_date').on('change input', function() {
+                if ($(this).val()) {
+                    $('.registration_date_msg').text("");
+                }
+            });
         }
+        var activeYear = $("#year").val() || "{{ session('db_names') ?? ($_COOKIE['selectedYear'] ?? '2026_2027') }}";
+        if (!$("#session_name").val()) {
+            $("#session_name").val(activeYear);
+        }
+        $("#year").on('change', function() {
+            var yVal = $(this).val();
+            if (yVal) {
+                $("#session_name").val(yVal);
+                $('.session_name_msg').text("");
+            }
+        });
+        $("#batch").on('change', function() {
+            var bVal = $(this).val();
+            if (bVal) {
+                $('.batch_dob_msg').text("");
+                if (!$("#session_name").val()) {
+                    $("#session_name").val(bVal);
+                    $('.session_name_msg').text("");
+                }
+            }
+        });
+        $('#session_name').on('input change', function() {
+            if ($(this).val()) {
+                $('.session_name_msg').text("");
+            }
+        });
+        $('#studentname, input[name="studentname"]').on('input change', function() {
+            if ($(this).val()) {
+                $('.student_name_msg').text("");
+            }
+        });
+        $('#student_dob').on('input change', function() {
+            if ($(this).val()) {
+                $('.student_dob_msg').text("");
+            }
+        });
+        $('#religion').on('change', function() {
+            if ($(this).val()) {
+                $('.religion_msg').text("");
+            }
+        });
+        $('#category').on('change', function() {
+            if ($(this).val()) {
+                $('.category_msg').text("");
+            }
+        });
+        $('#classname').on('change', function() {
+            if ($(this).val()) {
+                $('.classname_msg').text("");
+            }
+        });
+        $('select[name="application_for"]').on('change', function() {
+            if ($(this).val()) {
+                $('.application_for_msg').text("");
+            }
+        });
     });
 
     function getValAndAssign(selectOption) {
@@ -1031,11 +1121,24 @@
                     
                     $('input[name="student_dob"]').val(response.inq_data.date_of_birth);
                     $('select[name="gender"]').val(response.inq_str_data.gender);
-                    $('select[name="student_caste"]').val(response.inq_str_data.caste);
+                    if (response.inq_str_data && response.inq_str_data.caste) {
+                        if ($('select[name="student_caste"] option[value="' + response.inq_str_data.caste + '"]').length === 0) {
+                            var newCasteOption = new Option(response.inq_str_data.caste, response.inq_str_data.caste, true, true);
+                            $('select[name="student_caste"]').append(newCasteOption);
+                        }
+                        $('select[name="student_caste"]').val(response.inq_str_data.caste).trigger('change');
+                    }
                     $('select[name="religion"]').val(response.inq_str_data.religion);
                     $('select[name="category"]').val(response.inq_str_data.category);
                     $('select[name="classname"]').val(response.inq_data.class_name);
-                    $('select[name="session_name"]').val(response.inq_data.session_name);
+                    $('[name="session_name"]').val(response.inq_data.session_name || $("#session_name").val());
+                    if ($('[name="session_name"]').val()) {
+                        $('.session_name_msg').text("");
+                    }
+                    if (response.inq_data && response.inq_data.session_name) {
+                        $('select[name="batch"]').val(response.inq_data.session_name);
+                        $('.batch_dob_msg').text("");
+                    }
                     // $('input[name="present_address"]').val(response.inq_str_data.address);
                     $('input[name="permanent_address"]').val(response.inq_str_data.address);
                     $('input[name="phone_number"]').val(response.inq_str_data.fathermobile);
@@ -1121,89 +1224,102 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
         e.preventDefault();
 
         var application_for = $('select[name="application_for"]').val();
-        var student_name = $('input[name="student_name"]').val();
+        var registration_date = $('input[name="registration_date"]').val();
+        var student_name = $('input[name="studentname"]').val() || $('input[name="student_name"]').val() || $('#studentname').val();
         var student_dob = $('input[name="student_dob"]').val();
-        var student_caste = $('input[name="student_caste"]').val();
+        var batch = $('select[name="batch"]').val();
+        var student_caste = $('select[name="student_caste"]').val() || $('input[name="student_caste"]').val();
         var religion = $('select[name="religion"]').val();
+        var category = $('select[name="category"]').val();
         var classname = $('select[name="classname"]').val();
-        var session_name = $('select[name="session_name"]').val();
+        var session_name = $('[name="session_name"]').val();
 
-        if (application_for == null) {
+        if (application_for == null || application_for == '') {
             $('.application_for_msg').text("This field is required*");
         } else {
-
             $('.application_for_msg').text("");
         }
 
-        if (student_name == '') {
+        if (!registration_date || registration_date.trim() == '') {
+            $('.registration_date_msg').text("This field is required*");
+        } else {
+            $('.registration_date_msg').text("");
+        }
+
+        if (!student_name || student_name.trim() == '') {
             $('.student_name_msg').text("This field is required*");
         } else {
-
             $('.student_name_msg').text("");
         }
 
-        if (student_dob == '') {
+        if (!student_dob || student_dob.trim() == '') {
             $('.student_dob_msg').text("This field is required*");
         } else {
             $('.student_dob_msg').text("");
-
         }
-        if (batch == null) {
+
+        if (!batch || batch == '' || batch == 'select') {
             $('.batch_dob_msg').text("This field is required*");
         } else {
             $('.batch_dob_msg').text("");
-
         }
-        if (student_caste == '') {
+
+        if (!student_caste || student_caste.trim() == '') {
             $('.student_caste_msg').text("This field is required*");
         } else {
             $('.student_caste_msg').text("");
-
         }
 
-        if (religion == '') {
+        if (!religion || religion.trim() == '') {
             $('.religion_msg').text("This field is required*");
         } else {
             $('.religion_msg').text("");
-
         }
 
-        if (classname == null) {
+        if (!classname || classname == '') {
             $('.classname_msg').text("This field is required*");
         } else {
             $('.classname_msg').text("");
-
         }
 
-        if (session_name == null) {
+        if (!session_name || session_name.trim() == '') {
             $('.session_name_msg').text("This field is required*");
         } else {
             $('.session_name_msg').text("");
-
         }
 
-        if (category == null) {
+        if (!category || category == '') {
             $('.category_msg').text("This field is required*");
         } else {
             $('.category_msg').text("");
-
         }
 
-        if (application_for !== null && student_name !== '' && student_dob !== '' &&batch !==null && student_caste !== '' && religion !== null && classname !== null && session_name !== null && category !== null) {
-            var myForm = document.getElementById("form-id");
-            event.preventDefault();
-            myForm.submit();
-            $('.rg_form').submit();
-      } else {
-         $('.allinput_msg').text("All required fields must be completed before you submit the form*");
-         if (allinputmsg == "1") {
-            $("#step1").addClass('s1');
+        var isFormValid = application_for &&
+            student_name && student_name.trim() !== '' &&
+            student_dob && student_dob.trim() !== '' &&
+            batch && batch !== '' && batch !== 'select' &&
+            student_caste && student_caste.trim() !== '' &&
+            religion && religion.trim() !== '' &&
+            classname && classname !== '' &&
+            session_name && session_name.trim() !== '' &&
+            category && category !== '' &&
+            registration_date && registration_date.trim() !== '';
 
-         } else {
-            $("#step1").removeClass('s1');
-         }
-         console.log("invalid form");
-      }
+        if (isFormValid) {
+            $('.allinput_msg').text("");
+            var myForm = document.getElementById("form-id");
+            if (myForm) {
+                HTMLFormElement.prototype.submit.call(myForm);
+            }
+        } else {
+            $('.allinput_msg').text("All required fields must be completed before you submit the form*");
+            if (allinputmsg == "1") {
+                $("#step1").addClass('s1');
+            } else {
+                $("#step1").removeClass('s1');
+            }
+            console.log("invalid form");
+        }
 
 
     });
@@ -1567,24 +1683,11 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
 
 
     /*Show date*/
-    $('.date').datepicker({
-        format: 'dd-mm-yyyy'
-    });
-    $('.date1').datepicker({
-        format: 'dd-mm-yyyy'
-    });
-    $('.date2').datepicker({
-        format: 'dd-mm-yyyy'
-    });
-    $('.date3').datepicker({
-        format: 'dd-mm-yyyy'
-    });
-    $('.date4').datepicker({
-        format: 'dd-mm-yyyy'
-    });
-    $('.date5').datepicker({
-        format: 'dd-mm-yyyy'
-    });
+    if ($.fn.datepicker) {
+        $('.date, .date1, .date2, .date3, .date4, .date5').datepicker({
+            format: 'dd-mm-yyyy'
+        });
+    }
 
     function check() {
         var mobile = document.getElementById('phonenumber');

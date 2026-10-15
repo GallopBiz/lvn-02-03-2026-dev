@@ -9,6 +9,7 @@ use DataTables;
 use App\Http\Requests\StoreFileRequest;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
+use App\Models\HrmsEmployee;
 
 class StudentRegistrationController extends Controller
 {
@@ -331,7 +332,7 @@ public function downloadcertificate($id)
         $postData = [
         
             "scholar_no"    => (!empty($postData_html['scholar_no'])) ? $postData_html['scholar_no'] : "" ,
-			"registration_date" => (!empty($postData_html['registration_date'])) ? $postData_html['registration_date'] : "",
+			"registration_date" => (!empty($postData_html['registration_date'])) ? $postData_html['registration_date'] : date('Y-m-d'),
             "application_for"   => (!empty($postData_html['application_for'])) ? $postData_html['application_for'] : "" ,
             // "application_for"   => "" ,
             "form_number"    => (!empty($postData_html['form_number'])) ? $postData_html['form_number'] : "" ,
@@ -532,7 +533,7 @@ public function downloadcertificate($id)
             'class_name'=>$request->classname,
             'student_name'=>$request->studentname,
             // 'driver'=>$request->driver_name,
-            'staff_name' => $request->staff_name[0],
+            'staff_name' => (!empty($request->staff_name) && is_array($request->staff_name)) ? ($request->staff_name[0] ?? '') : (!empty($request->staff_name) ? $request->staff_name : ''),
     	    'scholar_no'=>$request->scholar_no,
             'session_name'=>$request->session_name,
             'password'=>Hash::make("LVN@123"),
@@ -542,7 +543,7 @@ public function downloadcertificate($id)
             'type'=>'s',
             // 'json_str' => $jsonStr 
             'json_str'=>json_encode($postData),
-			'registration_date'=>$request->registration_date,
+			'registration_date'=> !empty($request->registration_date) ? $request->registration_date : date('Y-m-d'),
             'is_archived'=>0,
         ];
         DB::connection('dynamic')->table('student_registration')->insert($insertArr); 
@@ -662,8 +663,26 @@ public function downloadcertificate($id)
 
         $stutdentsArr = $this->activeStudentRegistrationQuery()->get(); 
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-        $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
-        $caste = DB::connection('dynamic')->table('caste_name')->get();
+        if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
+            $drivername = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
+                ->whereHas('position', function ($query) {
+                    $query->whereRaw('LOWER(position_name) = ?', ['driver']);
+                })
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+
+            $staffList = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as full_name, contact_number")
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+        } else {
+            $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->where('is_delete', 0)->get();
+            $staffList = collect([]);
+        }
+        $caste = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
         $uid = DB::connection('dynamic')
         ->table('student_registration')
         ->where(function ($query) {
@@ -674,7 +693,7 @@ public function downloadcertificate($id)
         ->max('scholar_no');
     
         $uid = $uid +1;
-        return view('backend.student_registrations.add', compact('caste','inqArr','drivername','stutdentsArr','classlist','uid'));
+        return view('backend.student_registrations.add', compact('caste','inqArr','drivername','stutdentsArr','classlist','uid','staffList'));
     }
 
     public function selection_process(){
@@ -683,11 +702,38 @@ public function downloadcertificate($id)
          $totalCancel = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Cancel')->get();
          $totaladmission = DB::connection('dynamic')->table('student_registration')->where("status","=", "r")->get();
          $datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-         return view('backend.student_registrations.selection_process',compact('all_inquiry','totalPending','totalCancel','totaladmission', 'datas'));
+
+         $analytics = [
+             'total' => $all_inquiry->count(),
+             'form_selected' => 0,
+             'pending' => 0,
+             'form_submitted' => 0,
+             'admission_on_hold' => 0,
+             'rejected' => 0,
+             'registered' => 0,
+         ];
+         foreach ($all_inquiry as $item) {
+             $st = trim($item->save_status ?? '');
+             if (empty($st) || strcasecmp($st, 'Pending') === 0) {
+                 $analytics['pending']++;
+             } elseif (strcasecmp($st, 'Form Selected') === 0) {
+                 $analytics['form_selected']++;
+             } elseif (strcasecmp($st, 'Form Submitted') === 0) {
+                 $analytics['form_submitted']++;
+             } elseif (strcasecmp($st, 'Admission On Hold') === 0) {
+                 $analytics['admission_on_hold']++;
+             } elseif (strcasecmp($st, 'Rejected (Interview)') === 0 || strcasecmp($st, 'Rejected') === 0) {
+                 $analytics['rejected']++;
+             } elseif (strcasecmp($st, 'Registered') === 0) {
+                 $analytics['registered']++;
+             }
+         }
+
+         return view('backend.student_registrations.selection_process',compact('all_inquiry','totalPending','totalCancel','totaladmission', 'datas', 'analytics'));
     }
 
 
-    
+
     public function save_selection_process(Request $request){
         $id = $request->id;
         $dataForUpdate = [
@@ -718,16 +764,54 @@ public function downloadcertificate($id)
             'form_number'=>$request->post('form_number'),
         ];
 
-        $records1 = DB::connection('dynamic')->table('inquiry_registration')
-            ->where("status", "=", "i")
-            ->orderBy('id', 'desc');
+        // Base query without save_status so that the analytics breakdown displays all statuses for the active search
+        $baseQuery = DB::connection('dynamic')->table('inquiry_registration')
+            ->where("status", "=", "i");
 
         if(!empty($session_name)){
-            $records1->where("session_name","=", $session_name);
+            $baseQuery->where("session_name","=", $session_name);
         }
         if(!empty($form_number)){
-            $records1->where("form_number","=", $form_number);
+            $baseQuery->where("form_number","=", $form_number);
         }
+        if(!empty($class_name)){
+            $baseQuery->where("class_name","=", $class_name);
+        }
+        if(!empty($gender)){
+            $baseQuery->where("gender","=", $gender);
+        }
+        if(!empty($studentname)){
+            $baseQuery->where("student_name","like", '%' . $studentname . '%');
+        }
+
+        $analyticsItems = (clone $baseQuery)->select('save_status')->get();
+        $analytics = [
+            'total' => $analyticsItems->count(),
+            'form_selected' => 0,
+            'pending' => 0,
+            'form_submitted' => 0,
+            'admission_on_hold' => 0,
+            'rejected' => 0,
+            'registered' => 0,
+        ];
+        foreach ($analyticsItems as $item) {
+            $st = trim($item->save_status ?? '');
+            if (empty($st) || strcasecmp($st, 'Pending') === 0) {
+                $analytics['pending']++;
+            } elseif (strcasecmp($st, 'Form Selected') === 0) {
+                $analytics['form_selected']++;
+            } elseif (strcasecmp($st, 'Form Submitted') === 0) {
+                $analytics['form_submitted']++;
+            } elseif (strcasecmp($st, 'Admission On Hold') === 0) {
+                $analytics['admission_on_hold']++;
+            } elseif (strcasecmp($st, 'Rejected (Interview)') === 0 || strcasecmp($st, 'Rejected') === 0) {
+                $analytics['rejected']++;
+            } elseif (strcasecmp($st, 'Registered') === 0) {
+                $analytics['registered']++;
+            }
+        }
+
+        $records1 = clone $baseQuery;
         if(!empty($save_status)){
             if ($save_status === 'Pending') {
                 $records1->where(function($q) {
@@ -737,15 +821,8 @@ public function downloadcertificate($id)
                 $records1->where("save_status","=", $save_status);
             }
         }
-        if(!empty($class_name)){
-            $records1->where("class_name","=", $class_name);
-        }
-        if(!empty($gender)){
-            $records1->where("gender","=", $gender);
-        }
-        if(!empty($studentname)){
-            $records1->where("student_name","like", '%' . $studentname . '%');
-        }
+        $records1->orderBy('id', 'desc');
+
         $all_inquiry = $records1->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $datas = $classlist;
@@ -753,7 +830,7 @@ public function downloadcertificate($id)
         $totalPending = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Pending')->get();
         $totalCancel = DB::connection('dynamic')->table('inquiry_registration')->select('*')->where('status', '=', 'i')->whereJsonContains('json_str->folloupdate_status', 'Cancel')->get();
         $totaladmission = DB::connection('dynamic')->table('student_registration')->where("status","=", "r")->get();
-        return view('backend.student_registrations.selection_process',compact('all_inquiry','jsonArr', 'classlist', 'datas', 'classname', 'totalPending', 'totalCancel', 'totaladmission'));
+        return view('backend.student_registrations.selection_process',compact('all_inquiry','jsonArr', 'classlist', 'datas', 'classname', 'totalPending', 'totalCancel', 'totaladmission', 'analytics'));
     }
 
     

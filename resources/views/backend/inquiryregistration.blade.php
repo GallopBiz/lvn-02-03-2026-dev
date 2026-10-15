@@ -58,21 +58,18 @@
   }
 
   .ui-autocomplete {
-    max-height: 150px;
+    max-height: 200px;
     overflow-y: auto;
     overflow-x: hidden;
-
-    padding-right: 20px;
-  }
-
-  html .ui-autocomplete {
-    height: 150px;
+    padding-right: 10px;
+    z-index: 9999 !important;
   }
 </style>
 <form novalidate="novalidate" method="post" action="{{url('save_student_inquiryentry')}}" id="form-id" class="rg_form">
   <div class="main-content pt-4">
-    <div class="breadcrumb">
-      <h1 class="me-2">Enquiry Entry</h1>
+    <div class="breadcrumb d-flex justify-content-between align-items-center">
+      <h1 class="me-2 mb-0">Enquiry Entry</h1>
+      <a href="{{ url('adminenquirylist') }}" class="btn btn-primary text-white">Enquiry List</a>
     </div>
     <div class="separator-breadcrumb border-top"></div>
     <div class="row">
@@ -179,13 +176,13 @@
                   </div>
 
                   <div class="col-md-4 form-group mb-3">
-                    <label for="picker2">Enquiry Date</label>
-                    <input class="form-control " id="picker2" placeholder="dd-mm-yyyy" name="enquirydate" type="date" max="9999-12-31" />
+                    <label for="enquirydate">Enquiry Date</label>
+                    <input class="form-control" id="enquirydate" placeholder="dd-mm-yyyy" name="enquirydate" type="date" max="9999-12-31" />
                   </div>
 
                   <div class="col-md-4 form-group mb-3">
-                    <label for="picker2">Date Of Birth</label>
-                    <input class="form-control " id="picker2" placeholder="dd-mm-yyyy" name="student_dob" type="date" max="9999-12-31" /><span class="student_dob_msg validation_err"></span>
+                    <label for="student_dob">Date Of Birth</label>
+                    <input class="form-control" id="student_dob" placeholder="dd-mm-yyyy" name="student_dob" type="date" max="9999-12-31" /><span class="student_dob_msg validation_err"></span>
                   </div>
                   <div class="col-md-4 form-group mb-3">
                     <label for="firstName1">Gender</label>
@@ -474,7 +471,7 @@
                     </select>
                   </div>
                   <div class="col-md-6 form-group mb-3">
-                    <label for="follow-up-date">Follow Up Date</label>
+                    <label for="follow_up_date">Follow Up Date</label>
                     <input class="form-control" type="date" id="follow_up_date" placeholder="dd-mm-yyyy" name="follow_up_date" max="9999-12-31">
                   </div>
                   <div class="col-md-6 form-group mb-3">
@@ -516,8 +513,6 @@
                     </div>
 
                     <span class="allinput_msg validation_err"></span>
-
-                    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
 
                     <div class="group_wrapper">
 
@@ -629,8 +624,6 @@
   }
 </script>
 
-
-<script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
 <script type="text/javascript">
   function check() {
     var mobile = document.getElementById('fathermobile');
@@ -858,7 +851,6 @@
   });
 </script>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script>
   $(document).ready(function() {
     $('#country-dd').on('change', function() {
@@ -915,7 +907,7 @@
     '<tr class="item">' +
     '<td><input class="form-control" id="siblings_namesecond[' + i + ']" type="text" name="siblings_namesecond[' + i + ']"></td><td><select id="sibling_class_second[' + i + ']" class="form-control" name="sibling_class_second[' + i + ']"  autocomplete=""><option value="" disabled selected>Please select</option>@foreach(config("global.class_name") as $each)<option value="{{$each}}">{{$each}}</option>@endforeach</select></td> ' +
     '<td><select id="siblings_section_second[' + i + ']" class="form-control" name="siblings_section_second[' + i + ']" autocomplete="" ><option value="" disabled selected>Please select</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></td> ' +
-    '<td><input class="form-control" type="date"  id="picker2-" type="text" placeholder="dd-mm-yyyy"  name="siblings_bod_second[' + i + ']"></td> ' +
+    '<td><input class="form-control" type="date" id="siblings_bod_second_' + i + '" placeholder="dd-mm-yyyy" name="siblings_bod_second[' + i + ']"></td> ' +
     '<td><a href="javascript:void(0);" class="remove_button btn btn-sm btn-danger"><i class="fa fa-minus"></i></a> </td>' +
     '</tr>';
 
@@ -1139,15 +1131,9 @@
     });
   });
 </script>
-<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-<script type="text/javascript">
-  $.noConflict();
-</script>
-
-<script src="//code.jquery.com/jquery-1.10.2.js"></script>
-<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
 <script>
-  $.noConflict();
   jQuery(document).ready(function($) {
     var availableTags = [
       <?php foreach ($caste as $each) { ?> "<?php echo $each->caste_name; ?>",

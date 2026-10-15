@@ -14,8 +14,9 @@ use App\Models\Schedulemaster;
 use App\Models\Inquiry;
 use App\Models\Call;
 use DataTables;
-use App\Http\Requests\StoreFileRequest;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
+use App\Models\HrmsEmployee;
 class FeesMasterStudentController extends Controller
 {
 
@@ -295,13 +296,29 @@ class FeesMasterStudentController extends Controller
 
         // $inqArr = CommanModel::fetchDataWhere('student_registration',['status'=>'r']);
         $stutdentsArr = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->get(); //CommanModel::fetchDataArr('student_registration');
-        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-        $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
+        if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
+            $drivername = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
+                ->whereHas('position', function ($query) {
+                    $query->whereRaw('LOWER(position_name) = ?', ['driver']);
+                })
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+            $staffList = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as full_name, contact_number")
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+        } else {
+            $drivername = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->where('is_delete', 0)->get();
+            $staffList = collect([]);
+        }
         // print_r($drivername);exit;
         // return view('backend.student_registrations.add',compact('inqArr','stutdentsArr'));
      $uid = DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->get()->last()->id;
         $uid = $uid +1;
-        return view('backend.student_registrations.add', compact('inqArr','drivername','stutdentsArr','classlist','uid'));
+        return view('backend.student_registrations.add', compact('inqArr','drivername','stutdentsArr','classlist','uid','staffList'));
     }
 
     public function selection_process(){

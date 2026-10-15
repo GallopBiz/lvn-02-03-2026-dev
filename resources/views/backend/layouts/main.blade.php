@@ -16,7 +16,7 @@
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/toastr.css" />
    <link rel="stylesheet"  href="{{url('assets/backend')}}/css/plugins/perfect-scrollbar.min.css" />
 
-   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
+   @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist' || Request::segment(1)=='registrationeditlist')
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_arrows.min.css" />
    <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/smart.wizard/smart_wizard_theme_circles.min.css" />
@@ -61,7 +61,7 @@
       </div>
          @include('backend.layouts.headerSearchBar')
          <!-- script js -->
-         @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist')
+         @if(Request::segment(1)=='add-student-registrations'  || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='admin-enquiryform'|| Request::segment(1)=='student-master' || Request::segment(1)=='follow' || Request::segment(1)=='enquiryeditlist' || Request::segment(1)=='registrationeditlist')
          <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.5.0/js/bootstrap-datepicker.js"></script>
          @endif
          <script>
@@ -113,7 +113,7 @@
                }
             });
          </script>
-      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='student-master' || Request::segment(1)=='enquiryeditlist')
+      @if(Request::segment(1)=='add-student-registrations' || Request::segment(1)=='employee' || Request::segment(1)=='payroll' || Request::segment(1)=='student-master' || Request::segment(1)=='registrationeditlist')
       <script src="{{url('assets/backend')}}/js/scripts/tooltip.script.min.js"></script>
       <script src="{{url('assets/backend')}}/js/scripts/script_2.min.js"></script>
       <script src="{{url('assets/backend')}}/js/plugins/feather.min.js"></script>
@@ -154,7 +154,7 @@
     <script src="{{url('assets/backend/')}}/js/scripts/datatables.script.min.js"></script>
 
     @endif
-      @if(Request::segment(1)!='admin-enquiryform' && Request::segment(1)!='edit_enquiry' && Request::segment(1)!='edit_followupdate')
+      @if(Request::segment(1)!='admin-enquiryform' && Request::segment(1)!='edit_enquiry' && Request::segment(1)!='enquiryeditlist' && Request::segment(1)!='edit_followupdate')
       <script src="{{url('assets/backend')}}/js/scripts/smart.wizard.script.min.js"></script>
       @endif
       <script src="{{url('assets/backend')}}/js/scripts/form.validation.script.min.js"></script>

@@ -20,6 +20,7 @@ use App\Models\Late_fees_master;
 use App\Models\HrmsEmployee;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 
 // use Illuminate\Support\Facades\DB
 //use Request;
@@ -407,7 +408,7 @@ class InquiryEntryController extends Controller
      */
     public function edit($id)
     {
-        $data['caste'] = DB::connection('dynamic')->table('caste_name')->get();
+        $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
         $data['all_inquiry2'] = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->get();// CommanModel::fetchDataWhere('inquiry_registration',['status'=> "i"]);
         $data['all_inquiry'] = DB::connection('dynamic')->table('inquiry_registration')->where('id',$id)->get();// CommanModel::fetchDataWhere('inquiry_registration',['id'=> $id]);
         $data['states'] = DB::connection('dynamic')->table('states')->where('name',$id)->get();// State::get(["name", "id"]);
@@ -586,7 +587,7 @@ class InquiryEntryController extends Controller
     public function enquiryeditlist($id)
     {
         $data['states'] = DB::connection('dynamic')->table('states')->get();//State::get(["name", "id"]);
-        $data['caste'] = DB::connection('dynamic')->table('caste_name')->get();
+        $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
         $data['all_inquiry'] = DB::connection('dynamic')->table('inquiry_registration')->where('id',$id)->get();
         $data['all_inquiry2'] = DB::connection('dynamic')->table('inquiry_registration')->get();
         //return view('backend.student_registrations.index',compact('all_inquiry'));
@@ -1190,7 +1191,27 @@ class InquiryEntryController extends Controller
     {        
         $data['inqArr'] = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','Form Selected')->get(); 
         $data['stutdentsArr'] = DB::connection('dynamic')->table('student_registration')->get(); 
-        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get(); $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->get();
+        $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get(); 
+        if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
+            $data['drivername'] = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
+                ->whereHas('position', function ($query) {
+                    $query->whereRaw('LOWER(position_name) = ?', ['driver']);
+                })
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+
+            $data['staffList'] = HrmsEmployee::query()
+                ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as full_name, contact_number")
+                ->where('employee_status', 'active')
+                ->orderByRaw("LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) ASC")
+                ->get();
+        } else {
+            $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->where('is_delete', 0)->get();
+            $data['staffList'] = collect([]);
+        }
+        $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
         return view('backend.student_registrations.edit_registration',$data); 
     }
 
@@ -1535,7 +1556,7 @@ public function perstudueamount($id){
             'inq_mode'=>'off',
             'status'=>'r',
             'json_str'=>json_encode($postData),
-			'registration_date'=>$request->registration_date,
+			'registration_date'=> !empty($request->registration_date) ? $request->registration_date : date('Y-m-d'),
         ];
 // echo"<pre>";print_r($insertArr);exit;
         

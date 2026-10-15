@@ -26,7 +26,6 @@
                                     <th>Student Name</th>
                                     <th>Father Name</th>
                                     <th>Class Name</th>
-                                    <th>Section Name</th>
                                     <th>DOB</th>
                                     <th>Session Name</th>
                                     <th>Mobile Number</th>
@@ -44,7 +43,6 @@
                                         <td>{{ ucwords($each_inq->student_name ?? '') }}</td>
                                         <td>{{ ucwords($notificationData1['student_father_name'] ?? $notificationData1['fathername'] ?? '') }}</td>
                                         <td>{{ $each_inq->class_name }}</td>
-                                        <td>{{ $notificationData1['section_name'] ?? $each_inq->section_name ?? '' }}</td>
                                         <td>{{ !empty($each_inq->date_of_birth) ? date('d-m-Y', strtotime($each_inq->date_of_birth)) : '' }}</td>
                                         <td>{{ $each_inq->session_name }}</td>
                                         <td>{{ $notificationData1['father_mobile'] ?? $each_inq->mobile_number ?? '' }}</td>
@@ -65,7 +63,7 @@
                                         </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="12" class="text-center">No archived students found</td></tr>
+                                    <tr><td colspan="11" class="text-center">No archived students found</td></tr>
                                 @endforelse
                             </tbody>
                         </table>

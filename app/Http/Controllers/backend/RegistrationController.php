@@ -50,7 +50,7 @@ class RegistrationController extends Controller
     public function enquiryform()
     {   
         $data['states'] = State::get(["name", "id"]);
-        $data['caste'] = DB::connection('dynamic')->table('caste_name')->get();
+        $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
         $data['presentlyschool'] = DB::connection('dynamic')->table('presentlyschool')->get();
         $uid = 0; // Initialize $uid with a default value
 

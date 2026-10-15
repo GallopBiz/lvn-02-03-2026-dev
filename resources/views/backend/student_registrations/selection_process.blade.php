@@ -48,6 +48,86 @@ font-size: 0.813rem;
   text-transform: capitalize;
 }
 
+.analytics-inline-row {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: -5px;
+    margin-right: -5px;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+}
+.analytics-inline-col {
+    flex: 1 1 0;
+    min-width: 135px;
+    padding-left: 5px;
+    padding-right: 5px;
+}
+.analytics-card {
+    transition: all 0.2s ease-in-out;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: #fff;
+    cursor: pointer;
+    height: 100%;
+}
+.analytics-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.1) !important;
+}
+.analytics-card.border-accent-primary {
+    border-left: 4px solid #663399 !important;
+}
+.analytics-card.border-accent-success {
+    border-left: 4px solid #4caf50 !important;
+}
+.analytics-card.border-accent-warning {
+    border-left: 4px solid #ff9800 !important;
+}
+.analytics-card.border-accent-info {
+    border-left: 4px solid #00bcd4 !important;
+}
+.analytics-card.border-accent-secondary {
+    border-left: 4px solid #6c757d !important;
+}
+.analytics-card.border-accent-danger {
+    border-left: 4px solid #f44336 !important;
+}
+.analytics-card.border-accent-dark {
+    border-left: 4px solid #343a40 !important;
+}
+.analytics-card.active-filter {
+    background: #fbf9ff;
+    box-shadow: 0 4px 14px rgba(102, 51, 153, 0.12) !important;
+    border-color: rgba(102, 51, 153, 0.25);
+}
+.analytics-card .card-body {
+    user-select: none;
+    padding: 0.85rem 0.95rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.analytics-card .analytics-title-wrap {
+    min-height: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 4px;
+}
+.analytics-card h6 {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 0;
+}
+.analytics-card h3 {
+    font-size: 1.55rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-top: 6px;
+    margin-bottom: 0;
+}
 </style>
 <meta name="csrf-token" content="{{ csrf_token() }}" />
         <div class="main-content pt-4">
@@ -96,15 +176,143 @@ font-size: 0.813rem;
             </div>
             <!-- end modal -->
           <div class="separator-breadcrumb border-top"></div>
+
+          <!-- Analytics Section -->
+          @php
+              if (!isset($analytics)) {
+                  $analytics = [
+                      'total' => count($all_inquiry),
+                      'form_selected' => 0,
+                      'pending' => 0,
+                      'form_submitted' => 0,
+                      'admission_on_hold' => 0,
+                      'rejected' => 0,
+                      'registered' => 0,
+                  ];
+                  foreach ($all_inquiry as $item) {
+                      $st = trim($item->save_status ?? '');
+                      if (empty($st) || strcasecmp($st, 'Pending') === 0) {
+                          $analytics['pending']++;
+                      } elseif (strcasecmp($st, 'Form Selected') === 0) {
+                          $analytics['form_selected']++;
+                      } elseif (strcasecmp($st, 'Form Submitted') === 0) {
+                          $analytics['form_submitted']++;
+                      } elseif (strcasecmp($st, 'Admission On Hold') === 0) {
+                          $analytics['admission_on_hold']++;
+                      } elseif (strcasecmp($st, 'Rejected (Interview)') === 0 || strcasecmp($st, 'Rejected') === 0) {
+                          $analytics['rejected']++;
+                      } elseif (strcasecmp($st, 'Registered') === 0) {
+                          $analytics['registered']++;
+                      }
+                  }
+              }
+              $currentStatusFilter = $jsonArr['save_status'] ?? null;
+          @endphp
+
+          <div class="analytics-inline-row mb-4">
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-primary {{ ($currentStatusFilter === '' || $currentStatusFilter === null) && isset($jsonArr) ? 'active-filter' : '' }}" data-status="" role="button" title="Click to show all entries">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Total Entries</h6>
+                              @if(($currentStatusFilter === '' || $currentStatusFilter === null) && isset($jsonArr))
+                                  <span class="badge bg-primary text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-dark">{{ number_format($analytics['total']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-success {{ ($currentStatusFilter === 'Form Selected') ? 'active-filter' : '' }}" data-status="Form Selected" role="button" title="Click to filter by Form Selected">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Form Selected</h6>
+                              @if($currentStatusFilter === 'Form Selected')
+                                  <span class="badge bg-success text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-success">{{ number_format($analytics['form_selected']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-warning {{ ($currentStatusFilter === 'Pending') ? 'active-filter' : '' }}" data-status="Pending" role="button" title="Click to filter by Pending">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Pending</h6>
+                              @if($currentStatusFilter === 'Pending')
+                                  <span class="badge bg-warning text-dark" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-warning">{{ number_format($analytics['pending']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-info {{ ($currentStatusFilter === 'Form Submitted') ? 'active-filter' : '' }}" data-status="Form Submitted" role="button" title="Click to filter by Form Submitted">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Form Submitted</h6>
+                              @if($currentStatusFilter === 'Form Submitted')
+                                  <span class="badge bg-info text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-info">{{ number_format($analytics['form_submitted']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-secondary {{ ($currentStatusFilter === 'Admission On Hold') ? 'active-filter' : '' }}" data-status="Admission On Hold" role="button" title="Click to filter by Admission On Hold">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Admission On Hold</h6>
+                              @if($currentStatusFilter === 'Admission On Hold')
+                                  <span class="badge bg-secondary text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-secondary">{{ number_format($analytics['admission_on_hold']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-danger {{ ($currentStatusFilter === 'Rejected (Interview)') ? 'active-filter' : '' }}" data-status="Rejected (Interview)" role="button" title="Click to filter by Rejected (Interview)">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Rejected (Interview)</h6>
+                              @if($currentStatusFilter === 'Rejected (Interview)')
+                                  <span class="badge bg-danger text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-danger">{{ number_format($analytics['rejected']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+              <div class="analytics-inline-col mb-2">
+                  <div class="card analytics-card shadow-sm border-accent-dark {{ ($currentStatusFilter === 'Registered') ? 'active-filter' : '' }}" data-status="Registered" role="button" title="Click to filter by Registered">
+                      <div class="card-body">
+                          <div class="analytics-title-wrap">
+                              <h6 class="text-muted">Registered</h6>
+                              @if($currentStatusFilter === 'Registered')
+                                  <span class="badge bg-dark text-white" style="font-size: 0.65rem; padding: 2px 4px;">Active</span>
+                              @endif
+                          </div>
+                          <h3 class="text-dark">{{ number_format($analytics['registered']) }}</h3>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <!-- End Analytics Section -->
+
           <div class="row">
             <div class="col-md-12 mb-4">
                 <div class="form_section1_div">
-                    <form class="" novalidate="novalidate" method="post" action="{{url('filter-student-registration')}}">
+                    <form class="" id="selectionFilterForm" novalidate="novalidate" method="post" action="{{url('filter-student-registration')}}">
                         @csrf
                         <div class="row">
                            <div class="col-md-2 form-group mb-3">
                               <label for="firstName1">Session :</label>
-                              <input type="text" readonly id="session_name" class="form-control" value="" name="session_name">
+                              <input type="text" readonly id="session_name" class="form-control" value="{{ $jsonArr['session_name'] ?? '' }}" name="session_name">
                               <!-- <select id="session_name" class="form-control" name="session_name" autocomplete="shipping address-level1" required>
                                     <option <?php //if(!empty($jsonArr['session_name'])){  if($jsonArr['session_name'] == "2023-2024"){ echo "selected";} }?>  value="2023-2024" selected>2023-2024</option>
                                     <option <?php //if(!empty($jsonArr['session_name'])){  if($jsonArr['session_name'] == "2022-2023"){ echo "selected";} }?>  value="2022-2023" >2022-2023</option>
@@ -133,6 +341,7 @@ font-size: 0.813rem;
                                       @else       
                                       @endif                     
                                       <option value="" <?php echo ($selected == "") ? 'selected' : ''; ?> > -- Please select -- </option>
+                                      <option value="Pending" <?php echo ($selected  == "Pending") ? 'selected' : ''; ?> >Pending</option>
                                       <option value="Form Submitted" <?php echo ($selected  == "Form Submitted") ? 'selected' : ''; ?> >Form Submitted</option>
                                       <option value="Form Selected" <?php echo ($selected  == "Form Selected") ? 'selected' : ''; ?> >Form Selected</option>
                                       <option value="Rejected (Interview)" <?php echo ($selected  == "Rejected (Interview)") ? 'selected' : ''; ?> >Rejected (Interview)</option>
@@ -189,7 +398,7 @@ font-size: 0.813rem;
                                 <button class="btn btn-primary">Search</button>
                                 {{-- <a class="btn btn-primary" href="{{url('selection-process')}}">Clear</a> --}}
                                 
-                                <input type="reset" class="btn btn-danger text text-white" value="Reset">
+                                <input type="reset" class="btn btn-danger text text-white" value="Reset" onclick="window.location.href='{{url('selection-process')}}'; return false;">
                             </div>
                             <!-- <div class="col-md-1">
                                 <button class="btn btn-warning">Export</button>
@@ -430,13 +639,9 @@ for (i=1; i<= count; i++){
 
     }
     </script>
-    <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-                 <script type="text/javascript">$.noConflict();</script> 
-
-        <script src="//code.jquery.com/jquery-1.10.2.js"></script>
-        <script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
-        <script>
-            $.noConflict();
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script>
             jQuery(document).ready(function($){
               setTimeout(function() {
                 var year = $("#year").val()
@@ -467,6 +672,12 @@ for (i=1; i<= count; i++){
                     if (saveStat) $(this).find('input[name="save_status"]').val(saveStat);
                     if (clsName) $(this).find('input[name="class_name"]').val(clsName);
                     if (gen) $(this).find('input[name="gender"]').val(gen);
+                });
+
+                $(document).on('click', '.analytics-card', function() {
+                    var status = $(this).data('status');
+                    $('#save_status').val(status);
+                    $('#selectionFilterForm').submit();
                 });
             });
         </script> 

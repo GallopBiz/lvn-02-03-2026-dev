@@ -223,10 +223,8 @@ font-size: 0.813rem;
           </div>
           <!-- end of main-content -->
         </div>
-        <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-                 <!-- <script type="text/javascript">$.noConflict();</script>  -->
-
-        <script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+        <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
         <script>
             jQuery(document).ready(function($){
           

@@ -142,7 +142,6 @@ font-size: 0.813rem;
                           <th>Student Name</th>
                           <th>Father Name</th>
                           <th>Class Name</th>
-                          <th>Section Name</th>
                           <th>DOB</th>
                           <th>Session Name</th>
                           <th>Mobile Number</th>
@@ -169,7 +168,6 @@ font-size: 0.813rem;
                           }
                           } ?> </td>
                           <td>{{$each_inq->class_name}}</td>
-                          <td>{{ $notificationData1['section_name'] ?? '' }}</td>
                           <td>{{date('d-m-Y',strtotime($each_inq->date_of_birth))}}</td>
                           <td>
                             <?php
@@ -205,7 +203,7 @@ font-size: 0.813rem;
                         </tr>
                         @endforeach
                         @else
-                        <tr><td colspan="13" class="text-center">No Data Found</td></tr>
+                        <tr><td colspan="12" class="text-center">No Data Found</td></tr>
                         @endif
                       </tbody>
                       <tfoot>
@@ -216,7 +214,6 @@ font-size: 0.813rem;
                           <th>Student Name</th>
                           <th>Father Name</th>
                           <th>Class Name</th>
-                          <th>Section Name</th>
                           <th>DOB</th>
                           <th>Session Name</th>
                           <th>Mobile Number</th>
@@ -233,11 +230,8 @@ font-size: 0.813rem;
           </div>
           <!-- end of main-content -->
         </div>
-        <link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-                 <!-- <script type="text/javascript">$.noConflict();</script>  -->
-
-        <script src="//code.jquery.com/jquery-1.10.2.js"></script>
-<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+        <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
 <script>
     jQuery(document).ready(function($) {
         // Autocomplete for student name

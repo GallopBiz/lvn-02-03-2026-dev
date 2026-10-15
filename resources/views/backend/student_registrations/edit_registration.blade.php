@@ -83,41 +83,30 @@
       // echo"<pre>";print_r($notificationData1);exit;
       ?>
       <div class="col-md-12">
-         <!--  SmartWizard html -->
-         <div id="smartwizard">
-            <ul>
-               <li><a href="#step-1">Step 1<br /><small>Student Details</small></a></li>
-               <li>
-                  <a href="#step-2">Step 2<br /><small>Personal Details</small></a>
-               </li>
-               <!--  <li>
-                  <a href="#step-3"
-                     >Step 3<br /><small>Details of Siblings</small></a
-                     >
-                  </li>
+         <form novalidate="novalidate" method="post" action="{{url('saveeditregistration')}}" class="rg_form" id="form-id" enctype="multipart/form-data">
+            @csrf
+            <input type="hidden" name="id" value="<?php echo $each_inq->id; ?>">
+            <input name="scholar_no" class="form-control "  value="<?php if(!empty($notificationData1['scholar_no'])){ echo $notificationData1['scholar_no'];} ?>" id="scholar_no" placeholder="Scholar Number" type="hidden" />
+            <input name="received_amount" class="form-control " value="<?php if(!empty($notificationData1['received_amount'])){ echo $notificationData1['received_amount'];} ?>" id="received_amount" placeholder="Scholar Number" type="hidden" />
+            <input name="amount" class="form-control " value="<?php if(!empty($notificationData1['amount'])){ echo $notificationData1['amount'];} ?>" id="amount" placeholder="Scholar Number" type="hidden" />
+            <input type="hidden" name="bus_facility_start_date" value="<?php if(!empty($notificationData1['bus_facility_start_date'])){ echo $notificationData1['bus_facility_start_date'];} ?>">
+            <input type="hidden" name="bus_facility_end_date" value="<?php if(!empty($notificationData1['bus_facility_end_date'])){ echo $notificationData1['bus_facility_end_date'];} ?>">
+            <!--  SmartWizard html -->
+            <div id="smartwizard">
+               <ul>
+                  <li><a href="#step-1">Step 1<br /><small>Student Details</small></a></li>
                   <li>
-                  <a href="#step-4"
-                     >Step 4<br /><small>Bank Details</small></a
-                     >
-                  </li> -->
-            </ul>
-            <div>
+                     <a href="#step-2">Step 2<br /><small>Personal Details</small></a>
+                  </li>
+               </ul>
+               <div>
 
-               <div id="step-1">
-                  <h3 class="border-bottom border-gray pb-2">
-                     Student Registration Form
-                  </h3>
-                  <div class="form_section1_div">
-                     <form novalidate="novalidate" method="post" action="{{url('saveeditregistration')}}" class="rg_form" id="form-id" enctype="multipart/form-data">
-                        @csrf
-                        <input name="scholar_no" class="form-control "  value="<?php if(!empty($notificationData1['scholar_no'])){ echo $notificationData1['scholar_no'];} ?>" id="scholar_no" placeholder="Scholar Number" type="hidden" />
-                        <input name="received_amount" class="form-control " value="<?php if(!empty($notificationData1['received_amount'])){ echo $notificationData1['received_amount'];} ?>" id="received_amount" placeholder="Scholar Number" type="hidden" />
-                        <input name="amount" class="form-control " value="<?php if(!empty($notificationData1['amount'])){ echo $notificationData1['amount'];} ?>" id="amount" placeholder="Scholar Number" type="hidden" />
-
-                        <input type="hidden" name="bus_facility_start_date" value="<?php if(!empty($notificationData1['bus_facility_start_date'])){ echo $notificationData1['bus_facility_start_date'];} ?>">
-                        <input type="hidden" name="bus_facility_end_date" value="<?php if(!empty($notificationData1['bus_facility_end_date'])){ echo $notificationData1['bus_facility_end_date'];} ?>">
+                  <div id="step-1">
+                     <h3 class="border-bottom border-gray pb-2">
+                        Student Registration Form
+                     </h3>
+                     <div class="form_section1_div">
                         <div class="row">
-                           <input type="hidden" name="id" value="<?php echo $each_inq->id; ?>">
                            <div class="col-md-4 form-group mb-3">
                               <label for="firstName1">Application Type<b class="validation_err">*</b></label>
                               <select id="application_for" class="form-control" name="application_for" autocomplete="shipping address-level1" required>
@@ -147,10 +136,12 @@
                               } ?>" />
                            </div>
 						   <div class="col-md-4 form-group mb-3">
-								<label for="registration_date">Registration Date</label>
+								<label for="registration_date">Registration Date<b class="validation_err">*</b></label>
 								<input type="date" name="registration_date" class="form-control" id="registration_date" 
-									   value="{{ $each_inq->registration_date }}" 
-									   required>
+									   value="{{ !empty($each_inq->registration_date) ? $each_inq->registration_date : date('Y-m-d') }}" required>
+								<span class="registration_date_msg validation_err"></span>
+
+
 							</div>
 
                            
@@ -245,15 +236,29 @@
                            <div class="col-md-4 form-group mb-3">
                               <label for="Caste">Caste<b class="validation_err">*</b></label>
                               <!-- <input class="form-control Caste" id="Caste" placeholder="Student Caste" name="student_caste" /> -->
-                              <select id="Caste" class="form-control Caste" name="student_caste" autocomplete="">
+                              <select id="Caste" class="form-control Caste select2" name="student_caste" autocomplete="" data-placeholder="Please select caste">
                                  <option value="" disabled selected>Please select</option>
-                                 @foreach(config('global.caste') as $each)
-                                 <option <?php if (!empty($notificationData1['student_caste'])) {
-                                             if ($notificationData1['student_caste'] == $each) {
-                                                echo "selected";
-                                             }
-                                          } ?> value="{{$each}}">{{$each}}</option>
-                                 @endforeach
+                                 @if(!empty($caste) && count($caste) > 0)
+                                     @foreach($caste as $each)
+                                     <option <?php if (!empty($notificationData1['student_caste'])) {
+                                                 if ($notificationData1['student_caste'] == $each->caste_name) {
+                                                    echo "selected";
+                                                 }
+                                              } ?> value="{{$each->caste_name}}">{{$each->caste_name}}</option>
+                                     @endforeach
+                                 @else
+                                     @php
+                                        $globalCastes = config('global.caste') ?? [];
+                                        natcasesort($globalCastes);
+                                     @endphp
+                                     @foreach($globalCastes as $each)
+                                     <option <?php if (!empty($notificationData1['student_caste'])) {
+                                                 if ($notificationData1['student_caste'] == $each) {
+                                                    echo "selected";
+                                                 }
+                                              } ?> value="{{$each}}">{{$each}}</option>
+                                     @endforeach
+                                 @endif
                               </select>
                               <span class="student_caste_msg validation_err"></span>
                            </div>
@@ -313,7 +318,7 @@
                            </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="firstName1">Session Name<b class="validation_err">*</b></label>
-                              <input type="text" readonly id="session_name" class="form-control" value="" name="session_name">
+                              <input type="text" readonly id="session_name" class="form-control" value="{{ $each_inq->session_name ?? (session('db_names') ?? ($_COOKIE['selectedYear'] ?? '2026_2027')) }}" name="session_name">
                               <!-- <select id="session_name" class="form-control" name="session_name" autocomplete="" required>
                                  <option disabled selected>Please select</option>
                                  @foreach(config('global.session_name') as $each)
@@ -457,11 +462,7 @@
                                                     <button type="button" class="btn btn-primary pick_inq_data2" onclick="getsiblingbyfathersname();" data-form_number="" fdprocessedid="7t8lyh">Pick Data</button>
                                                 </div>
                                             </div>
-                                            <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-                                            <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.2/css/bootstrap.min.css" rel="stylesheet"/> -->
                                             <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet" />
-
-                                            <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.0/js/bootstrap.min.js"></script>
                                             <div class="group_wrapper">
 
                                                 <div class="gethtml">
@@ -597,23 +598,28 @@
                                           <div class="col-md-3 form-group mb-3">
                                              <label for="remark">Driver Name</label>
                                              <select name="driver_name" id="driver_name" class="form-control staff_selection" style="width:100%;">
-                                                @if(!empty($notificationData1))
                                                 <option value=""> -- Please select -- </option>
-
-                                                @foreach($drivername as $eachStudent)
-                                                {{-- @if($notificationData1['driver_name'] == $eachStudent->ename) --}}
-                                                @if(isset($notificationData1['driver_name']) && $notificationData1['driver_name'] == $eachStudent->ename)
-
-                                                <option selected value="{{$eachStudent->ename}}">{{$eachStudent->ename}}</option>
-                                                @else
-                                                <option value="{{$eachStudent->ename}}">{{$eachStudent->ename}}</option>
-                                                @endif
-                                                @endforeach
-                                                @else
-                                                <option value="" selected> -- Please select -- </option>
-                                                @foreach($drivername as $eachStudent)
-                                                <option value="{{$eachStudent->ename}}">{{$eachStudent->ename}}</option>
-                                                @endforeach
+                                                @php
+                                                   $savedDriver = isset($notificationData1['driver_name']) ? trim($notificationData1['driver_name']) : '';
+                                                   $driverFound = false;
+                                                @endphp
+                                                @if(!empty($drivername))
+                                                   @foreach($drivername as $eachStudent)
+                                                      @php
+                                                         $dName = trim($eachStudent->ename);
+                                                         if ($savedDriver !== '' && strcasecmp($savedDriver, $dName) === 0) {
+                                                            $driverFound = true;
+                                                         }
+                                                      @endphp
+                                                      @if($savedDriver !== '' && strcasecmp($savedDriver, $dName) === 0)
+                                                         <option selected value="{{$dName}}">{{$dName}}</option>
+                                                      @else
+                                                         <option value="{{$dName}}">{{$dName}}</option>
+                                                      @endif
+                                                   @endforeach
+                                                   @if($savedDriver !== '' && !$driverFound)
+                                                      <option selected value="{{$savedDriver}}">{{$savedDriver}}</option>
+                                                   @endif
                                                 @endif
                                              </select>
                                           </div>
@@ -638,29 +644,44 @@
                                                         <div class="col-md-3 form-group mb-3">
                                                             <label for="remark">Staff Name</label>
                                                             <select name="staff_name[]" id="staff_name" class="form-control staff_selection" style="width:100%;">
-                                                                @if(!empty($notificationData1))
-                                                                                                                        
-                                                                <option>Select Staff</option>
-                                                                <?php
-                                                                foreach ($all_inquiry as $eachStudent) {
-                                                                  if(isset($notificationData1['staff_name']) && $notificationData1['staff_name'] == $eachStudent->staff_name){
-                                                                    // Check if the 'type' column has the value 't'
-                                                                    if ($eachStudent->type == 't') {
-                                                                        echo '<option value="' . $eachStudent->staff_name . '" data-form_number="' . $eachStudent->form_number . '" data-class_name="' . $eachStudent->class_name . '">' . $eachStudent->staff_name . '</option>';
-                                                                    }}else{
-                                                                     if ($eachStudent->type == 't') {
-                                                                        echo '<option value="' . $eachStudent->staff_name . '" data-form_number="' . $eachStudent->form_number . '" data-class_name="' . $eachStudent->class_name . '">' . $eachStudent->staff_name . '</option>';
+                                                                 <option value="">Select Staff</option>
+                                                                 @php
+                                                                    $savedStaff = "";
+                                                                    if (isset($notificationData1['staff_name'])) {
+                                                                        if (is_array($notificationData1['staff_name'])) {
+                                                                            $savedStaff = trim($notificationData1['staff_name'][0] ?? "");
+                                                                        } else {
+                                                                            $savedStaff = trim($notificationData1['staff_name']);
+                                                                        }
+                                                                    } elseif (!empty($each_inq->staff_name)) {
+                                                                        $savedStaff = trim($each_inq->staff_name);
                                                                     }
-                                                                    }
-                                                                }?>                                                                
-                                                                @else
-                                                                <?php
-                                                                  if ($eachStudent->type == 't') {
-                                                                     echo '<option value="' . $eachStudent->staff_name . '" data-form_number="' . $eachStudent->form_number . '" data-class_name="' . $eachStudent->class_name . '">' . $eachStudent->staff_name . '</option>';
-                                                                 }
-                                                                ?>
-                                                                @endif                                                                
-                                                            </select>
+                                                                    $staffFound = false;
+                                                                 @endphp
+                                                                 @if (!empty($staffList) && count($staffList) > 0)
+                                                                     @foreach ($staffList as $eachStaff)
+                                                                         @php
+                                                                             $empName = trim($eachStaff->full_name);
+                                                                             $isSelected = ($savedStaff !== "" && strcasecmp($savedStaff, $empName) === 0);
+                                                                             if ($isSelected) {
+                                                                                 $staffFound = true;
+                                                                             }
+                                                                         @endphp
+                                                                         @if (!empty($empName))
+                                                                             <option value="{{ $empName }}" {{ $isSelected ? 'selected' : '' }}>{{ $empName }}</option>
+                                                                         @endif
+                                                                     @endforeach
+                                                                     @if ($savedStaff !== "" && !$staffFound && strcasecmp($savedStaff, 'Select Staff') !== 0)
+                                                                         <option value="{{ $savedStaff }}" selected>{{ $savedStaff }}</option>
+                                                                     @endif
+                                                                 @elseif (!empty($all_inquiry))
+                                                                     @foreach ($all_inquiry as $eachStudent)
+                                                                         @if (isset($eachStudent->type) && $eachStudent->type == 't' && !empty($eachStudent->staff_name))
+                                                                             <option value="{{ $eachStudent->staff_name }}" {{ ($savedStaff !== "" && strcasecmp($savedStaff, $eachStudent->staff_name) === 0) ? 'selected' : '' }}>{{ $eachStudent->staff_name }}</option>
+                                                                         @endif
+                                                                     @endforeach
+                                                                 @endif
+                                                             </select>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1154,26 +1175,19 @@
                      <div class="col-md-12">
                         <button class="btn btn-primary submit_btn">Submit</button>
                      </div>
-                     </form>
 
                   </div>
 
                </div>
-               <div id="step-3">
-               </div>
-               <div id="step-4">
-               </div>
             </div>
-            @endforeach
-            @endif
          </div>
+         </form>
       </div>
+      @endforeach
+      @endif
    </div>
    <!-- end of main-content -->
 </div>
-
-<script src="{{url('assets/backend')}}/js/plugins/jquery-3.3.1.min.js"></script>
-
 
 <script type="text/javascript">
     $(window).ready(function() {
@@ -1218,11 +1232,20 @@
                $('input[name="studentname"]').val(response.inq_data.student_name);
                $('input[name="student_dob"]').val(response.inq_data.date_of_birth);
                $('select[name="gender"]').val(response.inq_str_data.gender);
-               $('select[name="student_caste"]').val(response.inq_str_data.caste);
+               if (response.inq_str_data && response.inq_str_data.caste) {
+                  if ($('select[name="student_caste"] option[value="' + response.inq_str_data.caste + '"]').length === 0) {
+                     var newCasteOption = new Option(response.inq_str_data.caste, response.inq_str_data.caste, true, true);
+                     $('select[name="student_caste"]').append(newCasteOption);
+                  }
+                  $('select[name="student_caste"]').val(response.inq_str_data.caste).trigger('change');
+               }
                $('select[name="religion"]').val(response.inq_str_data.religion);
                $('select[name="category"]').val(response.inq_str_data.category);
                $('select[name="classname"]').val(response.inq_data.class_name);
-               $('select[name="session_name"]').val(response.inq_data.session_name);
+               $('[name="session_name"]').val(response.inq_data.session_name || $("#session_name").val());
+               if ($('[name="session_name"]').val()) {
+                  $('.session_name_msg').text("");
+               }
                $('input[name="present_address"]').val(response.inq_str_data.address);
                $('input[name="permanent_address"]').val(response.inq_str_data.address);
                $('input[name="phone_number"]').val(response.inq_str_data.fathermobile);
@@ -1255,12 +1278,19 @@
       e.preventDefault();
 
       var application_for = $('select[name="application_for"]').val();
+      var registration_date = $('input[name="registration_date"]').val();
       var student_name = $('input[name="student_name"]').val();
       var student_dob = $('input[name="student_dob"]').val();
-      var student_caste = $('input[name="student_caste"]').val();
+      var student_caste = $('select[name="student_caste"]').val() || $('input[name="student_caste"]').val();
       var religion = $('select[name="religion"]').val();
       var classname = $('select[name="classname"]').val();
-      var session_name = $('select[name="session_name"]').val();
+      var session_name = $('[name="session_name"]').val();
+
+      if (!registration_date || registration_date.trim() == '') {
+         $('.registration_date_msg').text("This field is required*");
+      } else {
+         $('.registration_date_msg').text("");
+      }
 
       if (application_for == null) {
          $('.application_for_msg').text("This field is required*");
@@ -1285,7 +1315,7 @@
 
       }
 
-      if (student_caste == '') {
+      if (student_caste == '' || student_caste == null) {
          $('.student_caste_msg').text("This field is required*");
       } else {
          $('.student_caste_msg').text("");
@@ -1307,7 +1337,7 @@
 
       }
 
-      if (session_name == null) {
+      if (!session_name || session_name.trim() == '') {
          $('.session_name_msg').text("This field is required*");
       } else {
          $('.session_name_msg').text("");
@@ -1321,11 +1351,11 @@
 
       }
 
-      if (application_for !== null && student_name !== '' && student_dob !== '' && student_caste !== '' && religion !== '' && classname !== null && session_name !== null && category !== null) {
+      if (application_for !== null && student_name !== '' && student_dob !== '' && student_caste !== '' && student_caste !== null && religion !== '' && classname !== null && session_name !== null && category !== null && registration_date && registration_date.trim() !== '') {
          var myForm = document.getElementById("form-id");
          event.preventDefault();
-         myForm.submit();
-         $('.rg_form').submit();
+         HTMLFormElement.prototype.submit.call(myForm);
+
       } else {
          $('.allinput_msg').text("All required fields must be completed before you submit the form*");
          if (allinputmsg == "1") {
@@ -1701,24 +1731,11 @@
 
 
    /*Show date*/
-   $('.date').datepicker({
-      format: 'dd-mm-yyyy'
-   });
-   $('.date1').datepicker({
-      format: 'dd-mm-yyyy'
-   });
-   $('.date2').datepicker({
-      format: 'dd-mm-yyyy'
-   });
-   $('.date3').datepicker({
-      format: 'dd-mm-yyyy'
-   });
-   $('.date4').datepicker({
-      format: 'dd-mm-yyyy'
-   });
-   $('.date5').datepicker({
-      format: 'dd-mm-yyyy'
-   });
+   if ($.fn.datepicker) {
+      $('.date, .date1, .date2, .date3, .date4, .date5').datepicker({
+         format: 'dd-mm-yyyy'
+      });
+   }
 
    function check() {
       var mobile = document.getElementById('phonenumber');
@@ -1812,22 +1829,27 @@
    });
 </script>
 <script type="text/javascript">
-   $.noConflict();
    jQuery(document).ready(function($) {
-      $("#inq-form-no").select2();
-      $("#sibling_name").select2();
+      if ($.fn.select2) {
+         $("#inq-form-no").select2({ width: '100%' });
+         $("#sibling_name").select2({ width: '100%' });
+         $("#Caste.select2").select2({
+            width: '100%',
+            placeholder: 'Please select caste',
+            allowClear: true
+         });
+         $("#Caste").on('change', function() {
+            if ($(this).val()) {
+               $('.student_caste_msg').text("");
+            }
+         });
+      }
 
       setTimeout(function() {
-         var year = $("#year").val()
+         var year = $("#year").val();
          $("#session_name").val(year);
       }, 1000);
    });
-</script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" />
-<style type="text/css"></style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.full.min.js"></script>
-<script type="text/javascript">
-   $.noConflict();
 </script>
 
 <script>
