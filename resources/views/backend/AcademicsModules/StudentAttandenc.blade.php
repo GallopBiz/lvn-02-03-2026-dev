@@ -56,10 +56,10 @@
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Class</label>
-                    <select name="class_id" class="form-control" onchange="this.form.submit()">
+                    <select name="class_id" class="form-control" onchange="var sec = this.form.querySelector('[name=section_name]'); if(sec) sec.value = ''; this.form.submit();">
                         <option value="">All</option>
                         @foreach($classes as $class)
-                            <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id)>{{ $class->class_name }}</option>
+                            <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id || (string)$filters['class_id'] === (string)$class->class_name)>{{ $class->class_name }}</option>
                         @endforeach
                     </select>
                 </div>

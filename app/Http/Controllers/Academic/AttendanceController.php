@@ -9,6 +9,7 @@ use App\Models\Academic\AttendanceCollectiveDetail;
 use App\Models\Academic\AttendanceDetail;
 use App\Models\Academic\Exam;
 use App\Models\Classes;
+use App\Models\Classname;
 use App\Models\Holidays;
 use App\Models\Student_registration;
 use App\Models\TeacherSubject;
@@ -32,6 +33,10 @@ class AttendanceController extends Controller
     {
         $filters = $this->filters($request);
         $classes = $this->classes();
+        $selectedClass = $filters['class_id']
+            ? (Classes::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first()
+                ?: (class_exists(Classname::class) ? Classname::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first() : null))
+            : null;
         $sections = $this->sections($filters['class_id']);
         $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
         $students = $filters['class_id']
@@ -49,6 +54,9 @@ class AttendanceController extends Controller
             $filters['section_name'] = $editingAttendance->section_name;
             $filters['academic_session'] = $editingAttendance->academic_session;
             $students = $editingAttendance->details->pluck('student')->filter()->values();
+            $sections = $this->sections($filters['class_id']);
+            $selectedClass = Classes::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first()
+                ?: (class_exists(Classname::class) ? Classname::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first() : null);
         }
 
         $recentAttendance = $this->accessibleAttendanceQuery()->with('teacher', 'className')
@@ -66,6 +74,7 @@ class AttendanceController extends Controller
         return view('backend.AcademicsModules.dailyattandence', [
             'statuses' => self::STATUSES,
             'classes' => $classes,
+            'selectedClass' => $selectedClass,
             'sections' => $sections,
             'teachers' => $teachers,
             'students' => $students,
@@ -101,6 +110,14 @@ class AttendanceController extends Controller
             'remarks' => 'nullable|array',
             'remarks.*' => 'nullable|string|max:255',
         ]);
+
+        if (empty($validated['class_name'])) {
+            $classObj = Classes::where('id', $validated['class_id'])->orWhere('class_name', $validated['class_id'])->first();
+            if (!$classObj && class_exists(Classname::class)) {
+                $classObj = Classname::where('id', $validated['class_id'])->orWhere('class_name', $validated['class_id'])->first();
+            }
+            $validated['class_name'] = optional($classObj)->class_name ?: (string) $validated['class_id'];
+        }
 
         $nonWorkingDay = $this->nonWorkingDayInfo($validated['attendance_date']);
         if ($nonWorkingDay) {
@@ -739,7 +756,15 @@ class AttendanceController extends Controller
 
         if ($this->isStaffAttendanceUser()) {
             $classIds = $this->accessibleTeacherSubjects(true)->pluck('class_id')->unique()->values();
-            $query->whereIn('id', $classIds);
+            $classNames = Classes::query()->whereIn('id', $classIds)->pluck('class_name')
+                ->merge(Classname::query()->whereIn('id', $classIds)->pluck('class_name'))
+                ->filter()
+                ->unique();
+
+            $query->where(function ($q) use ($classIds, $classNames) {
+                $q->whereIn('id', $classIds)
+                    ->orWhereIn('class_name', $classNames);
+            });
         }
 
         return $query->get()->unique('class_name')->values();
@@ -751,47 +776,87 @@ class AttendanceController extends Controller
             return collect();
         }
 
-        $query = Classes::query()
-            ->where('id', $classId)
-            ->orWhere('class_name', $classId);
+        $selectedClass = Classes::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
+        if (!$selectedClass && class_exists(Classname::class)) {
+            $selectedClass = Classname::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
+        }
+        $className = optional($selectedClass)->class_name ?: (string) $classId;
+
+        $classRows = Classes::query()
+            ->where('class_name', $className)
+            ->orWhere('id', $classId)
+            ->get();
+
+        $sections = $classRows->pluck('section_name')
+            ->filter()
+            ->flatMap(fn ($section) => array_map('trim', explode(',', $section)));
+
+        $studentSections = Student_registration::query()
+            ->where(function ($q) use ($classId, $className, $classRows) {
+                $q->where('class_name', $className)
+                    ->orWhere('class_name', $classId)
+                    ->orWhereIn('class_id', $classRows->pluck('id'));
+            })
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '')
+            ->pluck('section_name');
+
+        $allSections = $sections->concat($studentSections)
+            ->filter()
+            ->map(fn ($s) => trim($s))
+            ->filter(fn ($s) => $s !== '')
+            ->unique();
+
+        $knownOrder = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+        $sortedSections = $allSections->sortBy(function ($sec) use ($knownOrder) {
+            $idx = array_search($sec, $knownOrder);
+            return $idx === false ? 999 . $sec : sprintf('%03d', $idx);
+        })->values();
 
         if ($this->isStaffAttendanceUser()) {
+            $classIds = $classRows->pluck('id')->push($classId)->unique()->values();
             $allowedSections = $this->accessibleTeacherSubjects()
-                ->where('class_id', $classId)
+                ->where(function ($q) use ($classIds, $className, $classId) {
+                    $q->whereIn('class_id', $classIds)
+                        ->orWhere('class_id', $className)
+                        ->orWhere('class_id', $classId);
+                })
                 ->pluck('section_name')
                 ->filter()
                 ->values();
 
             if ($allowedSections->isNotEmpty() && !$allowedSections->contains('All')) {
-                $query->whereIn('section_name', $allowedSections);
+                $sortedSections = $sortedSections->filter(fn ($s) => $allowedSections->contains($s))->values();
             }
         }
 
-        return $query
-            ->pluck('section_name')
-            ->filter()
-            ->flatMap(fn ($section) => array_map('trim', explode(',', $section)))
-            ->unique()
-            ->values();
+        return $sortedSections;
     }
 
     private function studentsForClass($classId, ?string $sectionName = null)
     {
         $class = Classes::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
-        $className = optional($class)->class_name ?: $classId;
+        if (!$class && class_exists(Classname::class)) {
+            $class = Classname::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
+        }
+        $className = optional($class)->class_name ?: (string) $classId;
+        $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->unique()->values();
 
         return Student_registration::query()
-            ->where(function ($query) use ($classId, $className) {
-                $query->where('class_name', $classId)->orWhere('class_name', $className);
+            ->where(function ($query) use ($classId, $className, $classIds) {
+                $query->where('class_name', $classId)
+                    ->orWhere('class_name', $className)
+                    ->orWhereIn('class_id', $classIds);
             })
             ->when($sectionName, function ($query) use ($sectionName) {
                 $query->where(function ($inner) use ($sectionName) {
-                    $inner->where('json_str', 'like', '%"section_name":"' . $sectionName . '"%')
+                    $inner->where('section_name', $sectionName)
+                        ->orWhere('json_str', 'like', '%"section_name":"' . $sectionName . '"%')
                         ->orWhere('json_str', 'like', '%"section_name": "' . $sectionName . '"%');
                 });
             })
             ->orderBy('student_name')
-            ->select('id', 'form_number', 'scholar_no', 'student_name', 'class_name', 'session_name', 'json_str');
+            ->select('id', 'form_number', 'scholar_no', 'student_name', 'class_name', 'section_name', 'session_name', 'json_str');
     }
 
     private function studentOptions($classId, ?string $sectionName, string $search)
@@ -816,8 +881,22 @@ class AttendanceController extends Controller
 
     private function applyAttendanceFilters($query, array $filters): void
     {
-        $query->when($filters['class_id'], fn ($q) => $q->where('class_id', $filters['class_id']))
-            ->when($filters['section_name'], fn ($q) => $q->where('section_name', $filters['section_name']));
+        $query->when($filters['class_id'], function ($q) use ($filters) {
+            $class = Classes::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first();
+            if (!$class && class_exists(Classname::class)) {
+                $class = Classname::query()->where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first();
+            }
+            $className = optional($class)->class_name ?: (string) $filters['class_id'];
+            $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($filters['class_id'])->unique()->values();
+
+            $q->where(function ($inner) use ($filters, $className, $classIds) {
+                $inner->whereIn('class_id', $classIds)
+                    ->orWhere('class_id', $filters['class_id'])
+                    ->orWhere('class_name', $className)
+                    ->orWhere('class_name', $filters['class_id']);
+            });
+        })
+        ->when($filters['section_name'], fn ($q) => $q->where('section_name', $filters['section_name']));
 
         if (!empty($filters['academic_session'])) {
             $session = $filters['academic_session'];
@@ -1018,8 +1097,19 @@ class AttendanceController extends Controller
             return false;
         }
 
+        $class = Classes::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
+        if (!$class && class_exists(Classname::class)) {
+            $class = Classname::query()->where('id', $classId)->orWhere('class_name', $classId)->first();
+        }
+        $className = optional($class)->class_name ?: (string) $classId;
+        $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->unique()->values();
+
         return $this->accessibleTeacherSubjects($classTeacherOnly)
-            ->where('class_id', $classId)
+            ->where(function ($query) use ($classIds, $className, $classId) {
+                $query->whereIn('class_id', $classIds)
+                    ->orWhere('class_id', $className)
+                    ->orWhere('class_id', $classId);
+            })
             ->where(function ($query) use ($sectionName) {
                 $query->where('section_name', $sectionName)->orWhere('section_name', 'All');
             })

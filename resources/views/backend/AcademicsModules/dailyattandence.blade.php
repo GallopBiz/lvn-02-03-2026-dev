@@ -70,10 +70,10 @@
                 </div>
                 <div class="col-lg-3 col-md-4 form-group">
                     <label>Class</label>
-                    <select name="class_id" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                    <select name="class_id" class="form-control" onchange="var sec = this.form.querySelector('[name=section_name]'); if(sec) sec.value = ''; this.form.submit();">
                         <option value="">Select class</option>
                         @foreach($classes as $class)
-                            <option value="{{ $class->id }}" data-name="{{ $class->class_name }}" @selected((string)$filters['class_id'] === (string)$class->id)>{{ $class->class_name }}</option>
+                            <option value="{{ $class->id }}" data-name="{{ $class->class_name }}" @selected((string)$filters['class_id'] === (string)$class->id || (string)$filters['class_id'] === (string)$class->class_name || (optional($selectedClass)->class_name === $class->class_name))>{{ $class->class_name }}</option>
                         @endforeach
                     </select>
                 </div>

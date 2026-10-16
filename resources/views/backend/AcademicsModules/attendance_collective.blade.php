@@ -71,10 +71,10 @@
                 </div>
                 <div class="col-lg-3 col-md-4 form-group">
                     <label>Class</label>
-                    <select name="class_id" class="form-control" onchange="document.getElementById('collectiveFilterForm').submit()">
+                    <select name="class_id" class="form-control" onchange="var sec = document.getElementById('collectiveFilterForm').querySelector('[name=section_name]'); if(sec) sec.value = ''; document.getElementById('collectiveFilterForm').submit()">
                         <option value="">Select class</option>
                         @foreach($classes as $class)
-                            <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id)>{{ $class->class_name }}</option>
+                            <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id || (string)$filters['class_id'] === (string)$class->class_name)>{{ $class->class_name }}</option>
                         @endforeach
                     </select>
                 </div>
