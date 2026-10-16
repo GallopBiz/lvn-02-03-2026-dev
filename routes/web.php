@@ -17,6 +17,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AddVehical;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\StaffNotificationController;
 use App\Http\Controllers\backend\FeesTypesMasterController;
 use App\Http\Controllers\BusStaff;
 use App\Http\Controllers\Challa;
@@ -281,6 +282,10 @@ Route::group(['middleware' => ['auth', 'admin']], function() {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/{id}/hide', [NotificationController::class, 'hide'])->name('notifications.hide');
+    Route::get('staff-notifications', [StaffNotificationController::class, 'index'])->name('staff-notifications.index');
+    Route::post('staff-notifications/{id}/read', [StaffNotificationController::class, 'markRead'])->name('staff-notifications.read');
+    Route::post('staff-notifications/{id}/dismiss', [StaffNotificationController::class, 'dismiss'])->name('staff-notifications.dismiss');
+    Route::post('staff-notifications/read-all', [StaffNotificationController::class, 'markAllRead'])->name('staff-notifications.read-all');
     Route::resource('roles', RoleController::class);
     Route::resource('users', UserController::class);
     Route::get('permission', [UserPermissionController::class, 'index'])->name('permission');

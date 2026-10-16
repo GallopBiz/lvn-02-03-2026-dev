@@ -52,6 +52,7 @@ class NotificationController extends Controller
         return response()->json([
             'unreadCount' => AppNotification::query()
                 ->where('user_id', $user->getAuthIdentifier())
+                ->where('type', 'RTO_EXPIRY')
                 ->where('is_hidden', false)
                 ->where('is_read', false)
                 ->count(),
@@ -75,6 +76,7 @@ class NotificationController extends Controller
         return response()->json([
             'unreadCount' => AppNotification::query()
                 ->where('user_id', $user->getAuthIdentifier())
+                ->where('type', 'RTO_EXPIRY')
                 ->where('is_hidden', false)
                 ->where('is_read', false)
                 ->count(),

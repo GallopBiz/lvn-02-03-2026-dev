@@ -164,12 +164,248 @@
   text-align: center;
 }
 
+/* Staff Notifications Styles */
+.lvn-staff-notification-root {
+  position: relative;
+  margin-right: 18px;
+}
+
+.lvn-staff-notification-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  border-radius: 50%;
+  transition: background-color 0.15s ease;
+}
+
+.lvn-staff-notification-btn:hover,
+.lvn-staff-notification-btn:focus-visible {
+  background-color: rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+
+.lvn-staff-notification-badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: 10px;
+  background: #0d6efd;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.lvn-staff-notification-panel {
+  position: absolute;
+  z-index: 1050;
+  top: 42px;
+  right: -12px;
+  width: min(390px, calc(100vw - 24px));
+  max-height: 440px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.lvn-staff-notification-panel[hidden] {
+  display: none !important;
+}
+
+.lvn-staff-notification-heading {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8fafc;
+}
+
+.lvn-staff-header-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #0d6efd;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.lvn-staff-heading-sub {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 3px;
+}
+
+.lvn-staff-read-all-btn {
+  border: none;
+  background: transparent;
+  color: #0d6efd;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.lvn-staff-read-all-btn:hover {
+  text-decoration: underline;
+  background: #eef2ff;
+}
+
+.lvn-staff-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f1f2;
+  background: #fff;
+  color: #343a40;
+  transition: background-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.lvn-staff-item:hover {
+  background: #f8fafc;
+}
+
+.lvn-staff-item.leave-item {
+  border-left: 3px solid #0d6efd;
+}
+
+.lvn-staff-item.birthday-item {
+  border-left: 3px solid #fd7e14;
+}
+
+.lvn-staff-icon-wrap {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.leave-item .lvn-staff-icon-wrap {
+  background: #e7f1ff;
+  color: #0d6efd;
+}
+
+.birthday-item .lvn-staff-icon-wrap {
+  background: #fff3cd;
+  color: #fd7e14;
+}
+
+.lvn-staff-main {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.lvn-staff-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 3px;
+  letter-spacing: 0.3px;
+}
+
+.leave-item .lvn-staff-pill {
+  background: #e0edff;
+  color: #0a58ca;
+}
+
+.birthday-item .lvn-staff-pill {
+  background: #ffe8cc;
+  color: #c45a00;
+}
+
+.lvn-staff-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #212529;
+  line-height: 1.3;
+}
+
+.lvn-staff-message {
+  display: block;
+  font-size: 12px;
+  color: #495057;
+  line-height: 1.4;
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.lvn-staff-meta {
+  display: block;
+  margin-top: 5px;
+  color: #8c98a4;
+  font-size: 11px;
+}
+
+.lvn-staff-dismiss {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #6c757d;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.lvn-staff-dismiss:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.lvn-staff-empty,
+.lvn-staff-notification-loading {
+  padding: 28px 16px;
+  color: #6c757d;
+  font-size: 13px;
+  text-align: center;
+}
+
 @media (max-width: 576px) {
-  .lvn-notification-root {
+  .lvn-notification-root,
+  .lvn-staff-notification-root {
     margin-right: 8px;
   }
 
-  .lvn-notification-panel {
+  .lvn-notification-panel,
+  .lvn-staff-notification-panel {
     position: fixed;
     top: 56px;
     right: 12px;
@@ -197,6 +433,10 @@
           $notificationUnreadCount = \App\Models\AppNotification::where('user_id', $notificationUser->getAuthIdentifier())
               ->where('type', 'RTO_EXPIRY')
               ->count();
+
+          $staffNotificationService = app(\App\Services\StaffNotificationService::class);
+          $staffNotificationService->syncFor($notificationUser);
+          $staffNotificationCount = $staffNotificationService->unreadCount($notificationUser);
         @endphp
         <div class="col-md-3 align-items-center ">         
           <!-- Mega menu -->
@@ -339,12 +579,13 @@
         <div class="header-part-right">
 
           @role('Admin')
+          <!-- Transport RTO Notifications (untouched) -->
           <div class="lvn-notification-root" data-lvn-notifications
                data-notifications-url="{{ route('notifications.index') }}"
                data-read-url-template="{{ url('notifications/__notification__/read') }}"
                data-hide-url-template="{{ url('notifications/__notification__/hide') }}">
             <button type="button" class="lvn-notification-bell" data-lvn-notification-toggle
-                    aria-label="Notifications" aria-expanded="false" aria-controls="lvn-notification-panel">
+                    aria-label="Notifications" title="Transport Notifications" aria-expanded="false" aria-controls="lvn-notification-panel">
               <i class="i-Bell"></i>
               <span class="lvn-notification-badge" data-lvn-notification-count @if($notificationUnreadCount === 0) hidden @endif>{{ $notificationUnreadCount }}</span>
             </button>
@@ -352,6 +593,34 @@
               <div class="lvn-notification-heading">Notifications</div>
               <div data-lvn-notification-list>
                 <div class="lvn-notification-loading">Loading notifications...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Staff Notifications (Leaves & Birthdays) -->
+          <div class="lvn-staff-notification-root" data-lvn-staff-notifications
+               data-notifications-url="{{ route('staff-notifications.index') }}"
+               data-read-url-template="{{ url('staff-notifications/__notification__/read') }}"
+               data-dismiss-url-template="{{ url('staff-notifications/__notification__/dismiss') }}"
+               data-read-all-url="{{ route('staff-notifications.read-all') }}">
+            <button type="button" class="lvn-staff-notification-btn" data-lvn-staff-notification-toggle
+                    aria-label="Staff Notifications" title="Staff Notifications (Leaves & Birthdays)" aria-expanded="false" aria-controls="lvn-staff-notification-panel">
+              <i class="i-Calendar-4"></i>
+              <span class="lvn-staff-notification-badge" data-lvn-staff-notification-count @if($staffNotificationCount === 0) hidden @endif>{{ $staffNotificationCount }}</span>
+            </button>
+            <div id="lvn-staff-notification-panel" class="lvn-staff-notification-panel" data-lvn-staff-notification-panel hidden>
+              <div class="lvn-staff-notification-heading">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div class="d-flex align-items-center">
+                    <span class="fw-bold" style="font-size: 14px; color: #212529;">Staff Notifications</span>
+                    <span class="lvn-staff-header-badge" data-lvn-staff-header-count @if($staffNotificationCount === 0) hidden @endif>{{ $staffNotificationCount }}</span>
+                  </div>
+                  <button type="button" class="lvn-staff-read-all-btn" data-lvn-staff-read-all title="Mark all as read">Mark all read</button>
+                </div>
+                <div class="lvn-staff-heading-sub">Leaves &amp; upcoming staff birthdays (3 days)</div>
+              </div>
+              <div data-lvn-staff-notification-list class="lvn-staff-notification-list">
+                <div class="lvn-staff-notification-loading">Loading staff alerts...</div>
               </div>
             </div>
           </div>
@@ -511,6 +780,176 @@
 
           document.addEventListener('click', function (event) {
             if (!root.contains(event.target)) {
+              panel.hidden = true;
+              toggle.setAttribute('aria-expanded', 'false');
+            }
+          });
+        }());
+
+        // Staff & HR Notifications Logic
+        (function () {
+          var root = document.querySelector('[data-lvn-staff-notifications]');
+          if (!root) return;
+
+          var toggle = root.querySelector('[data-lvn-staff-notification-toggle]');
+          var panel = root.querySelector('[data-lvn-staff-notification-panel]');
+          var list = root.querySelector('[data-lvn-staff-notification-list]');
+          var countBadge = root.querySelector('[data-lvn-staff-notification-count]');
+          var headerCount = root.querySelector('[data-lvn-staff-header-count]');
+          var readAllBtn = root.querySelector('[data-lvn-staff-read-all]');
+          var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+          var transportPanel = document.querySelector('[data-lvn-notification-panel]');
+          var transportToggle = document.querySelector('[data-lvn-notification-toggle]');
+
+          function updateCounts(value) {
+            if (countBadge) {
+              countBadge.textContent = value;
+              countBadge.hidden = value < 1;
+            }
+            if (headerCount) {
+              headerCount.textContent = value;
+              headerCount.hidden = value < 1;
+            }
+          }
+
+          function renderStaffNotifications(data) {
+            updateCounts(data.unreadCount);
+            list.replaceChildren();
+
+            if (!data.notifications || !data.notifications.length) {
+              var empty = document.createElement('div');
+              empty.className = 'lvn-staff-empty';
+              empty.innerHTML = '<div style="font-size:24px;margin-bottom:6px;">🎉</div><div>No pending leave requests or upcoming staff birthdays.</div>';
+              list.appendChild(empty);
+              return;
+            }
+
+            data.notifications.forEach(function (n) {
+              var isLeave = n.type === 'STAFF_LEAVE';
+              var item = document.createElement('div');
+              item.className = 'lvn-staff-item ' + (isLeave ? 'leave-item' : 'birthday-item');
+              item.dataset.notificationId = n.id;
+              item.dataset.notificationUrl = n.url || '';
+
+              var iconWrap = document.createElement('div');
+              iconWrap.className = 'lvn-staff-icon-wrap';
+              iconWrap.innerHTML = isLeave ? '<i class="i-Calendar-4"></i>' : '<i class="i-Gift-Box"></i>';
+
+              var main = document.createElement('div');
+              main.className = 'lvn-staff-main';
+
+              var pill = document.createElement('span');
+              pill.className = 'lvn-staff-pill';
+              pill.textContent = isLeave ? 'Leave Request' : 'Staff Birthday';
+
+              var title = document.createElement('span');
+              title.className = 'lvn-staff-title';
+              title.textContent = n.title;
+
+              var msg = document.createElement('span');
+              msg.className = 'lvn-staff-message';
+              msg.textContent = n.message;
+
+              var meta = document.createElement('span');
+              meta.className = 'lvn-staff-meta';
+              meta.textContent = isLeave
+                ? (n.formattedDate ? 'Applied on: ' + n.formattedDate : '')
+                : (n.expiresAt ? 'Birthday Date: ' + n.expiresAt : '');
+
+              main.appendChild(pill);
+              main.appendChild(title);
+              main.appendChild(msg);
+              if (meta.textContent) main.appendChild(meta);
+
+              var dismissBtn = document.createElement('button');
+              dismissBtn.type = 'button';
+              dismissBtn.className = 'lvn-staff-dismiss';
+              dismissBtn.dataset.staffDismiss = 'true';
+              dismissBtn.textContent = 'Dismiss';
+              dismissBtn.title = 'Mark as read and dismiss';
+
+              item.appendChild(iconWrap);
+              item.appendChild(main);
+              item.appendChild(dismissBtn);
+              list.appendChild(item);
+            });
+          }
+
+          function loadStaffNotifications() {
+            fetch(root.dataset.notificationsUrl, {
+              headers: { 'Accept': 'application/json' }
+            })
+              .then(function (res) { return res.json(); })
+              .then(renderStaffNotifications)
+              .catch(function () {
+                list.innerHTML = '<div class="lvn-staff-empty">Unable to load staff alerts.</div>';
+              });
+          }
+
+          toggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var isOpening = panel.hidden;
+            panel.hidden = !isOpening;
+            toggle.setAttribute('aria-expanded', String(isOpening));
+
+            if (isOpening && transportPanel && !transportPanel.hidden) {
+              transportPanel.hidden = true;
+              if (transportToggle) transportToggle.setAttribute('aria-expanded', 'false');
+            }
+
+            if (isOpening) {
+              loadStaffNotifications();
+            }
+          });
+
+          // Only the Dismiss button marks as read in place; no redirection occurs
+          list.addEventListener('click', function (e) {
+            var dismissBtn = e.target.closest('[data-staff-dismiss]');
+            if (!dismissBtn) return;
+
+            var item = dismissBtn.closest('[data-notification-id]');
+            if (!item) return;
+
+            var notifId = item.dataset.notificationId;
+            var dismissUrl = root.dataset.dismissUrlTemplate.replace('__notification__', notifId);
+
+            dismissBtn.disabled = true;
+            fetch(dismissUrl, {
+              method: 'POST',
+              headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' }
+            })
+              .then(function (res) { return res.json(); })
+              .then(function (data) {
+                updateCounts(data.unreadCount);
+                item.remove();
+                if (!list.querySelector('[data-notification-id]')) {
+                  renderStaffNotifications({ unreadCount: 0, notifications: [] });
+                }
+              })
+              .catch(function () {
+                dismissBtn.disabled = false;
+              });
+          });
+
+          if (readAllBtn) {
+            readAllBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              var readAllUrl = root.dataset.readAllUrl;
+              fetch(readAllUrl, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' }
+              })
+                .then(function (res) { return res.json(); })
+                .then(function () {
+                  renderStaffNotifications({ unreadCount: 0, notifications: [] });
+                });
+            });
+          }
+
+          document.addEventListener('click', function (e) {
+            if (!root.contains(e.target)) {
               panel.hidden = true;
               toggle.setAttribute('aria-expanded', 'false');
             }
