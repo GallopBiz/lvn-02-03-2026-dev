@@ -180,7 +180,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                               <div class="dropdown-menu btn btn-danger " aria-labelledby="dropdownMenuButton">
                               <?php $a =$each_inq->scholar_no; ?>
                                 <a class="dropdown-item" href="{{url('perstudueamount').'/'.$a}}">View</a> 
-								<a class="dropdown-item" href="{{ url('admission-receipt/'.$each_inq->scholar_no) }}">Print Receipt</a> 	
+								<a class="dropdown-item" href="{{ url('admission-receipt/'.$each_inq->scholar_no) }}{{ !empty($each_inq->receipt_number) ? '?receipt='.$each_inq->receipt_number : '' }}">Print Receipt</a> 	
                               </div>
                             </div>
                           </td>

@@ -116,9 +116,27 @@
 @endphp
 
 @php
-    $session = $json['batch'] ?? $json['intended_session'] ?? $student->session_name ?? '';
-    $formattedSession = (!empty($session) && str_contains($session, '_')) ? str_replace('_', ' - ', $session) : ($session ?: 'N/A');
-    $createdDate = $feeHeads->first()->created_at ?? $student->created_at ?? now();
+    $batch = $json['batch'] ?? $json['batch_no'] ?? $json['intended_session'] ?? $student->session_name ?? '';
+    $formattedBatch = !empty($batch) ? preg_replace('/-+/', '-', preg_replace('/[\s_\/]+/', '-', trim($batch))) : 'N/A';
+    $firstFee = $feeHeads->first();
+    $rawDate = null;
+    if ($firstFee && !empty($firstFee->payment_date)) {
+        $rawDate = $firstFee->payment_date;
+    } elseif ($firstFee && !empty($firstFee->fees_date)) {
+        $rawDate = $firstFee->fees_date;
+    } elseif ($firstFee && !empty($firstFee->created_at)) {
+        $rawDate = $firstFee->created_at;
+    } elseif (!empty($student->created_at)) {
+        $rawDate = $student->created_at;
+    } else {
+        $rawDate = now();
+    }
+
+    try {
+        $displayDate = \Carbon\Carbon::parse($rawDate)->format('d-m-Y');
+    } catch (\Exception $e) {
+        $displayDate = $rawDate;
+    }
 @endphp
 
 <div class="main-content">
@@ -136,7 +154,10 @@
 
             <div class="meta-line">
                 <div><strong>School Code:</strong> 50396</div>
-                <div><strong>Date:</strong> {{ \Carbon\Carbon::parse($createdDate)->format('d-m-Y') }}</div>
+                @if(!empty($firstFee->receipt_number))
+                    <div><strong>Receipt No.:</strong> {{ $firstFee->receipt_number }}</div>
+                @endif
+                <div><strong>Date:</strong> {{ $displayDate }}</div>
             </div>
             <div class="student-info">
                 <div>
@@ -145,7 +166,7 @@
                     <h5><strong>Father Name:</strong> {{ ucfirst(strtolower($json['fathername_prefix'] ?? 'Mr.')) }} {{ ucwords(strtolower($json['fathername'] ?? 'Test Father')) }}</h5>
                 </div>
                 <div class="invoice-summary">
-                    <h5><strong>Session:</strong>&nbsp;{{ $formattedSession }}</h5>
+                    <h5><strong>Session:</strong>&nbsp;{{ $formattedBatch }}</h5>
                     <h5><strong>Class:</strong>&nbsp;&nbsp;{{ $romanClass }}</h5>
                 </div>
             </div>

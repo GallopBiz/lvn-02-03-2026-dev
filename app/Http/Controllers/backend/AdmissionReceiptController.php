@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class AdmissionReceiptController extends Controller
 {
-    public function show($scholar_no)
+    public function show(Request $request, $scholar_no)
     {
         // Get student data
         $student = DB::table('student_registration')
@@ -21,11 +21,33 @@ class AdmissionReceiptController extends Controller
 
         $json = json_decode($student->json_str, true) ?: [];
 
+        // Check for specific receipt or latest receipt
+        $receiptNo = $request->query('receipt');
+        if (!$receiptNo) {
+            $latestReceipt = DB::table('totalnextyear')
+                ->where('scholar_no', $scholar_no)
+                ->where(function ($q) {
+                    $q->where('is_delete', 0)->orWhereNull('is_delete');
+                })
+                ->orderByDesc('id')
+                ->value('receipt_number');
+            if ($latestReceipt) {
+                $receiptNo = $latestReceipt;
+            }
+        }
+
         // Get fee heads from totalnextyear
-        $feeHeads = DB::table('totalnextyear')
+        $query = DB::table('totalnextyear')
             ->where('scholar_no', $scholar_no)
-            ->select('account_name', 'fees', 'created_at')
-            ->get();
+            ->where(function ($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            });
+
+        if ($receiptNo) {
+            $query->where('receipt_number', $receiptNo);
+        }
+
+        $feeHeads = $query->orderBy('id')->get();
 
         return view('backend.admission-receipt', [
             'student' => $student,

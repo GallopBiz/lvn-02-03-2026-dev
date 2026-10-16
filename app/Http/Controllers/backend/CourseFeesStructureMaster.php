@@ -266,11 +266,15 @@ class CourseFeesStructureMaster extends Controller
                 });
             }
 
+            $paymentDate = !empty($request->payment_date_str)
+                ? $request->payment_date_str
+                : (!empty($request->fees_date_str) ? $request->fees_date_str : date('Y-m-d'));
+
             foreach ($request->data1 as $data) {
                 $insertArr = [
                     'fees_date' => $request->fees_date_str,
                     'due_date' => $request->due_date_str,
-                    'payment_date' => $request->payment_date_str,
+                    'payment_date' => $paymentDate,
                     'totalnextyear' => $request->totalnextyear,
                     'account_name' => $data['account_name_str'],
                     'fees' => $data['fees_str'],

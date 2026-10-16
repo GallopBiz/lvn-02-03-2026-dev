@@ -139,7 +139,6 @@
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Roll No.</th>
                             <th>Scholar No.</th>
                             <th>Student</th>
                             <th>Status</th>
@@ -154,7 +153,6 @@
                             @endphp
                             <tr>
                                 <td>{{ $loop->iteration }}</td>
-                                <td>{{ $student->form_number }}</td>
                                 <td>{{ $student->scholar_no ?: $student->id }}</td>
                                 <td class="student-name">{{ $student->student_name }}</td>
                                 <td>
@@ -168,7 +166,7 @@
                                 <td><input type="text" name="remarks[{{ $student->id }}]" value="{{ old("remarks.$student->id", optional($detail)->remarks) }}" class="form-control" placeholder="Optional"></td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-muted">Choose class and section to load students.</td></tr>
+                            <tr><td colspan="5" class="text-center text-muted">Choose class and section to load students.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
