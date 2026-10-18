@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Academic Session Database Migration & Dependency Report</title>
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --primary-light: #3b82f6;
+            --success: #15803d;
+            --warning: #b45309;
+            --danger: #b91c1c;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 30px 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 40px 50px;
+            border: 1px solid var(--border);
+        }
+
+        .header {
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 25px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .header h1 {
+            margin: 0 0 10px 0;
+            color: var(--primary);
+            font-size: 26px;
+        }
+
+        .header p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .btn-print {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-print:hover {
+            background-color: var(--primary-light);
+        }
+
+        h2 {
+            color: var(--primary);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            margin-top: 35px;
+            font-size: 20px;
+        }
+
+        h3 {
+            color: #334155;
+            margin-top: 25px;
+            font-size: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13.5px;
+        }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 10px 14px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #1e293b;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-copy { background-color: #dcfce7; color: #166534; }
+        .badge-promote { background-color: #fef3c7; color: #92400e; }
+        .badge-fresh { background-color: #fee2e2; color: #991b1b; }
+        .badge-obsolete { background-color: #f1f5f9; color: #64748b; }
+
+        .callout {
+            padding: 16px;
+            border-left: 4px solid var(--primary-light);
+            background-color: #eff6ff;
+            border-radius: 0 6px 6px 0;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        .callout-warning {
+            border-left-color: var(--warning);
+            background-color: #fffbeb;
+            color: #92400e;
+        }
+
+        pre {
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12.5px;
+            line-height: 1.5;
+        }
+
+        code {
+            font-family: Consolas, Monaco, "Courier New", Courier, monospace;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            background: white;
+        }
+
+        .card h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        @media print {
+            body { padding: 0; background: white; }
+            .container { box-shadow: none; border: none; padding: 0; max-width: 100%; }
+            .btn-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>New Academic Session Database Migration Report</h1>
+            <p><strong>System:</strong> LVN Multi-Database School Management System</p>
+            <p><strong>Database Transition:</strong> <code>2025_2026</code> (Source) &rarr; <code>2026_2027</code> (Target)</p>
+            <p><strong>Generated Date:</strong> October 2026 | <strong>Total Tables Analyzed:</strong> 169 Tables</p>
+        </div>
+        <button class="btn-print" onclick="window.print()">Print / Save PDF</button>
+    </div>
+
+    <div class="callout">
+        <strong>Architecture Notice:</strong> The LVN School ERP operates on a <em>Database-per-Session</em> model. When an administrator switches the academic year in the UI, the dynamic connection rebinds to that session's database (e.g. <code>2026_2027</code>). Consequently, creating a new session requires instantiating a complete schema with all 169 tables, but populating them according to strict classification rules.
+    </div>
+
+    <h2>1. Core Dependency Flow (What Must Exist First)</h2>
+    <p>Before standard school operations can proceed in the new session, tables must be set up in the following order:</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 80px;">Order</th>
+                <th style="width: 180px;">Layer</th>
+                <th>Required Tables</th>
+                <th>Operational Impact</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>1</strong></td>
+                <td>System &amp; Auth</td>
+                <td><code>users</code>, <code>roles</code>, <code>permissions</code>, <code>model_has_roles</code>, <code>role_menus</code></td>
+                <td>Enables administrator and staff login; allows navigation into the new session.</td>
+            </tr>
+            <tr>
+                <td><strong>2</strong></td>
+                <td>Academic Structure</td>
+                <td><code>class_name</code>, <code>sections</code>, <code>streams</code>, <code>subjectmaster</code>, <code>caste_name</code></td>
+                <td>Populates class, section, and subject dropdowns across all modules.</td>
+            </tr>
+            <tr>
+                <td><strong>3</strong></td>
+                <td>Staff &amp; HRMS</td>
+                <td><code>hrms_employees</code>, <code>teachers</code>, <code>hrms_departments</code>, <code>hrms_positions</code></td>
+                <td>Enables class-teacher assignment, subject allocation, and staff biometric logging.</td>
+            </tr>
+            <tr>
+                <td><strong>4</strong></td>
+                <td>Fee Configuration</td>
+                <td><code>fees_types_master</code>, <code>course_fees_structure_master</code>, <code>schedulemaster</code></td>
+                <td>Defines fee heads, class-wise fee amounts, and installment deadlines for due charts.</td>
+            </tr>
+            <tr>
+                <td><strong>5</strong></td>
+                <td>Transport Setup</td>
+                <td><code>vehicel</code>, <code>busstop</code>, <code>routemaster</code>, <code>busfees</code>, <code>busstaff</code></td>
+                <td>Enables bus route assignments and transport fee calculation.</td>
+            </tr>
+            <tr>
+                <td><strong>6</strong></td>
+                <td>Student Master</td>
+                <td><code>student_registration</code></td>
+                <td>Core entity: required before generating fee bills, roll numbers, attendance, or marks.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>2. Data Classification Matrix</h2>
+
+    <div class="grid-2">
+        <div class="card">
+            <h4><span class="badge badge-copy">Category A</span> Copy As-Is (Data + Schema)</h4>
+            <p style="font-size: 13px; color: var(--text-muted);">Master settings, lookups, and configuration that remain identical across sessions:</p>
+            <ul style="font-size: 13px; padding-left: 20px;">
+                <li><strong>Auth:</strong> <code>users</code>, <code>roles</code>, <code>permissions</code>, <code>role_menus</code></li>
+                <li><strong>Academic:</strong> <code>classes</code>, <code>class_name</code>, <code>sections</code>, <code>streams</code>, <code>subjectmaster</code>, <code>grades</code></li>
+                <li><strong>Demographics:</strong> <code>caste_name</code>, <code>states</code>, <code>cities</code></li>
+                <li><strong>Transport:</strong> <code>vehicel</code>, <code>busstop</code>, <code>routemaster</code>, <code>busfees</code></li>
+                <li><strong>Staff:</strong> <code>hrms_employees</code>, employee profiles, salaries</li>
+                <li><strong>Fee Setup:</strong> <code>fees_types_master</code>, <code>course_fees_head_master</code></li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h4><span class="badge badge-promote">Category B</span> Promote / Migrate Selectively</h4>
+            <p style="font-size: 13px; color: var(--text-muted);">Data carried forward with updated status or incremented class:</p>
+            <ul style="font-size: 13px; padding-left: 20px;">
+                <li><strong>Students:</strong> Promote via <code>StudentTransferController</code>:
+                    <br>&bull; Increment class (Nursery &rarr; KG1 &rarr; ... &rarr; 12)
+                    <br>&bull; Skip Class 12 (graduated)
+                    <br>&bull; Exclude TC issued (<code>status = 't'</code>)
+                    <br>&bull; Retain repeaters (<code>next_year == 1</code>)
+                </li>
+                <li><strong>Arrears:</strong> Pending balances &rarr; <code>student_fee_balances</code></li>
+                <li><strong>HRMS Loans:</strong> Carry forward active unpaid EMIs only</li>
+                <li><strong>Calendar:</strong> New holiday list in <code>hrms_holidays</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <h4><span class="badge badge-fresh">Category C</span> Fresh / Zero Records (Structure Only)</h4>
+        <p style="font-size: 13px; color: var(--text-muted);">Operational and transaction tables that MUST be empty (0 rows) at session launch:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Module</th>
+                    <th>Tables with 0 Rows in New Session</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Fees &amp; Receipts</strong></td>
+                    <td><code>student_fees_data</code>, <code>feesreceiptchallan</code>, <code>student_fees_receipt_challan</code>, <code>student_fees_receipt_breakdown</code>, <code>feesreceiptchallan_cancel</code>, <code>student_fees_exempted</code>, <code>student_bus_fees</code>, <code>student_online_fee_payments</code>, <code>generate_duechartstatus</code>, <code>defaulters_lists</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Attendance</strong></td>
+                    <td><code>academic_attendance</code>, <code>academic_attendance_details</code>, <code>academic_attendance_collectives</code>, <code>academic_student_daily_attendance</code>, <code>busattandence</code>, <code>hrms_employee_attendance</code>, <code>employee_thumb_attendance</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Exams &amp; Marks</strong></td>
+                    <td><code>marks</code>, <code>academic_students_marks</code>, <code>academic_marksheets</code>, <code>previosly_saved_marks_entry</code>, <code>academic_student_remarks</code>, <code>academic_student_roll_no</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Assignments &amp; New Intake</strong></td>
+                    <td><code>classasigntoteacher</code>, <code>teacher_subjects</code>, <code>subject_assign_student</code>, <code>scholarbusassign</code>, <code>inquiry_registration</code></td>
+                </tr>
+                <tr>
+                    <td><strong>TC &amp; Payroll</strong></td>
+                    <td><code>tc_certificates</code>, <code>tc_certificate_issues</code>, <code>tc_student_session_statuses</code>, <code>hrms_payrolls</code>, <code>fuel_entries</code>, <code>bus_maintenance</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2>3. Step-by-Step Migration SQL Script</h2>
+    <p>Run these commands to initialize the <code>2026_2027</code> database from <code>2025_2026</code>:</p>
+
+    <pre><code>-- Step 1: Create Database
+CREATE DATABASE `2026_2027` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Step 2: Import schema-only DDL into 2026_2027 (via mysqldump --no-data)
+
+-- Step 3: Copy Master Tables As-Is
+INSERT INTO `2026_2027`.`users` SELECT * FROM `2025_2026`.`users`;
+INSERT INTO `2026_2027`.`roles` SELECT * FROM `2025_2026`.`roles`;
+INSERT INTO `2026_2027`.`permissions` SELECT * FROM `2025_2026`.`permissions`;
+INSERT INTO `2026_2027`.`model_has_roles` SELECT * FROM `2025_2026`.`model_has_roles`;
+INSERT INTO `2026_2027`.`role_has_permissions` SELECT * FROM `2025_2026`.`role_has_permissions`;
+INSERT INTO `2026_2027`.`role_menus` SELECT * FROM `2025_2026`.`role_menus`;
+
+INSERT INTO `2026_2027`.`class_name` SELECT * FROM `2025_2026`.`class_name`;
+INSERT INTO `2026_2027`.`classes` SELECT * FROM `2025_2026`.`classes`;
+INSERT INTO `2026_2027`.`sections` SELECT * FROM `2025_2026`.`sections`;
+INSERT INTO `2026_2027`.`streams` SELECT * FROM `2025_2026`.`streams`;
+INSERT INTO `2026_2027`.`subjectmaster` SELECT * FROM `2025_2026`.`subjectmaster`;
+INSERT INTO `2026_2027`.`grademaster` SELECT * FROM `2025_2026`.`grademaster`;
+INSERT INTO `2026_2027`.`grades` SELECT * FROM `2025_2026`.`grades`;
+INSERT INTO `2026_2027`.`caste_name` SELECT * FROM `2025_2026`.`caste_name`;
+INSERT INTO `2026_2027`.`states` SELECT * FROM `2025_2026`.`states`;
+INSERT INTO `2026_2027`.`cities` SELECT * FROM `2025_2026`.`cities`;
+
+INSERT INTO `2026_2027`.`vehicel` SELECT * FROM `2025_2026`.`vehicel`;
+INSERT INTO `2026_2027`.`busstop` SELECT * FROM `2025_2026`.`busstop`;
+INSERT INTO `2026_2027`.`routemaster` SELECT * FROM `2025_2026`.`routemaster`;
+INSERT INTO `2026_2027`.`routeareabusmaster` SELECT * FROM `2025_2026`.`routeareabusmaster`;
+INSERT INTO `2026_2027`.`busfees` SELECT * FROM `2025_2026`.`busfees`;
+
+INSERT INTO `2026_2027`.`hrms_departments` SELECT * FROM `2025_2026`.`hrms_departments`;
+INSERT INTO `2026_2027`.`hrms_positions` SELECT * FROM `2025_2026`.`hrms_positions`;
+INSERT INTO `2026_2027`.`hrms_employees` SELECT * FROM `2025_2026`.`hrms_employees`;
+INSERT INTO `2026_2027`.`teachers` SELECT * FROM `2025_2026`.`teachers`;
+INSERT INTO `2026_2027`.`hrms_employee_salaries` SELECT * FROM `2025_2026`.`hrms_employee_salaries`;
+
+INSERT INTO `2026_2027`.`fees_types_master` SELECT * FROM `2025_2026`.`fees_types_master`;
+INSERT INTO `2026_2027`.`course_fees_head_master` SELECT * FROM `2025_2026`.`course_fees_head_master`;
+INSERT INTO `2026_2027`.`course_fees_structure_master` SELECT * FROM `2025_2026`.`course_fees_structure_master`;
+INSERT INTO `2026_2027`.`schedulemaster` SELECT * FROM `2025_2026`.`schedulemaster`;</code></pre>
+
+    <h2>4. Pre-Launch Verification Checklist</h2>
+    <ul>
+        <li>[ ] <strong>Database Switching:</strong> Log into admin panel, select <code>2026_2027</code> in the session dropdown, and verify no DB connection errors occur.</li>
+        <li>[ ] <strong>Student Promotion:</strong> Run Student Transfer for classes Nursery to 11. Confirm Class 12 students and TC-issued students are excluded.</li>
+        <li>[ ] <strong>Fee Chart Initialization:</strong> Review updated installment dates in <code>schedulemaster</code> and generate student due charts.</li>
+        <li>[ ] <strong>Zero-Transaction Integrity:</strong> Verify that tables like <code>feesreceiptchallan</code> and <code>academic_attendance</code> have 0 rows.</li>
+        <li>[ ] <strong>Teacher Assignment:</strong> Map teachers to new classes using <code>classasigntoteacher</code>.</li>
+    </ul>
+</div>
+
+</body>
+</html>
