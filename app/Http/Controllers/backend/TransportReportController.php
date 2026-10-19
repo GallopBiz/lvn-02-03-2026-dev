@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\backend;
 
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Config;
@@ -329,8 +330,35 @@ class TransportReportController extends Controller
 
         return $registrations->map(function ($registration) use ($driverBusMap, $driverDetails, $feeRecords) {
             $studentData = json_decode($registration->json_str, true) ?: [];
-            if (empty($studentData['required_school_transport'])) {
+
+            // Exclude if bus transport is not requested or explicitly disabled
+            $transport = $studentData['required_school_transport'] ?? null;
+            if (empty($transport) || in_array($transport, ['0', 0, false, 'off', 'false', ''], true)) {
                 return null;
+            }
+
+            // Exclude if bus facility has been stopped
+            $startDate = null;
+            $stopDate = null;
+
+            if (!empty($studentData['bus_facility_start_date'])) {
+                try {
+                    $startDate = Carbon::parse($studentData['bus_facility_start_date'])->startOfDay();
+                } catch (\Throwable $e) {}
+            }
+
+            if (!empty($studentData['bus_facility_end_date'])) {
+                try {
+                    $stopDate = Carbon::parse($studentData['bus_facility_end_date'])->startOfDay();
+                } catch (\Throwable $e) {}
+            }
+
+            if ($stopDate) {
+                // If stop date is on or after start date (or no start date), and stop date is reached (today or past)
+                $isCurrentStop = !$startDate || $stopDate->greaterThanOrEqualTo($startDate);
+                if ($isCurrentStop && ($stopDate->isPast() || $stopDate->isToday())) {
+                    return null;
+                }
             }
 
             $driver = trim((string) ($studentData['driver_name'] ?? ''));
@@ -338,6 +366,11 @@ class TransportReportController extends Controller
             $busAssignments = $driverBusMap[$driver] ?? [];
             $driverMobileNo = $this->uniqueValues(collect($busAssignments)->pluck('driver_mobile_no')->all())
                 ?: $this->driverMobileByName($driver, $driverDetails);
+
+            $displayStopDate = '';
+            if ($stopDate && (!$startDate || $stopDate->greaterThanOrEqualTo($startDate))) {
+                $displayStopDate = $studentData['bus_facility_end_date'] ?? '';
+            }
 
             return [
                 'student_name' => $registration->student_name,
@@ -350,7 +383,7 @@ class TransportReportController extends Controller
                 'vehicle_no' => $this->uniqueValues(collect($busAssignments)->pluck('vehicle_no')->all()),
                 'bus_fee' => $fee,
                 'start_date' => $studentData['bus_facility_start_date'] ?? '',
-                'stop_date' => $studentData['bus_facility_end_date'] ?? '',
+                'stop_date' => $displayStopDate,
             ];
         })->filter()->values();
     }

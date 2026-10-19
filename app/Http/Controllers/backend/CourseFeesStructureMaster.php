@@ -627,10 +627,10 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         ]);
         // echo"if";
             // print_r($dataArray);exit;
-        // Add or update the "required_school_transport" key with the value "1"
+        // Add or update the "required_school_transport" key with the value ""
         $dataArray['required_school_transport'] = "";
         $dataArray['driver_name'] = "Select Staff"; // Replace with the actual driver name
-        $dataArray['bus_facility_end_date'] = $busFacilityEndDate ?: ($dataArray['bus_facility_end_date'] ?? '');
+        $dataArray['bus_facility_end_date'] = $busFacilityEndDate ?: (!empty($dataArray['bus_facility_end_date']) ? $dataArray['bus_facility_end_date'] : date('d-m-Y'));
         // Encode the array back to JSON
         $updatedJsonData = json_encode($dataArray);
         // print_r($updatedJsonData);exit;
@@ -708,6 +708,7 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         $dataArray['required_school_transport'] = "1";
         $dataArray['driver_name'] = "$drivername"; // Replace with the actual driver name
         $dataArray['bus_facility_start_date'] = $busFacilityStartDate ?: $busFacilityDate;
+        $dataArray['bus_facility_end_date'] = '';
 
         // Encode the array back to JSON
         $updatedJsonData = json_encode($dataArray);
@@ -913,12 +914,16 @@ if ($sno >= 0 && $sno <= count($newdata->fees_date)) {
         $studentData['required_school_transport'] = $isEnabled ? '1' : '0';
         $studentData['driver_name'] = $request->input('bus_driver_name', '');
 
-        if ($isEnabled && $request->filled('bus_facility_start_date')) {
-            $studentData['bus_facility_start_date'] = Carbon::parse($request->input('bus_facility_start_date'))->format('d-m-Y');
-        }
-
-        if (!$isEnabled && $request->filled('bus_facility_end_date')) {
-            $studentData['bus_facility_end_date'] = Carbon::parse($request->input('bus_facility_end_date'))->format('d-m-Y');
+        if ($isEnabled) {
+            if ($request->filled('bus_facility_start_date')) {
+                $studentData['bus_facility_start_date'] = Carbon::parse($request->input('bus_facility_start_date'))->format('d-m-Y');
+            }
+            $studentData['bus_facility_end_date'] = '';
+        } else {
+            $endDate = $request->filled('bus_facility_end_date')
+                ? Carbon::parse($request->input('bus_facility_end_date'))->format('d-m-Y')
+                : (!empty($studentData['bus_facility_end_date']) ? $studentData['bus_facility_end_date'] : Carbon::now()->format('d-m-Y'));
+            $studentData['bus_facility_end_date'] = $endDate;
         }
 
         DB::connection('dynamic')->table('student_registration')

@@ -319,7 +319,7 @@
                                                                                                 <input type="date" id="busFacilityStartDate" name="bus_facility_start_date" class="form-control" value="{{ !empty($notificationData1['bus_facility_start_date']) ? \Carbon\Carbon::createFromFormat('d-m-Y', $notificationData1['bus_facility_start_date'])->format('Y-m-d') : '' }}" <?php echo empty($notificationData1['required_school_transport']) ? 'disabled' : ''; ?>>
                                                                                             </div>
                                                                                             <div class="col-md-6">
-                                                                                                <label class="form-label" for="busFacilityEndDate">Bus Facility Stop Date (Optional)</label>
+                                                                                                <label class="form-label" for="busFacilityEndDate" id="busFacilityEndDateLabel">Bus Facility Stop Date <span class="text-danger" id="busFacilityEndDateRequired" style="display: none;">* (Required when stopping)</span></label>
                                                                                                 <input type="date" id="busFacilityEndDate" name="bus_facility_end_date" class="form-control" value="{{ !empty($notificationData1['bus_facility_end_date']) ? \Carbon\Carbon::createFromFormat('d-m-Y', $notificationData1['bus_facility_end_date'])->format('Y-m-d') : '' }}">
                                                                                             </div>
                                                                                         </div>
@@ -543,18 +543,37 @@
         var startDateInput = document.getElementById('busFacilityStartDate');
         var endDateInput = document.getElementById('busFacilityEndDate');
 
+        var endDateRequired = document.getElementById('busFacilityEndDateRequired');
+
         function updateBusFacilityControls() {
             feesAmountContainer.style.display = busFacilityCheckbox.checked ? 'block' : 'none';
             busFeesSelect.disabled = !busFacilityCheckbox.checked;
             startDateInput.disabled = !busFacilityCheckbox.checked;
             endDateInput.disabled = busFacilityCheckbox.checked;
-            if (!busFacilityCheckbox.checked) {
+            if (busFacilityCheckbox.checked) {
+                endDateInput.required = false;
+                if (endDateRequired) endDateRequired.style.display = 'none';
+            } else {
                 busFeesSelect.value = "";
+                endDateInput.required = true;
+                if (endDateRequired) endDateRequired.style.display = 'inline';
             }
         }
 
         updateBusFacilityControls();
         busFacilityCheckbox.addEventListener('change', updateBusFacilityControls);
+
+        var form = document.getElementById('progress-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                if (!busFacilityCheckbox.checked && (!endDateInput.value || endDateInput.value.trim() === '')) {
+                    e.preventDefault();
+                    endDateInput.focus();
+                    alert('Bus Facility Stop Date is required when bus facility is unchecked.');
+                    return false;
+                }
+            });
+        }
     });
 </script>
                                                             <link rel="stylesheet" href="{{url('assets/backend')}}/css/plugins/sweetalert2.min.css" />
