@@ -131,9 +131,9 @@
 
                   </div>
                   <div class="col-md-2 form-group mb-3">
-                    <label for="enquiryno">Enquiry For Next Year</label>
+                    <label for="next_year">Enquiry For Next Year</label>
                     <br>
-                    <input id="next_year" type="checkbox" name="next_year" required value="1" />
+                    <input id="next_year" type="checkbox" name="next_year" value="1" />
                     <span class="enquiryno_msg validation_err"></span>
                   </div>
 

@@ -1056,6 +1056,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
 
     Route::get('admin-preenquiryform', [InquiryEntryController::class,'admin_preenquiryform'])->name('admin-preenquiryform');
+    Route::get('get-next-enquiry-number', [InquiryEntryController::class, 'get_next_enquiry_number'])->name('get-next-enquiry-number');
 
     Route::post('filter-preenquiry',[InquiryEntryController::class, 'filter_preenquiry'])->name('filter-preenquiry');
     Route::post('save_student_preinquiryentry', [InquiryEntryController::class, 'save_student_preinquiryentry']);

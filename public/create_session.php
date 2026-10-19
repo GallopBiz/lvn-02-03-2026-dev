@@ -50,8 +50,6 @@
                         if ($conn->query($copyDataSQL) === TRUE) {
                             // echo "Data copied successfully for table '$tableName'.<br>";
                             if ($tableName === 'inquiry_registration') {
-                                $select_data = "select * from inquiry_registration";
-                                
                                 $servername = "localhost"; // Change this to your database server hostname
                                 $username = "lvnschool_software";        // Change this to your MySQL username
                                 $password = "GallopBiz13#!";            // Change this to your MySQL password
@@ -59,22 +57,11 @@
                                 if ($conn_d->connect_error) {
                                     die("Connection failed: " . $conn_d->connect_error);
                                 }
-                                $res = $conn_d->query($select_data);
-                                if ($res->num_rows > 0) {
-                                    while ($row = $res->fetch_assoc()) {
-                                        $next_year = $row['next_year'];
-                                        $session_name = $row['session_name'];
-                                        if ($next_year == 1){
-                                            $update = "update inquiry_registration set next_year = 0 , session_name = '$str' where session_name = '$session_name' and next_year = '$next_year'";
-                                            $conn_d->query($update);
-                                            // update query
-                                        } else {
-                                            $delete = "DELETE FROM `inquiry_registration` WHERE next_year IS NULL";
-                                            $conn_d->query($delete);
-                                            // delete query 
-                                        }
-                                    }
-                                } 
+                                // Delete records that belonged to the previous session (not marked for next_year)
+                                $conn_d->query("DELETE FROM `inquiry_registration` WHERE next_year != 1 OR next_year IS NULL");
+                                // Convert next_year inquiries to current-year inquiries for the new session
+                                $conn_d->query("UPDATE `inquiry_registration` SET next_year = 0, session_name = '$str' WHERE next_year = 1");
+                                $conn_d->close();
                             } else {
                                 // skip
                             }

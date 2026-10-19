@@ -62,7 +62,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                         <div class="col-md-3 form-group mb-3">
                            <label for="firstName1">Enquiry Session:<b class="validation_err">*</b></label>
                            <input name="_token" type="hidden" value="{{ csrf_token() }}">
-                            <input type="text" readonly id="session" class="form-control" value="" name="session">
+                            <input type="text" readonly id="session" class="form-control" value="{{ session('db_names') ?? ($_COOKIE['selectedYear'] ?? Config::get('database.connections.dynamic.database', '2026_2027')) }}" name="session">
                            
                            <!-- <select id="session" class="form-control" name="session" autocomplete="shipping address-level1">
                               <option value="" disabled selected>Please Select</option>
@@ -77,29 +77,32 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                            <input
                              class="form-control"
                              id="enquiryno"
-                             type="text" disabled
-                             placeholder="Enter your Enquiry no." name="enquiryno" required value="{{$Userid}}"
-                           /><input type="hidden" name="formno2" value="{{$Userid}}">
+                             type="text" readonly style="background-color: #e9ecef; cursor: not-allowed;"
+                             placeholder="Enter your Enquiry no." name="enquiryno" required value="{{$currentEnquiryNo ?? $Userid}}"
+                           /><input type="hidden" name="formno2" value="{{$currentEnquiryNo ?? $Userid}}">
                            <span class="enquiryno_msg validation_err"></span>
                          </div>
                          <div class="col-md-2 form-group mb-3">
-                           <label for="enquiryno">Enquiry For Next Year</label>
+                           <label for="next_year">Enquiry For Next Year</label>
                            <br>
                            <input
                              id="next_year"
                              type="checkbox"
-                             name="next_year" required value="1"
+                             name="next_year"
+                             value="1"
+                             data-current-enquiry="{{ $currentEnquiryNo ?? $Userid }}"
+                             data-next-enquiry="{{ $nextYearEnquiryNo ?? 1 }}"
                            />
                            <span class="enquiryno_msg validation_err"></span>
                          </div>
 
                          <div class="col-md-3 form-group mb-3">
-                           <label for="enquiryno">Form No.</label>
+                           <label for="formno">Form No.</label>
                            <input
                              class="form-control"
                              id="formno"
                              type="text" 
-                             placeholder="Enter your formno no." name="formno" required value="{{$Userid}}"
+                             placeholder="Enter your formno no." name="formno" required value="{{$currentEnquiryNo ?? $Userid}}"
                            /><span class="enquiryno_msg validation_err"></span>
                          </div>
 
@@ -656,6 +659,46 @@ $(".submit_btn").on('click', function (e) {
       const dateValue = $(this).val();
       console.log("Selected Date:", dateValue);
     });
+
+    function syncEnquiryNumber(isChecked) {
+      var currentVal = $('#next_year').data('current-enquiry') || '{{ $currentEnquiryNo ?? $Userid }}';
+      var nextVal = $('#next_year').data('next-enquiry') || '{{ $nextYearEnquiryNo ?? 1 }}';
+      var targetNo = isChecked ? nextVal : currentVal;
+
+      $('#enquiryno').val(targetNo);
+      $('#formno').val(targetNo);
+      $('input[name="formno2"]').val(targetNo);
+
+      // Verify and fetch fresh sequence number from server
+      $.ajax({
+        url: "{{ route('get-next-enquiry-number') }}",
+        type: "GET",
+        data: {
+          next_year: isChecked ? 1 : 0
+        },
+        dataType: 'json',
+        success: function(res) {
+          if (res && res.enquiry_no) {
+            $('#enquiryno').val(res.enquiry_no);
+            $('#formno').val(res.enquiry_no);
+            $('input[name="formno2"]').val(res.enquiry_no);
+            if (isChecked) {
+              $('#next_year').data('next-enquiry', res.enquiry_no);
+            } else {
+              $('#next_year').data('current-enquiry', res.enquiry_no);
+            }
+          }
+        }
+      });
+    }
+
+    $('#next_year').on('change', function() {
+      syncEnquiryNumber($(this).is(':checked'));
+    });
+
+    if ($('#next_year').is(':checked')) {
+      syncEnquiryNumber(true);
+    }
   });
 </script>
 

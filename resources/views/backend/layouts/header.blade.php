@@ -503,7 +503,7 @@
                 $currentYear = date('Y');
                 $nextYear = date('Y') + 1;
                 // $currentSchoolYear = $currentYear . '_' . $nextYear;
-                $currentSchoolYear = session('db_names');
+                $currentSchoolYear = session('db_names') ?? ($_COOKIE['selectedYear'] ?? env('DB_DATABASE', '2026_2027'));
                 // if (!empty($currentSchoolYear)){
                 //   unset($_COOKIE['selectedYear']); 
                 //   setcookie("selectedYear", "", -1, '/');
