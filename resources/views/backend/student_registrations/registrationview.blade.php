@@ -368,6 +368,36 @@
                                                                                 echo $notificationData1['present_school_name'] . ' ';
                                                                             } ?></td>
                                                                     </tr>
+                                                                    <tr>
+                                                                        <th style="width:25%">Scholar SSSM ID</th>
+                                                                        <td><?php if (!empty($notificationData1['SSSMID'])) {
+                                                                                echo $notificationData1['SSSMID'] . ' ';
+                                                                            } ?></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th style="width:25%">Family SSSM ID</th>
+                                                                        <td><?php if (!empty($notificationData1['family_SSSMID'])) {
+                                                                                echo $notificationData1['family_SSSMID'] . ' ';
+                                                                            } ?></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th style="width:25%">Aadhar No.</th>
+                                                                        <td><?php if (!empty($notificationData1['AadharNo'])) {
+                                                                                echo $notificationData1['AadharNo'] . ' ';
+                                                                            } ?></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th style="width:25%">Apaar ID</th>
+                                                                        <td><?php if (!empty($notificationData1['apaar_id'])) {
+                                                                                echo $notificationData1['apaar_id'] . ' ';
+                                                                            } ?></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th style="width:25%">PEN No.</th>
+                                                                        <td><?php if (!empty($notificationData1['pen_no'])) {
+                                                                                echo $notificationData1['pen_no'] . ' ';
+                                                                            } ?></td>
+                                                                    </tr>
 
                                                                 </tbody>
                                                             </table>

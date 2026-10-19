@@ -17,12 +17,12 @@
             <form method="post" action="{{ route('bonafide.generateCertificate') }}" novalidate="novalidate" target="_blank">
                 @csrf
 
-                <!-- Scholar Search Field -->
-                <div class="row">
-                    <div class="form-outline w-auto p-4 progress-form">
-                        <label class="form-label" for="form1">Student Search</label>
-                        <select class="form-control" onchange="select_data(this);" name="scholar_no" id="search_student" data-live-search="true">
-                            <option data-tokens="china">Select The Student</option>
+                <!-- Student Search Field -->
+                <div class="row align-items-center mb-3">
+                    <div class="col-md-6 form-group">
+                        <label class="form-label" for="search_student">Student Search</label>
+                        <select class="form-control" onchange="select_data(this);" name="scholar_no" id="search_student" data-live-search="true" required>
+                            <option value="">Select The Student</option>
                             <?php if(!empty($data_student_name)) {
                                 foreach($data_student_name as $name){
                                     $selected = "";
@@ -37,6 +37,7 @@
                             }
                             ?>
                         </select>
+                        <span class="validation_err">{{ $errors->first('scholar_no') }}</span>
                     </div>
                 </div>
 
@@ -92,8 +93,9 @@
     });
 </script>
 <script type="text/javascript">
-   $.noConflict();
-        jQuery(document).ready(function($){
-  $("#search_student").select2();
-}); </script>
+    $.noConflict();
+    jQuery(document).ready(function($){
+        $("#search_student").select2();
+    });
+</script>
 @endsection

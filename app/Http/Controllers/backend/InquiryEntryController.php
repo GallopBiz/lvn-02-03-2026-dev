@@ -1569,6 +1569,8 @@ public function perstudueamount($id){
             "family_SSSMID"   => $postData_html['family_SSSMID'],
 
             "AadharNo"   => $postData_html['AadharNo'],
+            "apaar_id"   => (!empty($postData_html['apaar_id'])) ? $postData_html['apaar_id'] : "",
+            "pen_no"     => (!empty($postData_html['pen_no'])) ? $postData_html['pen_no'] : "",
             "student_medical_conserns"   => $postData_html['student_medical_conserns'],
             "present_school_name"   => $postData_html['present_school_name'],
             "is_sibling_applied_for_admission"   => (!empty($postData_html['is_sibling_applied_for_admission'])) ? $postData_html['is_sibling_applied_for_admission'] : "",

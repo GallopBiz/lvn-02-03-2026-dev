@@ -302,7 +302,8 @@ Route::group(['middleware' => ['auth', 'admin']], function() {
 	Route::post('/generate-tuition-certificate', [TuitionCertificateController::class, 'generate'])
     ->name('generate.tuition.certificate');
 	Route::get('bonafide-certificate', [BonafideCertificateController::class, 'showForm'])->name('bonafide.showForm');
-	Route::post('generate-bonafide', [BonafideCertificateController::class, 'generateCertificate'])->name('bonafide.generateCertificate');
+	Route::match(['get', 'post'], 'generate-bonafide', [BonafideCertificateController::class, 'generateCertificate'])->name('bonafide.generateCertificate');
+	Route::get('bonafide-students', [BonafideCertificateController::class, 'getStudentsBySession'])->name('bonafide.students');
 
 
     Route::resource('inquiry-data', InquiryController::class);

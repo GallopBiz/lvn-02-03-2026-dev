@@ -427,7 +427,19 @@
                                                                                                                                        echo $notificationData1['AadharNo'];
                                                                                                                                     } ?>" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
                                     </div>
-                                    <div class="col-md-6 form-group mb`-3">
+                                    <div class="col-md-4 form-group mb-3">
+                                        <label for="apaar_id">Apaar ID</label>
+                                        <input class="form-control" id="apaar_id" type="text" placeholder="Enter Apaar ID" name="apaar_id" value="<?php if (!empty($notificationData1['apaar_id'])) {
+                                                                                                                                       echo $notificationData1['apaar_id'];
+                                                                                                                                    } ?>" maxlength="20" />
+                                    </div>
+                                    <div class="col-md-4 form-group mb-3">
+                                        <label for="pen_no">PEN No.</label>
+                                        <input class="form-control" id="pen_no" type="text" placeholder="Enter PEN No." name="pen_no" value="<?php if (!empty($notificationData1['pen_no'])) {
+                                                                                                                                       echo $notificationData1['pen_no'];
+                                                                                                                                    } ?>" maxlength="20" />
+                                    </div>
+                                    <div class="col-md-4 form-group mb-3">
                                         <label for="remark">Medical Conserns (any)</label>
                                         <input name='student_medical_conserns' class="form-control uperletter" value="<?php if (!empty($notificationData1['student_medical_conserns'])) {
                                                                                                                                        echo $notificationData1['student_medical_conserns'];

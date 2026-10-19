@@ -95,30 +95,46 @@
 <body>
 
 @php
-    function romanClass($class) {
-        $map = [
-            'Nursery' => 'Nursery',
-            'KGI' => 'K.G. I',
-            'KGII' => 'K.G. II',
-            'KG II' => 'K.G. II',
-            '1' => 'I', '2' => 'II', '3' => 'III', '4' => 'IV',
-            '5' => 'V', '6' => 'VI', '7' => 'VII', '8' => 'VIII',
-            '9' => 'IX', '10' => 'X', '11' => 'XI', '12' => 'XII'
-        ];
-        return $map[trim(strtoupper($class))] ?? $class;
+    if (!function_exists('romanClass')) {
+        function romanClass($class) {
+            $map = [
+                'NURSERY' => 'Nursery',
+                'KGI' => 'K.G. I',
+                'KG1' => 'K.G. I',
+                'KG 1' => 'K.G. I',
+                'KG-1' => 'K.G. I',
+                'KG-I' => 'K.G. I',
+                'KGII' => 'K.G. II',
+                'KG II' => 'K.G. II',
+                'KG2' => 'K.G. II',
+                'KG 2' => 'K.G. II',
+                'KG-2' => 'K.G. II',
+                'KG-II' => 'K.G. II',
+                '1' => 'I', '2' => 'II', '3' => 'III', '4' => 'IV',
+                '5' => 'V', '6' => 'VI', '7' => 'VII', '8' => 'VIII',
+                '9' => 'IX', '10' => 'X', '11' => 'XI', '12' => 'XII',
+                '01' => 'I', '02' => 'II', '03' => 'III', '04' => 'IV',
+                '05' => 'V', '06' => 'VI', '07' => 'VII', '08' => 'VIII',
+                '09' => 'IX'
+            ];
+            $clean = trim(strtoupper($class));
+            return $map[$clean] ?? $map[ltrim($clean, '0')] ?? $class;
+        }
     }
 
-    function formattedDateWithSuffix($date) {
-        $day = \Carbon\Carbon::parse($date)->format('j');
-        $suffix = 'th';
-        if (!in_array($day % 100, [11, 12, 13])) {
-            switch ($day % 10) {
-                case 1: $suffix = 'st'; break;
-                case 2: $suffix = 'nd'; break;
-                case 3: $suffix = 'rd'; break;
+    if (!function_exists('formattedDateWithSuffix')) {
+        function formattedDateWithSuffix($date) {
+            $day = \Carbon\Carbon::parse($date)->format('j');
+            $suffix = 'th';
+            if (!in_array($day % 100, [11, 12, 13])) {
+                switch ($day % 10) {
+                    case 1: $suffix = 'st'; break;
+                    case 2: $suffix = 'nd'; break;
+                    case 3: $suffix = 'rd'; break;
+                }
             }
+            return $day . $suffix . \Carbon\Carbon::parse($date)->format(' F, Y');
         }
-        return $day . $suffix . \Carbon\Carbon::parse($date)->format(' F, Y');
     }
 @endphp
 
@@ -140,11 +156,11 @@
     <br><br>
     <div class="title">
         Bonafide Certificate<br>
-        (Session 2025–26)
+        (Session {{ $merged_data['session_short'] ?? $merged_data['session'] }})
     </div>
 
     <div class="content">
-        This is to certify that <strong>{{ ucwords($merged_data['student_name']) }}</strong> {{ $merged_data['relation'] }} <strong>{{ ucwords($merged_data['father_name']) }}</strong>, is a regular student of our school studying in <strong>Class {{ romanClass($merged_data['class']) }}</strong> session <strong>2025–2026</strong>. According to school record, {{ Str::lower($merged_data['his_her']) }} scholar no. is <strong>{{ $merged_data['scholar_no'] }}</strong> and date of birth is <strong>{{ \Carbon\Carbon::parse($merged_data['dob'])->format('d-m-Y') }}</strong>. {{ Str::ucfirst($merged_data['his_her']) }} address is <strong>{{ $merged_data['local_address'] }}</strong>. This certificate is provided on the demand of parents.
+        This is to certify that <strong>{{ ucwords($merged_data['student_name']) }}</strong> {{ $merged_data['relation'] }} <strong>{{ ucwords($merged_data['father_name']) }}</strong>, is a regular student of our school studying in <strong>Class {{ romanClass($merged_data['class']) }}</strong> session <strong>{{ $merged_data['session_full'] ?? $merged_data['session'] }}</strong>. According to school record, {{ Str::lower($merged_data['his_her']) }} scholar no. is <strong>{{ $merged_data['scholar_no'] }}</strong> and date of birth is <strong>{{ \Carbon\Carbon::parse($merged_data['dob'])->format('d-m-Y') }}</strong>. {{ Str::ucfirst($merged_data['his_her']) }} address is <strong>{{ $merged_data['local_address'] }}</strong>. This certificate is provided on the demand of parents.
 
         {!! ucfirst($remarks) !!}
     </div>

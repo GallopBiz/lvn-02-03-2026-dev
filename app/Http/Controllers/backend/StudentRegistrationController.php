@@ -355,6 +355,8 @@ public function downloadcertificate($id)
             "family_SSSMID"   =>  (!empty($postData_html['family_SSSMID'])) ? $postData_html['family_SSSMID'] : "" ,
             "is_staff_applied_for_admission"=>(!empty($postData_html['is_staff_applied_for_admission'])) ? $postData_html['is_staff_applied_for_admission'] : "",
             "AadharNo"   => (!empty($postData_html['AadharNo'])) ? $postData_html['AadharNo'] : "" ,
+            "apaar_id"   => (!empty($postData_html['apaar_id'])) ? $postData_html['apaar_id'] : "" ,
+            "pen_no"     => (!empty($postData_html['pen_no'])) ? $postData_html['pen_no'] : "" ,
             "student_medical_conserns"   =>  (!empty($postData_html['student_medical_conserns'])) ? $postData_html['student_medical_conserns'] : "" ,
             "present_school_name"   => (!empty($postData_html['present_school_name'])) ? $postData_html['present_school_name'] : "" ,
             "searchfather"   => (!empty($postData_html['searchfather'])) ? $postData_html['searchfather'] : "" ,
