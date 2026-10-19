@@ -8,7 +8,7 @@
 
     <div class="row mb-4">
         <div class="col-md-4"><div class="card"><div class="card-body"><h6 class="text-muted">Assigned Students</h6><h3>{{ $studentsTotal }}</h3></div></div></div>
-        <div class="col-md-4"><div class="card"><div class="card-body"><h6 class="text-muted">Drivers / Bus Groups</h6><h3>{{ $summaryTotal }}</h3></div></div></div>
+        <div class="col-md-4"><div class="card"><div class="card-body"><h6 class="text-muted">Drivers / Bus</h6><h3 title="{{ $driversTotal }} Drivers / {{ $busesTotal }} Buses">{{ $driversTotal }} / {{ $busesTotal }}</h3></div></div></div>
         <div class="col-md-4"><div class="card"><div class="card-body"><h6 class="text-muted">Bus Fees Total</h6><h3>{{ number_format($busFeesTotal, 2) }}</h3></div></div></div>
     </div>
 
@@ -65,7 +65,7 @@
                         <select name="student_driver" class="form-control form-control-sm mb-2 ml-2" aria-controls="student_fee_master_table" style="max-width: 180px;">
                             <option value="">Driver Name</option>
                             @foreach($studentDrivers as $studentDriverName)
-                                <option value="{{ $studentDriverName }}" @selected($studentDriver === $studentDriverName)>{{ $studentDriverName }}</option>
+                                <option value="{{ $studentDriverName }}" @selected(strcasecmp(trim((string)$studentDriver), trim((string)$studentDriverName)) === 0)>{{ $studentDriverName }}</option>
                             @endforeach
                         </select>
                         <select name="student_bus_amount" class="form-control form-control-sm mb-2 ml-2" aria-controls="student_fee_master_table" style="max-width: 150px;">

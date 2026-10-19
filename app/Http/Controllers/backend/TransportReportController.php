@@ -14,7 +14,8 @@ class TransportReportController extends Controller
 {
     public function __construct(Request $request)
     {
-        $database = $request->cookie('selectedYear')
+        $database = ($_COOKIE['selectedYear'] ?? null)
+            ?: $request->cookie('selectedYear')
             ?: $request->input('session')
             ?: $request->input('session_name')
             ?: config('database.connections.dynamic.database');
@@ -42,7 +43,8 @@ class TransportReportController extends Controller
         $bus = trim((string) $request->input('bus'));
 
         if ($driver !== '') {
-            $students = $students->where('driver_name', $driver)->values();
+            $targetDriverNorm = $this->normalizeDriverName($driver);
+            $students = $students->filter(fn ($s) => $this->normalizeDriverName($s['driver_name']) === $targetDriverNorm)->values();
         }
         if ($bus !== '') {
             $students = $this->filterByVehicleNo($students, $bus);
@@ -72,7 +74,43 @@ class TransportReportController extends Controller
             ]
         );
 
-        $studentDrivers = $students->pluck('driver_name')->filter()->unique()->sort()->values();
+        $driversTotal = $students->pluck('driver_name')
+            ->filter(fn ($d) => !empty($d) && !in_array(strtolower(trim($d)), ['unassigned driver', 'unassigned', 'lvn default']))
+            ->map(fn ($d) => $this->normalizeDriverName($d))
+            ->unique()
+            ->count();
+
+        $busesTotal = $students->pluck('bus_no')
+            ->flatMap(fn ($busNumbers) => explode(',', $busNumbers))
+            ->map(fn ($busNumber) => trim($busNumber))
+            ->filter(fn ($b) => !empty($b) && !in_array(strtolower($b), ['unassigned bus', 'unassigned']))
+            ->unique()
+            ->count();
+
+        $studentDrivers = $this->hrmsDriverList($connection);
+
+        if ($studentDrivers->isEmpty()) {
+            $studentDrivers = $students->pluck('driver_name')
+                ->filter(fn ($name) => trim((string) $name) !== '' && !in_array(strtolower(trim($name)), ['unassigned driver', 'unassigned', 'lvn default']))
+                ->groupBy(fn ($name) => $this->normalizeDriverName($name))
+                ->map(fn ($group) => $group->sortByDesc(fn ($name) => (preg_match('/[a-z]/', $name) ? 10 : 0) + strlen($name))->first())
+                ->sort(fn ($a, $b) => strcasecmp($a, $b))
+                ->values();
+        }
+
+        if ($studentDriver !== '') {
+            $normInput = $this->normalizeDriverName($studentDriver);
+            foreach ($studentDrivers as $canonDriver) {
+                $canonNorm = $this->normalizeDriverName($canonDriver);
+                if ($canonNorm === $normInput || (max(strlen($canonNorm), strlen($normInput)) > 5 && levenshtein($canonNorm, $normInput) <= 2)) {
+                    $studentDriver = $canonDriver;
+                    break;
+                }
+            }
+        }
+
+        $drivers = $studentDrivers;
+
         $studentBusNos = $students->pluck('bus_no')
             ->flatMap(fn ($busNumbers) => explode(',', $busNumbers))
             ->map(fn ($busNumber) => trim($busNumber))
@@ -100,7 +138,7 @@ class TransportReportController extends Controller
             ]
         );
 
-        return view('backend.Transport.report', compact('students', 'studentsTotal', 'busFeesTotal', 'summary', 'summaryTotal', 'summarySearch', 'studentsSearch', 'studentDriver', 'studentBusNo', 'studentBusAmount', 'studentDrivers', 'studentBusNos', 'studentBusAmounts', 'drivers', 'buses', 'driver', 'bus'));
+        return view('backend.Transport.report', compact('students', 'studentsTotal', 'busFeesTotal', 'driversTotal', 'busesTotal', 'summary', 'summaryTotal', 'summarySearch', 'studentsSearch', 'studentDriver', 'studentBusNo', 'studentBusAmount', 'studentDrivers', 'studentBusNos', 'studentBusAmounts', 'drivers', 'buses', 'driver', 'bus'));
     }
 
     public function exportSummaryCsv(Request $request)
@@ -113,7 +151,8 @@ class TransportReportController extends Controller
         $summarySearch = trim((string) $request->input('summary_search'));
 
         if ($driver !== '') {
-            $students = $students->where('driver_name', $driver)->values();
+            $targetDriverNorm = $this->normalizeDriverName($driver);
+            $students = $students->filter(fn ($s) => $this->normalizeDriverName($s['driver_name']) === $targetDriverNorm)->values();
         }
         if ($bus !== '') {
             $students = $this->filterByVehicleNo($students, $bus);
@@ -154,7 +193,8 @@ class TransportReportController extends Controller
         $studentBusAmount = trim((string) $request->input('student_bus_amount'));
 
         if ($driver !== '') {
-            $students = $students->where('driver_name', $driver)->values();
+            $targetDriverNorm = $this->normalizeDriverName($driver);
+            $students = $students->filter(fn ($s) => $this->normalizeDriverName($s['driver_name']) === $targetDriverNorm)->values();
         }
         if ($bus !== '') {
             $students = $this->filterByVehicleNo($students, $bus);
@@ -188,10 +228,65 @@ class TransportReportController extends Controller
 
     private function reportStudents($connection)
     {
-        $driverBusMap = $this->driverBusMap($connection);
+        $vehicleDetails = $this->vehicleDetailsByNumber($connection);
+        $driverBusMap = $this->driverBusMap($connection, $vehicleDetails);
         $driverDetails = $this->driverDetailsByName($connection);
 
-        return $this->transportStudents($connection, $driverBusMap, $driverDetails);
+        return $this->transportStudents($connection, $driverBusMap, $driverDetails, $vehicleDetails);
+    }
+
+    private function hrmsDriverList($connection)
+    {
+        if (!Schema::connection('dynamic')->hasTable('hrms_employees')) {
+            return collect();
+        }
+
+        $schedules = Schema::connection('dynamic')->hasTable('schedulemasterall')
+            ? $connection->table('schedulemasterall')->get(['schedule_check_one'])
+            : collect();
+
+        $scheduleDrivers = [];
+        foreach ($schedules as $s) {
+            $data = json_decode($s->schedule_check_one, true);
+            if (is_array($data)) {
+                foreach ($data as $row) {
+                    $d = trim((string)($row['driver_name'] ?? ''));
+                    if ($d && $d !== '-- select driver --') {
+                        $scheduleDrivers[] = $this->normalizeDriverName($d);
+                    }
+                }
+            }
+        }
+        $scheduleDrivers = array_unique(array_filter($scheduleDrivers));
+
+        $hasVehicel = Schema::connection('dynamic')->hasTable('vehicel') && Schema::connection('dynamic')->hasColumn('vehicel', 'driver_id');
+
+        $query = $connection->table('hrms_employees')
+            ->leftJoin('hrms_positions', 'hrms_positions.id', '=', 'hrms_employees.position_id')
+            ->where(function ($q) use ($hasVehicel, $scheduleDrivers) {
+                $q->whereRaw("LOWER(COALESCE(hrms_positions.position_name, '')) LIKE '%driver%'");
+                if ($hasVehicel) {
+                    $q->orWhereIn('hrms_employees.id', function ($sub) {
+                        $sub->select('driver_id')->from('vehicel')->whereNotNull('driver_id');
+                    });
+                }
+                foreach ($scheduleDrivers as $sd) {
+                    if ($sd !== '') {
+                        $q->orWhereRaw("LOWER(CONCAT(COALESCE(hrms_employees.first_name, ''), ' ', COALESCE(hrms_employees.last_name, ''))) LIKE ?", ["%{$sd}%"]);
+                    }
+                }
+            })
+            ->selectRaw("hrms_employees.id, TRIM(CONCAT(COALESCE(hrms_employees.first_name, ''), ' ', COALESCE(hrms_employees.last_name, ''))) as full_name")
+            ->get();
+
+        return $query->map(function ($emp) {
+            $name = trim((string)$emp->full_name);
+            return ucwords(strtolower($name));
+        })
+        ->filter(fn ($name) => $name !== '')
+        ->unique()
+        ->sort(fn ($a, $b) => strcasecmp($a, $b))
+        ->values();
     }
 
     private function filterByVehicleNo($students, string $vehicleNo)
@@ -206,10 +301,25 @@ class TransportReportController extends Controller
     private function summaryRows($students, string $summarySearch)
     {
         $summary = $students->groupBy(function ($student) {
-            return ($student['driver_name'] ?: 'Unassigned driver') . '|' . ($student['bus_no'] ?: 'Unassigned bus');
+            $normDriver = $this->normalizeDriverName($student['driver_name'] ?: 'Unassigned driver');
+            return $normDriver . '|' . ($student['bus_no'] ?: 'Unassigned bus');
         })->map(function ($group) {
+            $canonicalDriver = $group->pluck('driver_name')
+                ->filter()
+                ->sortByDesc(function ($name) {
+                    $score = 0;
+                    if (preg_match('/[a-z]/', $name) && preg_match('/[A-Z]/', $name)) {
+                        $score += 10;
+                    }
+                    if (preg_match('/\b(Mr|Mrs|Ms)\b/i', $name)) {
+                        $score += 5;
+                    }
+                    return $score;
+                })
+                ->first() ?: 'Unassigned driver';
+
             return [
-                'driver_name' => $group->first()['driver_name'] ?: 'Unassigned driver',
+                'driver_name' => $canonicalDriver,
                 'bus_no' => $group->first()['bus_no'] ?: 'Unassigned bus',
                 'driver_mobile_no' => $this->uniqueValues($group->pluck('driver_mobile_no')->all()),
                 'student_count' => $group->count(),
@@ -237,7 +347,15 @@ class TransportReportController extends Controller
     private function studentRows($students, string $studentsSearch, string $studentDriver = '', string $studentBusNo = '', string $studentBusAmount = '')
     {
         if ($studentDriver !== '') {
-            $students = $students->where('driver_name', $studentDriver)->values();
+            $targetNorm = $this->normalizeDriverName($studentDriver);
+            $students = $students->filter(function ($student) use ($targetNorm) {
+                $studentNorm = $this->normalizeDriverName($student['driver_name']);
+                if ($studentNorm === $targetNorm) {
+                    return true;
+                }
+                $len = max(strlen($studentNorm), strlen($targetNorm));
+                return $len > 5 && levenshtein($studentNorm, $targetNorm) <= 2;
+            })->values();
         }
 
         if ($studentBusNo !== '') {
@@ -276,44 +394,211 @@ class TransportReportController extends Controller
         })->values();
     }
 
-    private function driverBusMap($connection)
+    private function driverBusMap($connection, array $vehicleDetails = [])
     {
         $map = [];
-        $vehicleDetails = $this->vehicleDetailsByNumber($connection);
-        $schedules = $connection->table('schedulemasterall')->select('schedule_name', 'schedule_check_one')->get();
+        $driverList = [];
 
-        foreach ($schedules as $schedule) {
-            $assignments = json_decode($schedule->schedule_check_one, true);
-            if (!is_array($assignments)) {
-                continue;
-            }
+        // 1. Direct assignments from `vehicel` table (callno = Bus No, driver_id = Driver)
+        if (Schema::connection('dynamic')->hasTable('vehicel')) {
+            $hasDriverId = Schema::connection('dynamic')->hasColumn('vehicel', 'driver_id');
+            $hasHrms = Schema::connection('dynamic')->hasTable('hrms_employees');
+            $hasBusStaff = Schema::connection('dynamic')->hasTable('busstaff');
 
-            foreach ($assignments as $assignment) {
-                $driver = trim((string) ($assignment['driver_name'] ?? ''));
-                $vehicleNumber = trim((string) ($assignment['vehicelno'] ?? $assignment['vehicle_no'] ?? $assignment['callno'] ?? ''));
-                $vehicle = $vehicleDetails[$this->normalizeKey($vehicleNumber)] ?? null;
-                $driver = $driver ?: ($vehicle['driver_name'] ?? '');
-                $bus = $vehicle['bus_no'] ?? trim((string) ($assignment['callno'] ?? $vehicleNumber));
-                if ($driver === '' || $bus === '') {
+            $hrmsEmployees = ($hasDriverId && $hasHrms)
+                ? $connection->table('hrms_employees')->get()->keyBy('id')
+                : collect();
+
+            $busStaffMembers = ($hasDriverId && $hasBusStaff)
+                ? $connection->table('busstaff')->get()->keyBy('id')
+                : collect();
+
+            $vehicles = $connection->table('vehicel')
+                ->where(function ($query) {
+                    $query->where('vehicel.is_delete', 0)->orWhereNull('vehicel.is_delete');
+                })
+                ->whereNotNull('callno')
+                ->where('callno', '!=', '')
+                ->get();
+
+            foreach ($vehicles as $vehicle) {
+                $busNo = trim((string) $vehicle->callno);
+                $vehNo = trim((string) $vehicle->vehicelno);
+                if ($busNo === '') {
                     continue;
                 }
-                $map[$driver][] = [
-                    'bus_no' => $bus,
-                    'vehicle_no' => $vehicle['vehicle_no'] ?? $vehicleNumber,
-                    'driver_mobile_no' => $vehicle['driver_mobile_no'] ?? '',
-                ];
+
+                $driverNames = [];
+                $mobileNo = '';
+
+                if ($hasDriverId && !empty($vehicle->driver_id)) {
+                    if (isset($hrmsEmployees[$vehicle->driver_id])) {
+                        $emp = $hrmsEmployees[$vehicle->driver_id];
+                        $name = trim(($emp->first_name ?? '').' '.($emp->last_name ?? ''));
+                        if ($name !== '') {
+                            $driverNames[] = $name;
+                            $mobileNo = trim((string) ($emp->contact_number ?? ''));
+                        }
+                    }
+                    if (isset($busStaffMembers[$vehicle->driver_id])) {
+                        $bs = $busStaffMembers[$vehicle->driver_id];
+                        $name = trim((string) ($bs->ename ?? ''));
+                        if ($name !== '') {
+                            $driverNames[] = $name;
+                            $mobileNo = $mobileNo ?: trim((string) ($bs->mobile_number ?? ''));
+                        }
+                    }
+                }
+
+                foreach ($driverNames as $driverName) {
+                    $this->addDriverBusEntry($map, $driverList, $driverName, $busNo, $vehNo ?: $busNo, $mobileNo);
+                }
             }
         }
 
-        return collect($map)->map(function ($buses) {
-            return collect($buses)
-                ->unique(fn ($bus) => $this->normalizeKey($bus['bus_no'].'|'.$bus['vehicle_no']))
-                ->values()
-                ->all();
-        })->all();
+        // 2. Direct assignments from `busstaff` table where call_no (Bus No) is set
+        if (Schema::connection('dynamic')->hasTable('busstaff')) {
+            $hasCallNo = Schema::connection('dynamic')->hasColumn('busstaff', 'call_no');
+            if ($hasCallNo) {
+                $staffWithBus = $connection->table('busstaff')
+                    ->where(function ($query) {
+                        $query->where('is_delete', 0)->orWhereNull('is_delete');
+                    })
+                    ->whereNotNull('call_no')
+                    ->where('call_no', '!=', '')
+                    ->where('call_no', '!=', 'option 1')
+                    ->get();
+
+                foreach ($staffWithBus as $staff) {
+                    $driverName = trim((string) ($staff->ename ?? ''));
+                    $busNo = trim((string) ($staff->call_no ?? ''));
+                    $mobileNo = trim((string) ($staff->mobile_number ?? ''));
+                    if ($driverName !== '' && $busNo !== '') {
+                        $this->addDriverBusEntry($map, $driverList, $driverName, $busNo, $busNo, $mobileNo);
+                    }
+                }
+            }
+        }
+
+        // 3. Route assignments from `schedulemasterall`
+        if (Schema::connection('dynamic')->hasTable('schedulemasterall')) {
+            $schedules = $connection->table('schedulemasterall')
+                ->select('schedule_name', 'schedule_check_one')
+                ->whereNotNull('schedule_check_one')
+                ->get();
+
+            foreach ($schedules as $schedule) {
+                $assignments = json_decode($schedule->schedule_check_one, true);
+                if (!is_array($assignments)) {
+                    continue;
+                }
+
+                foreach ($assignments as $assignment) {
+                    $driver = trim((string) ($assignment['driver_name'] ?? ''));
+                    $vehicleNumber = trim((string) ($assignment['vehicelno'] ?? $assignment['vehicle_no'] ?? $assignment['callno'] ?? ''));
+                    $vehicle = $vehicleDetails[$this->normalizeKey($vehicleNumber)] ?? null;
+                    $driver = $driver ?: ($vehicle['driver_name'] ?? '');
+                    $bus = $vehicle['bus_no'] ?? trim((string) ($assignment['callno'] ?? $vehicleNumber));
+
+                    if ($driver === '' || $bus === '' || $driver === '-- select driver --') {
+                        continue;
+                    }
+
+                    $this->addDriverBusEntry(
+                        $map,
+                        $driverList,
+                        $driver,
+                        $bus,
+                        $vehicle['vehicle_no'] ?? $vehicleNumber,
+                        $vehicle['driver_mobile_no'] ?? ''
+                    );
+                }
+            }
+        }
+
+        $map['__drivers'] = collect($driverList)->unique('norm')->values()->all();
+
+        return $map;
     }
 
-    private function transportStudents($connection, array $driverBusMap, array $driverDetails)
+    private function addDriverBusEntry(array &$map, array &$driverList, string $driverName, string $busNo, string $vehicleNo, string $driverMobileNo = '')
+    {
+        $item = [
+            'bus_no' => $busNo,
+            'vehicle_no' => $vehicleNo,
+            'driver_mobile_no' => $driverMobileNo,
+        ];
+
+        $norm = $this->normalizeDriverName($driverName);
+        $key = $this->normalizeKey($driverName);
+
+        foreach (array_unique([$driverName, $norm, $key]) as $k) {
+            if ($k !== '') {
+                $map[$k][] = $item;
+            }
+        }
+
+        $driverList[] = [
+            'name' => $driverName,
+            'norm' => $norm,
+        ];
+    }
+
+    private function busAssignmentsForDriver(string $driverName, array $driverBusMap): array
+    {
+        if ($driverName === '') {
+            return [];
+        }
+
+        // 1. Direct exact key match
+        if (!empty($driverBusMap[$driverName])) {
+            return $this->deduplicateBusEntries($driverBusMap[$driverName]);
+        }
+
+        // 2. Normalized driver name (ignoring titles like Mr. and extra spaces)
+        $norm = $this->normalizeDriverName($driverName);
+        if (!empty($driverBusMap[$norm])) {
+            return $this->deduplicateBusEntries($driverBusMap[$norm]);
+        }
+
+        // 3. Lowercase / trimmed key
+        $key = $this->normalizeKey($driverName);
+        if (!empty($driverBusMap[$key])) {
+            return $this->deduplicateBusEntries($driverBusMap[$key]);
+        }
+
+        // 4. Fuzzy match against known drivers
+        $drivers = $driverBusMap['__drivers'] ?? [];
+        $bestDistance = null;
+        $bestKey = null;
+        $maxDistance = max(2, (int) floor(strlen($norm) * 0.25));
+
+        foreach ($drivers as $d) {
+            $dist = levenshtein($norm, $d['norm']);
+            if ($dist <= $maxDistance) {
+                if ($bestDistance === null || $dist < $bestDistance) {
+                    $bestDistance = $dist;
+                    $bestKey = $d['norm'];
+                }
+            }
+        }
+
+        if ($bestKey && !empty($driverBusMap[$bestKey])) {
+            return $this->deduplicateBusEntries($driverBusMap[$bestKey]);
+        }
+
+        return [];
+    }
+
+    private function deduplicateBusEntries(array $buses): array
+    {
+        return collect($buses)
+            ->unique(fn ($bus) => $this->normalizeKey($bus['bus_no'].'|'.$bus['vehicle_no']))
+            ->values()
+            ->all();
+    }
+
+    private function transportStudents($connection, array $driverBusMap, array $driverDetails, array $vehicleDetails = [])
     {
         $registrations = $connection->table('student_registration')
             ->select('id', 'student_name', 'class_name', 'scholar_no', 'json_str')
@@ -328,7 +613,21 @@ class TransportReportController extends Controller
             ->get()
             ->keyBy('student_id');
 
-        return $registrations->map(function ($registration) use ($driverBusMap, $driverDetails, $feeRecords) {
+        $scholarBusMap = [];
+        if (Schema::connection('dynamic')->hasTable('scholarbusassign')) {
+            $scholarBusMap = $connection->table('scholarbusassign')
+                ->where(function ($query) {
+                    $query->where('is_delete', 0)->orWhereNull('is_delete');
+                })
+                ->whereNotNull('pickup_bus_no')
+                ->where('pickup_bus_no', '!=', '')
+                ->whereIn('student_id_select_p', $registrations->pluck('id'))
+                ->pluck('pickup_bus_no', 'student_id_select_p')
+                ->map(fn ($val) => trim((string) $val))
+                ->all();
+        }
+
+        return $registrations->map(function ($registration) use ($driverBusMap, $driverDetails, $feeRecords, $scholarBusMap, $vehicleDetails) {
             $studentData = json_decode($registration->json_str, true) ?: [];
 
             // Exclude if bus transport is not requested or explicitly disabled
@@ -363,9 +662,20 @@ class TransportReportController extends Controller
 
             $driver = trim((string) ($studentData['driver_name'] ?? ''));
             $fee = $this->busFee($feeRecords->get($registration->id));
-            $busAssignments = $driverBusMap[$driver] ?? [];
+            $busAssignments = $this->busAssignmentsForDriver($driver, $driverBusMap);
             $driverMobileNo = $this->uniqueValues(collect($busAssignments)->pluck('driver_mobile_no')->all())
                 ?: $this->driverMobileByName($driver, $driverDetails);
+
+            $busNo = $this->uniqueValues(collect($busAssignments)->pluck('bus_no')->all());
+            $vehicleNo = $this->uniqueValues(collect($busAssignments)->pluck('vehicle_no')->all());
+
+            // Fallback to scholarbusassign if no bus derived from driver
+            if ($busNo === '' && isset($scholarBusMap[$registration->id])) {
+                $directBus = $scholarBusMap[$registration->id];
+                $matchedVehicle = $vehicleDetails[$this->normalizeKey($directBus)] ?? null;
+                $busNo = $matchedVehicle['bus_no'] ?? $directBus;
+                $vehicleNo = $matchedVehicle['vehicle_no'] ?? $directBus;
+            }
 
             $displayStopDate = '';
             if ($stopDate && (!$startDate || $stopDate->greaterThanOrEqualTo($startDate))) {
@@ -379,8 +689,8 @@ class TransportReportController extends Controller
                 'section_name' => $studentData['sectionname'] ?? $studentData['section_name'] ?? '',
                 'driver_name' => $driver,
                 'driver_mobile_no' => $driverMobileNo,
-                'bus_no' => $this->uniqueValues(collect($busAssignments)->pluck('bus_no')->all()),
-                'vehicle_no' => $this->uniqueValues(collect($busAssignments)->pluck('vehicle_no')->all()),
+                'bus_no' => $busNo,
+                'vehicle_no' => $vehicleNo,
                 'bus_fee' => $fee,
                 'start_date' => $studentData['bus_facility_start_date'] ?? '',
                 'stop_date' => $displayStopDate,
