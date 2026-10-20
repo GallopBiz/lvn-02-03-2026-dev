@@ -875,7 +875,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 	Route::get('tuition-fees-certificate', [FeesTypesMasterController::class, 'student_ledger'])->name('student_ledger1');
 	Route::post('/print-certificate', [App\Http\Controllers\CertificateController::class, 'generate'])->name('print.certificate');
     Route::get('cancle_student_ledger', [FeesTypesMasterController::class, 'cancle_student_ledger'])->name('cancle_student_ledger');
-    Route::post('search-student-ledger', [FeesTypesMasterController::class, 'search_student_ledger'])->name('search-student-ledger');
+    Route::match(['get', 'post'], 'search-student-ledger', [FeesTypesMasterController::class, 'search_student_ledger'])->name('search-student-ledger');
     Route::get('defaulterlist', [FeesTypesMasterController::class, 'defaulter_list'])->name('defaulterlist');
     Route::post('search-cancle-student-ledger', [FeesTypesMasterController::class, 'search_cancle_student_ledger'])->name('search-cancle-student-ledger');
     Route::get('cancle_student_ledger_delete/{id}', [FeesTypesMasterController::class, 'student_ledger_delete']);
@@ -884,6 +884,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     Route::get('view-student-ledger/{id}', [FeesTypesMasterController::class, 'view_student_ledger'])->name('view-student-ledger');
     Route::post('student-ledger-receipt-challan', [FeesreceiptchallanController::class, 'student_ledger_receipt_challan'])->name('student-ledger-receipt-challan');
+    Route::get('fees-receipt-print/{id}', [FeesTypesMasterController::class, 'print_challan_receipt'])->name('fees-receipt.print');
     Route::post('student-view-part', [FeesreceiptchallanController::class, 'student_view_part'])->name('student-view-part');
 
     Route::get('bus-fees-master', [busfeesmasterController::class, 'index'])->name('bus-fees-master');
@@ -949,7 +950,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('/search', [DefaultersListController::class, 'search'])->name('search');
 
 
-    Route::post('search-student-ledger', [FeesTypesMasterController::class, 'search_student_ledger'])->name('search-student-ledger');
+    Route::match(['get', 'post'], 'search-student-ledger', [FeesTypesMasterController::class, 'search_student_ledger'])->name('search-student-ledger');
     Route::get('view-student-ledger/{id}', [FeesTypesMasterController::class, 'view_student_ledger'])->name('view-student-ledger');
 
 

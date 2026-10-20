@@ -27,15 +27,13 @@ class FeesTypesMasterController extends Controller
             $db_name = $request->session; 
         } else if (!empty($request->session_name)){
             $db_name = $request->session_name;
+        } else if (isset($_COOKIE['selectedYear'])) {
+            $db_name = $_COOKIE['selectedYear'];
+        } else if (session()->has('db_names')) {
+            $db_name = session('db_names');
         } else {
-            if (isset($_COOKIE['selectedYear'])) {
-                $db_name = $_COOKIE['selectedYear'];
-            } else {
-                $db_name = "2023_2024";
-            }
-            
+            $db_name = env('DB_DATABASE', '2025_2026');
         }
-        // $db_name = "2023_2024";
 
         $dynamicConnectionName = 'dynamic';
         $dynamicConfig = Config::get("database.connections.{$dynamicConnectionName}");
@@ -158,8 +156,9 @@ class FeesTypesMasterController extends Controller
     }
 
 	public function search_student_ledger(Request $request){
-
-
+        if ($request->isMethod('get') && !$request->has('student_id')) {
+            return $this->student_ledger();
+        }
         $student_id = $request->student_id; 
 
         $totalnextyear = DB::connection('dynamic')->table('totalnextyear')->where('scholar_no',$request->scholar_number)->get();
@@ -175,25 +174,36 @@ class FeesTypesMasterController extends Controller
 
         $student_data = DB::connection('dynamic')->table('student_registration')->where('id', $student_id)->first();
 
+        if (!$student_data) {
+            return redirect()->back()->with('error', 'Student not found.');
+        }
+
         //$student_data_opening = DB::connection('dynamic')->table('opning_balance')->where('scholar_no', $student_data->scholar_no)->first();
         $data_student_name = DB::connection('dynamic')->table('student_registration')->select('student_name','id','scholar_no')->get();
 		
-		// Fetching the course fees structure based on the class of the student
-		$course_fees_data = DB::connection('dynamic')->table('course_fees_structure_master')
-        ->where('class_name', $student_data->class_name) // Assuming the class name is in the student_registration table
-        ->where('is_delete', 0) // Assuming you want to avoid deleted records
-        ->get();
-        
-        
-        $course_fees_data = DB::connection('dynamic')->table('generate_duechartstatus')
-        ->where('student_id', $student_id)->get();
+		// Fetching the course fees structure based on student due chart or class structure
+		$course_fees_data = DB::connection('dynamic')->table('generate_duechartstatus')
+            ->where('student_id', $student_id)
+            ->get();
 
-		// Now, to handle the JSON string from the course_fees_structure_master table, we can decode it.
-		$decoded_course_fees_data = [];
+        if ($course_fees_data->isEmpty()) {
+            $course_fees_data = DB::connection('dynamic')->table('course_fees_structure_master')
+                ->where('class_name', $student_data->class_name)
+                ->where('is_delete', 0)
+                ->get();
+        }
+        
+        $decoded_course_fees_data = [];
 		foreach ($course_fees_data as $course_data) {
-        $json_data = json_decode($course_data->json_str, true); // Decoding JSON string
-        $json_data_main = json_decode($json_data[0]['json_str'], true); // Decoding JSON string
-        $decoded_course_fees_data[] = $json_data_main;
+            $json_data = json_decode($course_data->json_str, true);
+            if (!empty($json_data[0]['json_str'])) {
+                $json_data_main = json_decode($json_data[0]['json_str'], true);
+                if (is_array($json_data_main)) {
+                    $decoded_course_fees_data[] = $json_data_main;
+                }
+            } elseif (is_array($json_data) && isset($json_data['fees_date'])) {
+                $decoded_course_fees_data[] = $json_data;
+            }
 		}
 
         $mergedRowsNew = $this->mergeLedger($decoded_course_fees_data,$challan_data,$student_data,$totalnextyear);
@@ -329,6 +339,8 @@ class FeesTypesMasterController extends Controller
                 'amount_cr' => $totalnextyear->sum('fees')-3000,
                 'refundable_cr' => "3000",
                 'remarks' => 'Opening Balance',//$totalnextyear->pluck('account_name')->unique()->implode(', '),
+                'source' => 'totalnextyear',
+                'receipt_number' => $totalnextyear->first()?->receipt_number,
             ];
         }
         
@@ -408,6 +420,8 @@ class FeesTypesMasterController extends Controller
                         'amount_cr' => $data['sub_total_received'],
                         'remarks' => $remark,
                         'settle_date' => $settle_date,
+                        'source' => 'feesreceiptchallan',
+                        'challan_id' => $object->id,
                     ];
             }
         }
@@ -588,5 +602,176 @@ class FeesTypesMasterController extends Controller
          return view('backend.FeesTypeMaster.defaulter');
     }
 
+    /**
+     * Print head-wise receipt for a specific challan entry
+     */
+    public function print_challan_receipt($id)
+    {
+        $challan = DB::connection('dynamic')->table('feesreceiptchallan')->where('id', $id)->first();
+
+        if (!$challan) {
+            return redirect()->back()->with('error', 'Challan record not found.');
+        }
+
+        $json = json_decode($challan->str_json, true) ?: [];
+
+        // Student data
+        $student = null;
+        if (!empty($challan->student_id)) {
+            $student = DB::connection('dynamic')->table('student_registration')->where('id', $challan->student_id)->first();
+        }
+        if (!$student && !empty($json['name_scholarno'])) {
+            $student = DB::connection('dynamic')->table('student_registration')->where('scholar_no', $json['name_scholarno'])->first();
+        }
+
+        $studentJson = $student ? (json_decode($student->json_str, true) ?: []) : [];
+
+        // Parse head items
+        $headNames = array_map('trim', explode(',', $json['head_name'] ?? ''));
+        $headAmounts = array_map('trim', explode(',', $json['head_rec_ammount'] ?? ''));
+        $headTerms = array_map('trim', explode(',', $json['term_str'] ?? ''));
+        $headDueDates = array_map('trim', explode(',', $json['head_due_date'] ?? ''));
+
+        $items = [];
+        $totalAmount = 0;
+
+        for ($i = 0; $i < count($headNames); $i++) {
+            $name = $headNames[$i] ?? '';
+            $amt = floatval($headAmounts[$i] ?? 0);
+            $term = $headTerms[$i] ?? '';
+            if ($name !== '' && $amt > 0) {
+                $items[] = [
+                    'head_name' => $name,
+                    'term' => $term ?: '-',
+                    'amount' => $amt,
+                ];
+                $totalAmount += $amt;
+            }
+        }
+
+        // Late fees
+        $lateFee = floatval($json['late_fees_rate_received'] ?? 0);
+        if ($lateFee > 0) {
+            $items[] = [
+                'head_name' => 'LATE FEES',
+                'term' => '-',
+                'amount' => $lateFee,
+            ];
+            $totalAmount += $lateFee;
+        }
+
+        // Advance fees if any
+        $advance = floatval($json['advance_received'] ?? 0);
+        if ($advance > 0) {
+            $items[] = [
+                'head_name' => 'ADVANCE FEES',
+                'term' => '-',
+                'amount' => $advance,
+            ];
+            $totalAmount += $advance;
+        }
+
+        // Fallback if sub_total_received has amount but items were empty
+        $subTotalReceived = floatval($json['sub_total_received'] ?? 0);
+        if (empty($items) && $subTotalReceived > 0) {
+            $items[] = [
+                'head_name' => 'FEES RECEIVED',
+                'term' => $challan->due_upto ?: '-',
+                'amount' => $subTotalReceived,
+            ];
+            $totalAmount = $subTotalReceived;
+        }
+
+        // Determine session/batch
+        $rawBatch = $studentJson['batch'] ?? $studentJson['session_name'] ?? $student?->session_name ?? session('db_names') ?? '2025_2026';
+        if (preg_match('/(\d{4})[_\-\–\/\s]+(\d{2,4})/', $rawBatch, $m)) {
+            $end = strlen($m[2]) == 2 ? $m[2] : substr($m[2], 2, 2);
+            $formattedSession = $m[1] . '–' . $end;
+        } else {
+            $formattedSession = str_replace('_', '–', $rawBatch);
+        }
+
+        // Class formatting
+        $rawClass = $json['name_classsection'] ?? $studentJson['classname'] ?? $student?->class_name ?? '';
+        $classMap = [
+            'nursery' => 'Nursery',
+            'kg1' => 'KG-I',
+            'kg2' => 'KG-II',
+            '01' => 'I',
+            '02' => 'II',
+            '03' => 'III',
+            '04' => 'IV',
+            '05' => 'V',
+            '06' => 'VI',
+            '07' => 'VII',
+            '08' => 'VIII',
+            '09' => 'IX',
+            '10' => 'X',
+            '11' => 'XI',
+            '12' => 'XII',
+            '1' => 'I',
+            '2' => 'II',
+            '3' => 'III',
+            '4' => 'IV',
+            '5' => 'V',
+            '6' => 'VI',
+            '7' => 'VII',
+            '8' => 'VIII',
+            '9' => 'IX',
+        ];
+        $cleanedClass = strtolower(trim(preg_replace('/[^a-z0-9]/i', '', (string)$rawClass)));
+        $formattedClass = $classMap[$cleanedClass] ?? $rawClass;
+
+        // Number to words
+        $amountInWords = $this->convertAmountToWords($totalAmount);
+
+        $displayDate = !empty($json['payment_date']) ? Carbon::parse($json['payment_date'])->format('d-m-Y') : Carbon::now()->format('d-m-Y');
+
+        return view('backend.FeesTypeMaster.challan_receipt', compact(
+            'challan',
+            'json',
+            'student',
+            'studentJson',
+            'items',
+            'totalAmount',
+            'amountInWords',
+            'formattedSession',
+            'formattedClass',
+            'displayDate'
+        ));
+    }
+
+    /**
+     * Convert integer/float number to Indian currency words
+     */
+    public function convertAmountToWords($number)
+    {
+        $number = (int) round($number);
+        if ($number <= 0) return 'Zero Rupees Only';
+
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $toWords = function ($n) use (&$toWords, $ones, $tens) {
+            if ($n < 20) {
+                return $ones[$n];
+            }
+            if ($n < 100) {
+                return trim($tens[intdiv($n, 10)] . ' ' . $ones[$n % 10]);
+            }
+            if ($n < 1000) {
+                return trim($ones[intdiv($n, 100)] . ' Hundred ' . $toWords($n % 100));
+            }
+            if ($n < 100000) {
+                return trim($toWords(intdiv($n, 1000)) . ' Thousand ' . $toWords($n % 1000));
+            }
+            if ($n < 10000000) {
+                return trim($toWords(intdiv($n, 100000)) . ' Lakh ' . $toWords($n % 100000));
+            }
+            return trim($toWords(intdiv($n, 10000000)) . ' Crore ' . $toWords($n % 10000000));
+        };
+
+        return trim($toWords($number)) . ' Rupees Only';
+    }
 
 }

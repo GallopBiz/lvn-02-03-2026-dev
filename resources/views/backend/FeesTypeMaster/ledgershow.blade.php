@@ -7,11 +7,33 @@
   } 
 
   @media print {
-    .no-print-col {
+    html, body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .app-admin-wrap, .main-content-wrap, .main-content {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      float: none !important;
+      position: static !important;
+    }
+    header, .main-header, .sidebar, .sidebar-left, .side-content-wrap,
+    .breadcrumb, .separator-breadcrumb, .card:first-child,
+    #progress-form, .btn, .no-print-col, .no-print-col *, .no-print {
       display: none !important;
     }
     .print-info {
-      display: none !important;
+      display: block !important;
+    }
+    .card {
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    .card-body {
+      padding: 0 !important;
     }
   }
 
@@ -349,19 +371,22 @@
                               <td>{{ isset($row['refundable_cr']) && $row['refundable_cr'] !== '' ? number_format($row['refundable_cr'], 2) : '' }}</td>
                               <td style="font-size:10px;max-width:200px;" >{{ $row['remarks'] }}</td>
                               <td class="no-print-col">
-                                @php  
-                                if(!empty($student_data) && $row['amount_cr']!=='' && !str_contains($row['remarks'], 'Opening Balance')){
-                                          echo ' 
-                                          <form method="post" action="student-ledger-receipt-challan">
-                                            <input type = "hidden" name = "_token" value = "'.csrf_token().'">
-                                            <input type="hidden" name="student_id" value="'.$student_data->id.'">
-                                            <input type="hidden" name="class_name" value="'.$student_data->class_name.'">
-                                            <input type="hidden" name="due_upto" value="'.$row['due_date'].'">
-                                            <button type="submit" class="btn btn-primary btn-sm removeItem">View</button>
-                                          </form>
-                                          ';
-                                        }
-                                @endphp      
+                                @if(!empty($student_data) && $row['amount_cr']!=='' && !str_contains($row['remarks'], 'Opening Balance'))
+                                  <div class="d-flex align-items-center" style="gap: 8px;">
+                                    <form method="post" action="{{ url('student-ledger-receipt-challan') }}" class="d-inline m-0">
+                                      @csrf
+                                      <input type="hidden" name="student_id" value="{{ $student_data->id }}">
+                                      <input type="hidden" name="class_name" value="{{ $student_data->class_name }}">
+                                      <input type="hidden" name="due_upto" value="{{ $row['due_date'] }}">
+                                      <button type="submit" class="btn btn-primary btn-sm removeItem">View</button>
+                                    </form>
+                                    @if(!empty($row['challan_id']))
+                                      <a href="{{ url('fees-receipt-print/' . $row['challan_id']) }}" target="_blank" class="text-primary text-decoration-underline" style="font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;">Print Receipt</a>
+                                    @endif
+                                  </div>
+                                @elseif(!empty($student_data) && $row['amount_cr']!=='' && str_contains($row['remarks'], 'Opening Balance') && !empty($student_data->scholar_no))
+                                  <a href="{{ url('admission-receipt/' . $student_data->scholar_no) }}{{ !empty($row['receipt_number']) ? '?receipt=' . $row['receipt_number'] : '' }}" target="_blank" class="text-primary text-decoration-underline" style="font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;">Print Receipt</a>
+                                @endif
                               </td>
                           </tr>
                         @endif
@@ -708,44 +733,124 @@ function select_data(ele){
 </script>
 <script>
 function printLedgerTable() {
-    // Clone the table and wrap it in a printable layout
     const table = document.querySelector('.print-student-detail');
     if (!table) {
         alert('Ledger table not found.');
         return;
     }
 
-    const newWin = window.open('', '', 'width=900,height=700');
-    newWin.document.write(`
-        <html>
-            <head>
-                <title>Print Ledger</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    table, th, td { border: 1px solid black; }
-                    th, td { padding: 8px; text-align: left; }
-                    th { background-color: #f2f2f2; }
-					@media print {
-						.no-print-col,
-						.no-print-col * {
-							display: none !important;
-						}
-					}
-					
-                </style>
-            </head>
-            <body>
-                <h2>Student Ledger</h2>
-                ${table.outerHTML}
-            </body>
-        </html>
-    `);
-    newWin.document.close();
-    newWin.focus();
-    newWin.print();
-    // Optionally, close the print window after printing
-    // newWin.close();
+    const htmlContent = `<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Student Ledger</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                font-size: 13px;
+                color: #111;
+                background: #fff;
+            }
+            h2 {
+                text-align: center;
+                margin-top: 0;
+                margin-bottom: 15px;
+                font-size: 18px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .print-info {
+                margin-bottom: 15px;
+                padding: 10px 14px;
+                background: #fdfdfd;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .print-info p {
+                margin: 4px 0;
+                font-size: 13px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 12px;
+            }
+            table, th, td {
+                border: 1px solid #333;
+            }
+            th, td {
+                padding: 7px 10px;
+                text-align: left;
+                vertical-align: middle;
+            }
+            th {
+                background-color: #f2f2f2;
+                font-weight: 600;
+            }
+            .no-print-col,
+            .no-print-col * {
+                display: none !important;
+            }
+            @media print {
+                body {
+                    padding: 0;
+                }
+                .no-print-col,
+                .no-print-col * {
+                    display: none !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Student Ledger</h2>
+        ${table.innerHTML}
+    </body>
+</html>`;
+
+    // Try opening a popup window first
+    const newWin = window.open('', '_blank', 'width=950,height=750');
+    if (newWin) {
+        newWin.document.open();
+        newWin.document.write(htmlContent);
+        newWin.document.close();
+        
+        // Wait for Chromium DOM layout to finish so print preview is never blank
+        setTimeout(function() {
+            try {
+                newWin.focus();
+                newWin.print();
+            } catch(e) {}
+        }, 350);
+        return;
+    }
+
+    // Fallback if popup was blocked: use hidden iframe
+    let printFrame = document.getElementById('ledgerPrintFrame');
+    if (printFrame) {
+        printFrame.remove();
+    }
+    printFrame = document.createElement('iframe');
+    printFrame.id = 'ledgerPrintFrame';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow.document;
+    frameDoc.open();
+    frameDoc.write(htmlContent);
+    frameDoc.close();
+
+    setTimeout(function() {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+    }, 350);
 }
 </script>
 

@@ -57,75 +57,83 @@ $staffUser = Auth::guard('staff')->user();
 				);
 			}
 
-			function getAllowedMenuForUser($user, $roleName = null, $isStudentUser = false) {
-				if (!$user) return [];
-				if (!$roleName) {
-					$roleName = getRoleNameForUser($user);
+			if (!function_exists('getAllowedMenuForUser')) {
+				function getAllowedMenuForUser($user, $roleName = null, $isStudentUser = false) {
+					if (!$user) return [];
+					if (!$roleName) {
+						$roleName = getRoleNameForUser($user);
+					}
+					if ($isStudentUser || !$roleName || $roleName === 'Student') return []; // Students do not use DB role_menus
+					$roleId = \DB::table('roles')->where('name', $roleName)->value('id');
+					if (!$roleId) return [];
+					$roleMenu = \App\Models\RoleMenu::where('role_id', $roleId)->first();
+					return $roleMenu ? json_decode($roleMenu->menu, true) : [];
 				}
-				if ($isStudentUser || !$roleName || $roleName === 'Student') return []; // Students do not use DB role_menus
-				$roleId = \DB::table('roles')->where('name', $roleName)->value('id');
-				if (!$roleId) return [];
-				$roleMenu = \App\Models\RoleMenu::where('role_id', $roleId)->first();
-				return $roleMenu ? json_decode($roleMenu->menu, true) : [];
 			}
 
-			function filterMenuByAllowed($menu, $allowed, $prefix = '') {
-				$filtered = [];
-				foreach ($menu as $item) {
-					$key = $prefix . $item['title'];
-					if (in_array($key, $allowed)) {
-						$filteredItem = $item;
-						if (!empty($item['children'])) {
-							$filteredItem['children'] = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
-						}
-						$filtered[] = $filteredItem;
-					} elseif (!empty($item['children'])) {
-						$children = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
-						if ($children) {
+			if (!function_exists('filterMenuByAllowed')) {
+				function filterMenuByAllowed($menu, $allowed, $prefix = '') {
+					$filtered = [];
+					foreach ($menu as $item) {
+						$key = $prefix . $item['title'];
+						if (in_array($key, $allowed)) {
 							$filteredItem = $item;
-							$filteredItem['children'] = $children;
+							if (!empty($item['children'])) {
+								$filteredItem['children'] = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
+							}
 							$filtered[] = $filteredItem;
+						} elseif (!empty($item['children'])) {
+							$children = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
+							if ($children) {
+								$filteredItem = $item;
+								$filteredItem['children'] = $children;
+								$filtered[] = $filteredItem;
+							}
 						}
 					}
+					return $filtered;
 				}
-				return $filtered;
 			}
 
-			function filterMenuByRoleName($menu, $roleName) {
-				$filtered = [];
-				foreach ($menu as $item) {
-					$roles = $item['roles'] ?? [];
+			if (!function_exists('filterMenuByRoleName')) {
+				function filterMenuByRoleName($menu, $roleName) {
+					$filtered = [];
+					foreach ($menu as $item) {
+						$roles = $item['roles'] ?? [];
 
-					// Explicit roles check: roleName MUST be in $roles if $roles is non-empty
-					if (!empty($roles) && !in_array($roleName, $roles)) {
-						continue;
-					}
-
-					$filteredItem = $item;
-					if (!empty($item['children'])) {
-						$children = filterMenuByRoleName($item['children'], $roleName);
-						if (empty($children)) {
+						// Explicit roles check: roleName MUST be in $roles if $roles is non-empty
+						if (!empty($roles) && !in_array($roleName, $roles)) {
 							continue;
 						}
-						$filteredItem['children'] = $children;
-					}
 
-					$filtered[] = $filteredItem;
+						$filteredItem = $item;
+						if (!empty($item['children'])) {
+							$children = filterMenuByRoleName($item['children'], $roleName);
+							if (empty($children)) {
+								continue;
+							}
+							$filteredItem['children'] = $children;
+						}
+
+						$filtered[] = $filteredItem;
+					}
+					return $filtered;
 				}
-				return $filtered;
 			}
 
-			function menuItemUrl($item) {
-				if (!empty($item['children'])) {
-					return '#';
+			if (!function_exists('menuItemUrl')) {
+				function menuItemUrl($item) {
+					if (!empty($item['children'])) {
+						return '#';
+					}
+
+					$isStaffUser = isStaffRouteRequest() || (Auth::guard('staff')->check() && !Auth::guard('web')->check());
+					$route = $isStaffUser && isset($item['staff_route'])
+						? $item['staff_route']
+						: ($item['route'] ?? '#');
+
+					return $route === '#' ? '#' : url($route);
 				}
-
-				$isStaffUser = isStaffRouteRequest() || (Auth::guard('staff')->check() && !Auth::guard('web')->check());
-				$route = $isStaffUser && isset($item['staff_route'])
-					? $item['staff_route']
-					: ($item['route'] ?? '#');
-
-				return $route === '#' ? '#' : url($route);
 			}
 
 			if ($isAdmin) {
