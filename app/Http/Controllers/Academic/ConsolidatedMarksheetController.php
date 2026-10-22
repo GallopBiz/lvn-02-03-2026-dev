@@ -20,12 +20,18 @@ class ConsolidatedMarksheetController extends Controller
         $classes = $this->classOptions();
         $sections = $this->sectionsForRequest($request);
         $sectionsByClass = $this->sectionsByClass();
-        $exams = Exam::with('classInfo')->latest('id')->get();
+        $rawExams = Exam::with('classInfo')->latest('id')->get();
+        $groupedExams = $this->groupedExams($rawExams);
+        $exams = $rawExams;
         $reports = $request->hasAny(['class_name', 'section_name', 'class_id', 'exam_id'])
             ? $this->buildReports($request)
             : collect();
 
-        return view('backend.AcademicsModules.consolidated_marksheet', compact('classes', 'sections', 'sectionsByClass', 'exams', 'reports'));
+        $missingMarksClasses = $reports->filter(fn ($r) => empty($r['has_marks']))->map(function ($r) {
+            return $r['class']->class_name . ($r['class']->section_name ? ' - ' . $r['class']->section_name : '');
+        })->unique()->values()->all();
+
+        return view('backend.AcademicsModules.consolidated_marksheet', compact('classes', 'sections', 'sectionsByClass', 'exams', 'groupedExams', 'reports', 'missingMarksClasses'));
     }
 
     public function print(Request $request)
@@ -57,13 +63,16 @@ class ConsolidatedMarksheetController extends Controller
 
     private function buildClassReport($class, ?Exam $selectedExam, Request $request): array
     {
+        $classResolvedExam = $selectedExam
+            ? $this->resolveExamForClass((int) $selectedExam->id, (int) $class->id, $class->class_name)
+            : null;
         $students = $this->studentsForClass((int) $class->id);
-        $examMap = $this->examMapForClass((int) $class->id, $selectedExam, $request);
+        $examMap = $this->examMapForClass((int) $class->id, $classResolvedExam, $request);
         $examIds = collect($examMap)->filter()->pluck('id')->map(fn ($id) => (int) $id)->unique()->values()->all();
         $marks = $this->marksForStudents($students->pluck('id')->all(), (int) $class->id, $examIds);
         $subjectsByStudent = $this->assignedSubjectsForStudents($students, $class, $marks);
 
-        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $selectedExam) {
+        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $classResolvedExam) {
             $subjects = $subjectsByStudent->get((int) $student->id, collect());
             $subjectRows = [];
             $studentTotal = 0.0;
@@ -90,7 +99,7 @@ class ConsolidatedMarksheetController extends Controller
 
                 $subjectFailed = $term1['result'] === 'Fail'
                     || $term2['result'] === 'Fail'
-                    || $this->isBelowFailPercent($term1['total'] + $term2['total'], 200, $selectedExam);
+                    || $this->isBelowFailPercent($term1['total'] + $term2['total'], 200, $classResolvedExam);
                 $hasFailingSubject = $hasFailingSubject || $subjectFailed;
                 $studentTotal += $term1['total'] + $term2['total'];
                 $studentMax += 200;
@@ -106,7 +115,7 @@ class ConsolidatedMarksheetController extends Controller
             $percentage = $studentMax > 0 ? $this->roundPercentage(($studentTotal / $studentMax) * 100) : null;
             $failed = $percentage === null
                 ? false
-                : ($hasFailingSubject || $this->isBelowFailPercent($studentTotal, $studentMax, $selectedExam));
+                : ($hasFailingSubject || $this->isBelowFailPercent($studentTotal, $studentMax, $classResolvedExam));
 
             return [
                 'student' => $student,
@@ -123,9 +132,11 @@ class ConsolidatedMarksheetController extends Controller
         return [
             'class' => $class,
             'session_year' => $this->resolveDynamicSessionYear($request),
-            'exam_title' => $selectedExam?->exam_name ?: 'Consolidated Term - II (Annual) Examination',
+            'exam_title' => $classResolvedExam?->exam_name ?: ($selectedExam?->exam_name ?: 'Consolidated Term - II (Annual) Examination'),
             'class_teacher' => $this->classTeacherName($class),
             'students' => $studentRows,
+            'has_marks' => $marks->isNotEmpty(),
+            'marks_count' => $marks->count(),
         ];
     }
 
@@ -480,7 +491,7 @@ class ConsolidatedMarksheetController extends Controller
     private function termValues($termMark, $ptMark, $termExam, $ptExam, ?string $className = null, ?string $subjectType = null): array
     {
         $theory = $this->numericMark($this->markValue($termMark, 'mark_theory'));
-        $pt = $this->convertedPtMark($ptMark, $ptExam);
+        $pt = $this->convertedPtMark($ptMark, $ptExam, $termMark);
         $mas = $this->internalAssessmentValue($termMark, ['MA/MAS', 'MAS', 'MA', 'Multiple Assessment']);
         $pf = $this->internalAssessmentValue($termMark, ['PF', 'Portfolio', 'NB', 'Notebook']);
         $sea = $this->internalAssessmentValue($termMark, ['SE', 'SEA', 'Subject Enrichment']);
@@ -522,23 +533,44 @@ class ConsolidatedMarksheetController extends Controller
         return '';
     }
 
-    private function convertedPtMark($ptMark, $ptExam): float
+    private function convertedPtMark($ptMark, $ptExam, $termMark = null): float
     {
-        if (!$ptMark) {
+        if (!$ptMark && !$termMark) {
             return 0.0;
         }
 
-        $obtained = $this->numericMark($this->markValue($ptMark, 'mark_theory'));
+        $raw = null;
+        if ($ptMark) {
+            $raw = $this->markValue($ptMark, 'mark_theory');
+            if ($raw === '' || $raw === null) {
+                $raw = $this->markValue($ptMark, 'total_marks');
+            }
+        }
+
+        if (($raw === '' || $raw === null) && $termMark) {
+            $internal = $this->internalAssessmentMarks($termMark);
+            foreach ($internal as $key => $value) {
+                $norm = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
+                if (in_array($norm, ['pt', 'periodictest', 'pt1', 'pt2'], true) && $value !== null && $value !== '') {
+                    $raw = $value;
+                    break;
+                }
+            }
+        }
+
+        if ($raw === '' || $raw === null || !is_numeric($raw)) {
+            return 0.0;
+        }
+
+        $obtained = (float) $raw;
         if ($obtained <= 0) {
-            $obtained = $this->numericMark($this->markValue($ptMark, 'total_marks'));
+            return 0.0;
         }
 
-        $max = (float) ($ptExam->max_marks_theory ?? 0);
-        if ($max <= 0) {
-            $max = max(1, $obtained);
-        }
+        // Converted Marks = (Obtained PT Marks ÷ 40) × 5, rounded off to nearest whole number
+        $converted = ($obtained / 40.0) * 5.0;
 
-        return $this->roundMark(min(5, ($obtained / $max) * 5));
+        return (float) round(min(5.0, max(0.0, $converted)), 0, PHP_ROUND_HALF_UP);
     }
 
     private function internalAssessmentValue($mark, array $keys): float
@@ -573,7 +605,7 @@ class ConsolidatedMarksheetController extends Controller
 
     private function roundMark(float $value): float
     {
-        return round($value, 0, PHP_ROUND_HALF_UP);
+        return round($value, 2, PHP_ROUND_HALF_UP);
     }
 
     private function roundPercentage(float $value): float
@@ -599,7 +631,12 @@ class ConsolidatedMarksheetController extends Controller
 
     private function formatMark($value): string
     {
-        return number_format($this->roundMark((float) $value), 2, '.', '');
+        $val = (float) $value;
+        if (abs($val - round($val)) < 0.005) {
+            return (string) (int) round($val);
+        }
+
+        return number_format($val, 2, '.', '');
     }
 
     private function gradeFor(float $marks, ?string $className = null, ?string $subjectType = null): string
@@ -697,7 +734,7 @@ class ConsolidatedMarksheetController extends Controller
 
     private function resolveDynamicSessionYear(Request $request): ?string
     {
-        $year = $request->session()->get('selectedYear') ?: $request->cookie('selectedYear');
+        $year = ($request->hasSession() ? $request->session()->get('selectedYear') : null) ?: $request->cookie('selectedYear');
         $year = $year ?: Config::get('database.connections.dynamic.database');
         return is_string($year) && preg_match('/^\d{4}_\d{4}$/', $year) ? $year : null;
     }
@@ -776,5 +813,105 @@ class ConsolidatedMarksheetController extends Controller
             'class_teacher' => 'Meenal Gupta',
             'students' => $studentRows,
         ]]);
+    }
+
+    private function groupedExams($rawExams)
+    {
+        return $rawExams->groupBy(function ($exam) {
+            return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
+        })->map(function ($group) {
+            $first = $group->first();
+
+            $classesData = [];
+            foreach ($group as $examItem) {
+                $cName = optional($examItem->classInfo)->class_name;
+                $cId = (int) $examItem->class_id;
+                if ($cName || $cId) {
+                    $classesData[] = [
+                        'exam_id' => (int) $examItem->id,
+                        'class_id' => (int) $examItem->class_id,
+                        'class_name' => (string) ($cName ?: ('Class ' . $cId)),
+                    ];
+                }
+            }
+
+            $uniqueClasses = collect($classesData)->unique('class_id')->values()->all();
+            usort($uniqueClasses, function ($a, $b) {
+                return strnatcasecmp($a['class_name'], $b['class_name']);
+            });
+
+            $displayName = trim((string) $first->exam_name);
+            $examType = trim((string) $first->exam_type);
+            if ($examType !== '' && strcasecmp($displayName, $examType) !== 0) {
+                $displayName .= ' - ' . $examType;
+            }
+
+            return [
+                'id' => (int) $first->id,
+                'group_key' => (string) ($first->exam_group_id ?: $first->id),
+                'exam_name' => (string) $first->exam_name,
+                'exam_title' => (string) ($first->exam_title ?: $first->exam_name),
+                'exam_type' => (string) ($first->exam_type ?: ''),
+                'display_name' => $displayName,
+                'classes' => $uniqueClasses,
+                'class_names' => collect($uniqueClasses)->pluck('class_name')->map(fn ($n) => (string) $n)->all(),
+                'all_exam_ids' => $group->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            ];
+        })->values();
+    }
+
+    private function resolveExamForClass(?int $examId, ?int $classId, ?string $className = null): ?Exam
+    {
+        if (!$examId) {
+            return null;
+        }
+
+        $exam = Exam::with('classInfo')->find($examId);
+        if (!$exam) {
+            return null;
+        }
+
+        // 1. If exam directly matches class_id
+        if ($classId && (int) $exam->class_id === (int) $classId) {
+            return $exam;
+        }
+
+        // 2. If exam directly matches class_name
+        $examClassName = optional($exam->classInfo)->class_name;
+        if ($className && $examClassName && (
+            (string) $examClassName === (string) $className ||
+            ltrim((string) $examClassName, '0') === ltrim((string) $className, '0')
+        )) {
+            return $exam;
+        }
+
+        // 3. Search siblings in the same exam group or with identical exam_name and exam_type
+        $siblingQuery = Exam::with('classInfo')->where('id', '!=', $examId);
+
+        if (!empty($exam->exam_group_id)) {
+            $siblingQuery->where('exam_group_id', $exam->exam_group_id);
+        } else {
+            $siblingQuery->where('exam_name', $exam->exam_name);
+            if (!empty($exam->exam_type)) {
+                $siblingQuery->where('exam_type', $exam->exam_type);
+            }
+        }
+
+        $siblings = $siblingQuery->get();
+
+        foreach ($siblings as $sibling) {
+            if ($classId && (int) $sibling->class_id === (int) $classId) {
+                return $sibling;
+            }
+            $sibClassName = optional($sibling->classInfo)->class_name;
+            if ($className && $sibClassName && (
+                (string) $sibClassName === (string) $className ||
+                ltrim((string) $sibClassName, '0') === ltrim((string) $className, '0')
+            )) {
+                return $sibling;
+            }
+        }
+
+        return $exam;
     }
 }

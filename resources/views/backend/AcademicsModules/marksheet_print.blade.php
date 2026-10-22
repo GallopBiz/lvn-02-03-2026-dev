@@ -188,18 +188,47 @@
     }
 </style>
 
-<div class="main-content pt-4">
-    <div class="breadcrumb">
-        <h2>{{ $template->name }} Print</h2>
+@php
+    $previousUrl = url()->previous();
+    $currentUrl = url()->current();
+    $backUrl = route('marksheet');
+    if ($previousUrl && $previousUrl !== $currentUrl && !str_contains($previousUrl, 'login') && !str_contains($previousUrl, 'signin')) {
+        $backUrl = $previousUrl;
+    }
+@endphp
+
+<div class="main-content pt-3">
+    <div class="breadcrumb d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <div>
+            <h2 class="mb-0 font-weight-bold" style="font-size: 20px;">{{ $template->name }} Print</h2>
+            <span class="text-muted small">Total sheets: {{ count($sheets ?? [['template' => $template, 'printData' => $printData]]) }} (Landscape A4)</span>
+        </div>
+        <div class="print-actions d-flex align-items-center gap-2">
+            <a href="{{ $backUrl }}" class="btn btn-sm btn-secondary d-inline-flex align-items-center" onclick="handleBack(event)">
+                <i class="fa fa-arrow-left mr-1"></i> Back
+            </a>
+            <button class="btn btn-sm btn-success d-inline-flex align-items-center" type="button" onclick="printMarksheet()">
+                <i class="fa fa-print mr-1"></i> Print Marksheet
+            </button>
+        </div>
     </div>
-    <div class="separator-breadcrumb border-top"></div>
+    <div class="separator-breadcrumb border-top mb-3"></div>
 
     <div class="marksheet-preview">
         <div id="marksheetPrintArea" class="marksheet-print-area">
             @php
             $sheets = $sheets ?? [['template' => $template, 'printData' => $printData]];
-            $formatMark = fn ($value) => number_format(round((float) $value, 0, PHP_ROUND_HALF_UP), 2, '.', '');
-            $formatPercentage = fn ($value) => number_format((float) $value, 2, '.', '');
+            $formatMark = function ($value) {
+                if (!is_numeric($value) || $value === '') {
+                    return '';
+                }
+                $val = (float) $value;
+                if (abs($val - round($val)) < 0.005) {
+                    return (string) (int) round($val);
+                }
+                return number_format($val, 2, '.', '');
+            };
+            $formatPercentage = fn ($value) => (is_numeric($value) && $value !== '') ? number_format((float) $value, 2, '.', '') : '';
             $sumTermColumn = function ($rows, $termIndex, $cellIndex) {
             return collect($rows)->sum(function ($row) use ($termIndex, $cellIndex) {
             $value = $row['terms'][$termIndex]['cells'][$cellIndex] ?? null;
@@ -257,7 +286,7 @@
             'cells' => array_fill(0, count($term['columns'] ?? []), ''),
             'grade' => '',
             ])->all(),
-            'grade' => $printData['grading']['co_scholastic_default_grade'] ?? 'A',
+            'grade' => !empty($printData['is_blank']) ? '' : ($printData['grading']['co_scholastic_default_grade'] ?? 'A'),
             'grand_total' => '',
             ];
             })
@@ -352,8 +381,9 @@
                             @foreach($term['columns'] ?? [] as $columnIndex => $column)
                             @php
                             $source = strtolower((string) ($column['source'] ?? ''));
+                            $sum = $sumTermColumn($scholasticRows, $termIndex, $columnIndex);
                             @endphp
-                            <td>{{ ($source !== 'mark_theory' && $source !== 'theory' && !empty($column['counts_in_total'])) ? $formatMark($sumTermColumn($scholasticRows, $termIndex, $columnIndex)) : '' }}</td>
+                            <td>{{ ($source !== 'mark_theory' && $source !== 'theory' && !empty($column['counts_in_total']) && empty($printData['is_blank']) && $sum > 0) ? $formatMark($sum) : '' }}</td>
                             @endforeach
                             @endforeach
                             <td></td>
@@ -371,8 +401,8 @@
                             <td>{{ $cell }}</td>
                             @endforeach
                             @endforeach
-                            <td>{{ $subject['grade'] ?? '' }}</td>
-                            <td>{{ is_numeric($subject['grand_total'] ?? null) ? $formatMark($subject['grand_total']) : '' }}</td>
+                            <td>{{ !empty($printData['is_blank']) ? '' : ($subject['grade'] ?? '') }}</td>
+                            <td>{{ (is_numeric($subject['grand_total'] ?? null) && empty($printData['is_blank'])) ? $formatMark($subject['grand_total']) : '' }}</td>
                         </tr>
                         @endforeach
                         </tbody>
@@ -388,7 +418,7 @@
                         @foreach($section['items'] ?? [] as $item)
                         <tr>
                             <td><strong>{{ $item }}</strong></td>
-                            <td>{{ $printData['grading']['co_scholastic_default_grade'] ?? 'A' }}</td>
+                            <td>{{ !empty($printData['is_blank']) ? '' : ($printData['grading']['co_scholastic_default_grade'] ?? 'A') }}</td>
                         </tr>
                         @endforeach
                     </table>
@@ -396,23 +426,40 @@
                 </section>
 
                 <section class="summary">
-                    <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] }}</div>
-                    <div>Percentage : {{ $printData['percentage'] !== null ? $formatPercentage($printData['percentage']) : '' }}</div>
-                    <div>Attendance : {{ $printData['attendance'] }}</div>
-                    <div>Result : {{ $printData['result'] }}</div>
+                    <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] ?? '' }}</div>
+                    <div>Percentage : {{ ($printData['percentage'] !== null && $printData['percentage'] !== '' && empty($printData['is_blank'])) ? $formatPercentage($printData['percentage']) : '' }}</div>
+                    <div>Attendance : {{ $printData['attendance'] ?? '' }}</div>
+                    <div>Result : {{ $printData['result'] ?? '' }}</div>
                 </section>
             </main>
             @endforeach
         </div>
     </div>
 
-    <div class="print-actions d-flex justify-content-center gap-2 mt-3 mb-3">
-        <button class="btn btn-sm btn-success" onclick="printMarksheet()">Print Marksheet</button>
-        <a href="{{ url()->previous() }}" class="btn btn-sm btn-secondary">Back</a>
+    <div class="print-actions d-flex justify-content-center align-items-center gap-2 mt-3 mb-4">
+        <a href="{{ $backUrl }}" class="btn btn-sm btn-secondary d-inline-flex align-items-center" onclick="handleBack(event)">
+            <i class="fa fa-arrow-left mr-1"></i> Back
+        </a>
+        <button class="btn btn-sm btn-success d-inline-flex align-items-center" type="button" onclick="printMarksheet()">
+            <i class="fa fa-print mr-1"></i> Print Marksheet
+        </button>
     </div>
 </div>
 
 <script>
+    function handleBack(e) {
+        if (window.history.length > 1 && document.referrer && document.referrer !== window.location.href) {
+            e.preventDefault();
+            window.history.back();
+            return;
+        }
+        if (window.opener && !window.opener.closed) {
+            e.preventDefault();
+            window.close();
+            return;
+        }
+    }
+
     function printMarksheet() {
         const content = document.getElementById('marksheetPrintArea').cloneNode(true);
         const styles = document.getElementById('marksheet-print-styles').innerHTML;

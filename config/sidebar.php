@@ -231,7 +231,9 @@ return [
                 'children' => [
                     [ 'title' => 'Daily Attendance', 'route' => 'dailyattandence', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Student Collective Attendance', 'route' => 'academic/attendance-collective', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
-                    [ 'title' => 'Student-wise Attendance', 'route' => 'student-attandence-report', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Manual Student Attendance', 'route' => 'academic/attendance-manual', 'roles' => ['Admin'] ],
+                    // [ 'title' => 'Student-wise Attendance', 'route' => 'student-attandence-report', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Monthly Attendance Summary', 'route' => 'academic/attendance-monthly-report', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Attendance Reports', 'route' => 'Attandencereports', 'roles' => ['Admin'] ],
                 ],
             ],

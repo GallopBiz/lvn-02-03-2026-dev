@@ -143,6 +143,7 @@ use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetContro
 use App\Http\Controllers\Academic\Term1MarksheetController;
 use App\Http\Controllers\Academic\TeacherRemarkEntryController;
 use App\Http\Controllers\Academic\AttendanceController as AcademicAttendanceController;
+use App\Http\Controllers\Academic\ManualAttendanceController as AcademicManualAttendanceController;
 // Remove any duplicate use statement for SeatingArrangementController below this line
 
 // use App\Http\Controllers\FormController;
@@ -468,10 +469,21 @@ Route::post('change_password', [Changepassword::class, 'create']);
     // Route::get('teachersubject',[TeacherSubjectController::class, 'index'])->name('teachersubject');
     Route::get('Attandencelist',[AttendanceController::class, 'index'])->name('Attandencelist');
     Route::get('Attandencereports',[AcademicAttendanceController::class, 'reports'])->name('Attandencereports');
+    Route::get('academic/attendance-monthly-report',[AcademicAttendanceController::class, 'monthlyReport'])->name('academic.attendance.monthly-report');
+    Route::get('academic.attendance.monthly-report',[AcademicAttendanceController::class, 'monthlyReport']);
+    Route::get('monthly-attendance-report',[AcademicAttendanceController::class, 'monthlyReport'])->name('monthly-attendance-report');
     Route::get('academic/attendance-collective',[AcademicAttendanceController::class, 'collective'])->name('academic.attendance.collective');
     Route::post('academic/attendance-collective',[AcademicAttendanceController::class, 'storeCollective'])->name('academic.attendance.collective.store');
     Route::get('academic/attendance-collective/{collective}/print',[AcademicAttendanceController::class, 'printCollective'])->name('academic.attendance.collective.print');
     Route::delete('academic/attendance-collective/{collective}',[AcademicAttendanceController::class, 'destroyCollective'])->name('academic.attendance.collective.delete');
+
+    // Manual Student Attendance & Working Days Adjustment (Admin Only)
+    Route::middleware(['admin'])->group(function () {
+        Route::get('academic/attendance-manual', [AcademicManualAttendanceController::class, 'index'])->name('academic.attendance.manual');
+        Route::post('academic/attendance-manual', [AcademicManualAttendanceController::class, 'store'])->name('academic.attendance.manual.store');
+        Route::get('academic/attendance-manual/{collective}/print', [AcademicManualAttendanceController::class, 'print'])->name('academic.attendance.manual.print');
+        Route::delete('academic/attendance-manual/{collective}', [AcademicManualAttendanceController::class, 'destroy'])->name('academic.attendance.manual.delete');
+    });
     Route::get('dailyattandence',[AcademicAttendanceController::class, 'daily'])->name('dailyattandence');
     Route::post('dailyattandence',[AcademicAttendanceController::class, 'store'])->name('dailyattandence');
     Route::get('dailyattandence-update/{id}',[AcademicAttendanceController::class, 'daily'])->name('dailyattandenceUpdate');
@@ -565,6 +577,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     Route::get('marksheet',[AcademicMarksheetController::class, 'index'])->name('marksheet');
     Route::get('academic/marksheets', [AcademicMarksheetController::class, 'index'])->name('academic.marksheets.index');
+    Route::get('academic/marksheets/students-data', [AcademicMarksheetController::class, 'getStudentsJson'])->name('academic.marksheets.students-data');
     Route::get('academic/consolidated-marksheets', [ConsolidatedMarksheetController::class, 'index'])->name('academic.consolidated-marksheets.index');
     Route::get('academic/consolidated-marksheets/print', [ConsolidatedMarksheetController::class, 'print'])->name('academic.consolidated-marksheets.print');
     Route::post('academic/marksheets/generate', [AcademicMarksheetController::class, 'generate'])->name('academic.marksheets.generate');
@@ -578,7 +591,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
         ->where('marksheets', '[0-9,]+')
         ->name('academic.marksheets.generated.bulk-print-page');
     Route::post('academic/marksheets/generated/bulk-print', [AcademicMarksheetController::class, 'bulkPrintGenerated'])->name('academic.marksheets.generated.bulk-print');
-    Route::delete('academic/marksheets/generated/bulk-delete', [AcademicMarksheetController::class, 'bulkDeleteGenerated'])->name('academic.marksheets.generated.bulk-delete');
+    Route::match(['post', 'delete'], 'academic/marksheets/generated/bulk-delete', [AcademicMarksheetController::class, 'bulkDeleteGenerated'])->name('academic.marksheets.generated.bulk-delete');
     Route::delete('academic/marksheets/generated/{marksheet}', [AcademicMarksheetController::class, 'deleteGenerated'])->name('academic.marksheets.generated.delete');
     Route::get('academic/marksheets/print/{marksheet}', [AcademicMarksheetController::class, 'printGenerated'])->name('academic.marksheets.generated.print');
     Route::get('academic/marksheets/print', [AcademicMarksheetController::class, 'print'])->name('academic.marksheets.print');

@@ -1477,7 +1477,7 @@ class Term1MarksheetController extends Controller
     private function cbseTermValues($termMark, $ptMark, $ptExam): array
     {
         $theory = $this->numericMark($this->markValue($termMark, 'mark_theory'));
-        $pt = $this->convertedPtMark($ptMark, $ptExam);
+        $pt = $this->convertedPtMark($ptMark, $ptExam, $termMark);
         $nb = $this->internalAssessmentValue($termMark, ['NB', 'Notebook', 'Portfolio', 'PF']);
         $mas = $this->internalAssessmentValue($termMark, ['MA/MAS', 'MAS', 'MA', 'Multiple Assessment', 'Multiple Ass.']);
         $sea = $this->internalAssessmentValue($termMark, ['SE', 'SEA', 'Subject Enrichment']);
@@ -1494,26 +1494,44 @@ class Term1MarksheetController extends Controller
         ];
     }
 
-    private function convertedPtMark($ptMark, $ptExam): float
+    private function convertedPtMark($ptMark, $ptExam, $termMark = null): float
     {
-        if (!$ptMark) {
+        if (!$ptMark && !$termMark) {
             return 0.0;
         }
 
-        $obtained = $this->numericMark($this->markValue($ptMark, 'mark_theory'));
+        $raw = null;
+        if ($ptMark) {
+            $raw = $this->markValue($ptMark, 'mark_theory');
+            if ($raw === '' || $raw === null) {
+                $raw = $this->markValue($ptMark, 'total_marks');
+            }
+        }
+
+        if (($raw === '' || $raw === null) && $termMark) {
+            $internal = $this->internalAssessmentMarks($termMark);
+            foreach ($internal as $key => $value) {
+                $norm = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
+                if (in_array($norm, ['pt', 'periodictest', 'pt1', 'pt2'], true) && $value !== null && $value !== '') {
+                    $raw = $value;
+                    break;
+                }
+            }
+        }
+
+        if ($raw === '' || $raw === null || !is_numeric($raw)) {
+            return 0.0;
+        }
+
+        $obtained = (float) $raw;
         if ($obtained <= 0) {
-            $obtained = $this->numericMark($this->markValue($ptMark, 'total_marks'));
+            return 0.0;
         }
 
-        $max = (float) ($ptExam->max_marks_theory ?? 0);
-        if ($max <= 0) {
-            $max = (float) ($ptExam->max_marks ?? 0);
-        }
-        if ($max <= 0) {
-            $max = max(1, $obtained);
-        }
+        // Converted Marks = (Obtained PT Marks ÷ 40) × 5, rounded off to nearest whole number
+        $converted = ($obtained / 40.0) * 5.0;
 
-        return round(min(5, ($obtained / $max) * 5), 2);
+        return (float) round(min(5.0, max(0.0, $converted)), 0, PHP_ROUND_HALF_UP);
     }
 
     private function markValue($mark, ?string $source): string
@@ -1577,6 +1595,10 @@ class Term1MarksheetController extends Controller
 
     private function formatMarkValue(float $value): string
     {
+        if (abs($value - round($value)) < 0.005) {
+            return (string) (int) round($value);
+        }
+
         return number_format($value, 2, '.', '');
     }
 

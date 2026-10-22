@@ -35,7 +35,12 @@
                 <span class="badge badge-dark ml-2">Locked</span>
             @endif
         </h2>
-        <a href="{{ route('Attandencereports') }}" class="btn btn-outline-primary btn-sm">Reports</a>
+        <div class="d-flex align-items-center">
+            <button type="button" class="btn btn-outline-secondary btn-sm mr-2" onclick="goBackToSource('{{ url()->previous() !== url()->current() ? url()->previous() : route('academic.attendance.monthly-report') }}')">
+                <i class="i-Arrow-Left mr-1 font-weight-bold"></i> Back
+            </button>
+            <a href="{{ route('Attandencereports') }}" class="btn btn-outline-primary btn-sm">Reports</a>
+        </div>
     </div>
     <div class="separator-breadcrumb border-top"></div>
 
@@ -309,5 +314,36 @@
         updateCounts();
     });
     updateCounts();
+
+    (function() {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var ref = document.referrer;
+            if (ref && !ref.includes(window.location.pathname)) {
+                sessionStorage.setItem(pageKey, ref);
+            }
+        } catch (e) {}
+    })();
+
+    function goBackToSource(fallbackUrl) {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var saved = sessionStorage.getItem(pageKey);
+            if (saved && saved !== window.location.href && !saved.includes(window.location.pathname)) {
+                sessionStorage.removeItem(pageKey);
+                window.location.href = saved;
+                return;
+            }
+        } catch (e) {}
+        if (document.referrer && document.referrer !== window.location.href && !document.referrer.includes(window.location.pathname)) {
+            window.location.href = document.referrer;
+            return;
+        }
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        window.location.href = fallbackUrl;
+    }
 </script>
 @endsection

@@ -11,6 +11,8 @@ class AttendanceCollective extends Model
 {
     use HasFactory;
 
+    protected $connection = 'dynamic';
+
     protected $table = 'academic_attendance_collectives';
 
     protected $fillable = [
@@ -25,12 +27,15 @@ class AttendanceCollective extends Model
         'end_date',
         'working_days',
         'student_count',
+        'is_manual',
+        'remarks',
         'is_delete',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date' => 'date',
+        'is_manual' => 'boolean',
     ];
 
     public function details()

@@ -10,6 +10,8 @@ class AttendanceCollectiveDetail extends Model
 {
     use HasFactory;
 
+    protected $connection = 'dynamic';
+
     protected $table = 'academic_attendance_collective_details';
 
     public $timestamps = false;
@@ -23,6 +25,7 @@ class AttendanceCollectiveDetail extends Model
         'working_days',
         'attendance_percentage',
         'is_below_minimum',
+        'remarks',
     ];
 
     protected $casts = [

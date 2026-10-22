@@ -132,7 +132,15 @@ $staffUser = Auth::guard('staff')->user();
 						? $item['staff_route']
 						: ($item['route'] ?? '#');
 
-					return $route === '#' ? '#' : url($route);
+					if ($route === '#') {
+						return '#';
+					}
+
+					if (\Illuminate\Support\Facades\Route::has($route)) {
+						return route($route);
+					}
+
+					return url($route);
 				}
 			}
 

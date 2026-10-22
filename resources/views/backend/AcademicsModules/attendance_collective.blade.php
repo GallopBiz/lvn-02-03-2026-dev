@@ -9,8 +9,69 @@
     .summary-card strong { font-size:24px; }
     .badge-low { background:#fff0f0; color:#b42318; border:1px solid #ffd0d0; }
     .badge-ok { background:#e9f8ef; color:#167146; border:1px solid #bfe9ce; }
-    .table thead th { background:#f4f7fb; white-space:nowrap; }
-    @media print { .no-print, .main-header, .sidebar, .breadcrumb { display:none !important; } .main-content { margin:0 !important; padding:0 !important; } }
+    @media print {
+        body, body * {
+            visibility: visible !important;
+        }
+        #print-area, #print-area * {
+            visibility: visible !important;
+        }
+        #print-area {
+            position: static !important;
+            width: 100% !important;
+            left: auto !important;
+            top: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .no-print,
+        .main-header,
+        .sidebar,
+        .breadcrumb,
+        .app-admin-wrap > .sidebar,
+        .app-footer,
+        .separator-breadcrumb,
+        .alert,
+        .summary-grid,
+        .d-print-none {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        .app-admin-wrap,
+        .main-content-wrap,
+        .main-content {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            position: static !important;
+            float: none !important;
+        }
+        .collective-panel {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            background: transparent !important;
+        }
+        .table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+        .table th, .table td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 4px 6px !important;
+            font-size: 10px !important;
+            color: #000 !important;
+        }
+        .table th {
+            background-color: #f1f5f9 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        tr {
+            page-break-inside: avoid;
+        }
+    }
     @media (max-width: 991px) { .summary-grid { grid-template-columns:repeat(2,minmax(130px,1fr)); } }
 </style>
 
@@ -23,8 +84,11 @@
 <div class="main-content collective-page pt-4">
     <div class="breadcrumb d-flex justify-content-between align-items-center flex-wrap">
         <h2 class="mb-2">Student Collective Attendance</h2>
-        <div class="no-print">
-            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">Print / PDF</button>
+        <div class="no-print d-flex align-items-center">
+            <button type="button" class="btn btn-outline-secondary btn-sm mr-2" onclick="goBackToSource('{{ url()->previous() !== url()->current() ? url()->previous() : route('academic.attendance.monthly-report') }}')">
+                <i class="i-Arrow-Left mr-1 font-weight-bold"></i> Back
+            </button>
+            <button class="btn btn-outline-secondary btn-sm mr-1" onclick="window.print()">Print / PDF</button>
             <button class="btn btn-outline-success btn-sm" onclick="exportTable('collectiveTable','student-collective-attendance.xls')">Excel</button>
         </div>
     </div>
@@ -94,8 +158,6 @@
                         @foreach($exams as $exam)
                             <option value="{{ $exam->id }}" data-name="{{ $exam->exam_name }}" @selected((int)$filters['exam_id'] === (int)$exam->id)>
                                 {{ $exam->exam_name }}
-                                @if(optional($exam->classInfo)->class_name) - {{ optional($exam->classInfo)->class_name }} @endif
-                                @if($exam->session_year) ({{ str_replace('_', '-', $exam->session_year) }}) @endif
                             </option>
                         @endforeach
                     </select>
@@ -117,7 +179,7 @@
         <div class="summary-card"><span>Below 75%</span><strong>{{ $belowCount }}</strong></div>
     </div>
 
-    <div class="collective-panel mb-3">
+    <div id="print-area" class="collective-panel mb-3 print-area">
         <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
             <div>
                 <h4 class="mb-1">Student Wise Details</h4>
@@ -132,8 +194,8 @@
                 <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                 <input type="hidden" name="class_name" value="{{ optional($selectedClass)->class_name }}">
                 <input type="hidden" name="section_name" value="{{ $filters['section_name'] }}">
-                <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
-                <input type="hidden" name="exam_name" value="{{ $filters['exam_name'] }}">
+                <input type="hidden" name="exam_id" id="collectivePostExamId" value="{{ $filters['exam_id'] }}">
+                <input type="hidden" name="exam_name" id="collectivePostExamName" value="{{ $filters['exam_name'] }}">
                 <input type="hidden" name="academic_session" value="{{ $filters['academic_session'] }}">
                 <input type="hidden" name="start_date" value="{{ $filters['start_date'] }}">
                 <input type="hidden" name="end_date" value="{{ $filters['end_date'] }}">
@@ -222,6 +284,16 @@
 </div>
 
 <script>
+    function setExamName(selectEl) {
+        var opt = selectEl.options[selectEl.selectedIndex];
+        var name = opt ? (opt.getAttribute('data-name') || '') : '';
+        var postExamId = document.getElementById('collectivePostExamId');
+        var postExamName = document.getElementById('collectivePostExamName');
+        if (postExamId) postExamId.value = selectEl.value;
+        if (postExamName) postExamName.value = name;
+        document.getElementById('collectiveFilterForm').submit();
+    }
+
     function exportTable(tableId, filename) {
         var table = document.getElementById(tableId);
         var html = table.outerHTML.replace(/ /g, '%20');
@@ -229,6 +301,37 @@
         link.href = 'data:application/vnd.ms-excel,' + html;
         link.download = filename;
         link.click();
+    }
+
+    (function() {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var ref = document.referrer;
+            if (ref && !ref.includes(window.location.pathname)) {
+                sessionStorage.setItem(pageKey, ref);
+            }
+        } catch (e) {}
+    })();
+
+    function goBackToSource(fallbackUrl) {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var saved = sessionStorage.getItem(pageKey);
+            if (saved && saved !== window.location.href && !saved.includes(window.location.pathname)) {
+                sessionStorage.removeItem(pageKey);
+                window.location.href = saved;
+                return;
+            }
+        } catch (e) {}
+        if (document.referrer && document.referrer !== window.location.href && !document.referrer.includes(window.location.pathname)) {
+            window.location.href = document.referrer;
+            return;
+        }
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        window.location.href = fallbackUrl;
     }
 </script>
 @endsection

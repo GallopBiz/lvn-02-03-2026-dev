@@ -19,6 +19,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Dynamic Academic Database Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration options used by SetDynamicDatabaseConnectionFromCookie middleware:
+    | - dynamic_lookup_connection: Stable connection for INFORMATION_SCHEMA schema checks.
+    | - enforce_academic_default: Whether to force-switch to default if no session is selected.
+    | - allowed_dynamic_databases: Optional explicit allowlist of valid academic databases.
+    |
+    */
+
+    'dynamic_lookup_connection' => env('DB_DYNAMIC_LOOKUP_CONNECTION', 'mysql'),
+
+    'enforce_academic_default' => false,
+
+    'allowed_dynamic_databases' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
     |

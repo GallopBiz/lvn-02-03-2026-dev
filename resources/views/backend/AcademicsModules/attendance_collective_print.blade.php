@@ -7,8 +7,11 @@
         @page { size: A4 portrait; margin: 10mm; }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; color: #1f2a3d; background: #eef2f7; }
-        .print-actions { position: sticky; top: 0; z-index: 5; padding: 12px 18px; background: #fff; text-align: right; border-bottom: 1px solid #d9e1ec; }
-        .print-actions button { border: 1px solid #1f6feb; background: #1f6feb; color: #fff; border-radius: 4px; padding: 7px 14px; cursor: pointer; }
+        .print-actions { position: sticky; top: 0; z-index: 5; padding: 12px 18px; background: #fff; border-bottom: 1px solid #d9e1ec; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+        .print-actions button, .print-actions a { border: 1px solid #1f6feb; background: #1f6feb; color: #fff; border-radius: 4px; padding: 7px 14px; cursor: pointer; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
+        .print-actions a.btn-back { background: #6c757d; border-color: #6c757d; color: #fff; }
+        .print-actions a.btn-back:hover { background: #5a6268; }
+        .print-actions button:hover { background: #1858ba; }
         .sheet { width: 210mm; min-height: 297mm; margin: 18px auto; padding: 12mm; background: #fff; box-shadow: 0 8px 28px rgba(31, 42, 61, .18); }
         .school-header { display: grid; grid-template-columns: 1fr auto; gap: 12px; border-bottom: 2px solid #1f2a3d; padding-bottom: 8px; margin-bottom: 10px; }
         .school-name { font-size: 19px; font-weight: 700; }
@@ -48,6 +51,7 @@
 @endphp
 <body>
     <div class="print-actions">
+        <a href="{{ (url()->previous() && url()->previous() !== url()->current()) ? url()->previous() : route('academic.attendance.collective') }}" class="btn-back" onclick="if (window.history.length > 1) { event.preventDefault(); window.history.back(); }">&larr; Back</a>
         <button onclick="window.print()">Print / Save PDF</button>
     </div>
 

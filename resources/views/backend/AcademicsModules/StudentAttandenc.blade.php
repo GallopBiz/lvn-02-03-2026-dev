@@ -39,77 +39,84 @@
         <form method="GET" action="{{ route('student-attandence-report') }}">
             <div class="row">
                 <div class="col-lg-2 col-md-4 form-group">
-                    <label>Academic Session</label>
+                    <label class="font-weight-600">Academic Session</label>
                     <input type="text" name="academic_session" value="{{ $filters['academic_session'] }}" class="form-control">
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
-                    <label>Month</label>
-                    <input type="month" name="month" value="{{ $filters['month'] }}" class="form-control">
-                </div>
-                <div class="col-lg-2 col-md-4 form-group">
-                    <label>From</label>
+                    <label class="font-weight-600">From Date</label>
                     <input type="date" name="from_date" value="{{ $filters['from_date'] }}" class="form-control">
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
-                    <label>To</label>
+                    <label class="font-weight-600">To Date</label>
                     <input type="date" name="to_date" value="{{ $filters['to_date'] }}" class="form-control">
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
-                    <label>Class</label>
+                    <label class="font-weight-600">Class</label>
                     <select name="class_id" class="form-control" onchange="var sec = this.form.querySelector('[name=section_name]'); if(sec) sec.value = ''; this.form.submit();">
-                        <option value="">All</option>
+                        <option value="">All Classes</option>
                         @foreach($classes as $class)
                             <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id || (string)$filters['class_id'] === (string)$class->class_name)>{{ $class->class_name }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
-                    <label>Section</label>
+                    <label class="font-weight-600">Section</label>
                     <select name="section_name" class="form-control" onchange="this.form.submit()">
-                        <option value="">All</option>
+                        <option value="">All Sections</option>
                         @foreach($sections as $section)
                             <option value="{{ $section }}" @selected($filters['section_name'] === $section)>{{ $section }}</option>
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-4 col-md-6 form-group">
-                    <label>Student Search</label>
+                <div class="col-lg-2 col-md-4 form-group">
+                    <label class="font-weight-600">Student Search</label>
                     <input type="text" name="student_search" value="{{ $studentSearch }}" class="form-control" placeholder="Name, roll no, scholar no">
                 </div>
-                <div class="col-lg-4 col-md-6 form-group">
-                    <label>Student</label>
+            </div>
+
+            <div class="row align-items-center">
+                <div class="col-lg-5 col-md-6 form-group mb-0">
+                    <label class="font-weight-600">Student (Optional - Leave blank for all students)</label>
                     <select name="student_id" class="form-control">
-                        <option value="">Select student</option>
+                        <option value="">-- All Students --</option>
                         @foreach($students as $student)
                             <option value="{{ $student->id }}" @selected((int)$filters['student_id'] === (int)$student->id)>
-                                {{ $student->student_name }} @if($student->form_number) - {{ $student->form_number }} @endif
+                                {{ $student->student_name }} @if($student->scholar_no || $student->form_number) ({{ $student->scholar_no ?: $student->form_number }}) @endif
                             </option>
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-4 form-group d-flex align-items-end">
-                    <button class="btn btn-primary mr-2">Search</button>
-                    <a class="btn btn-outline-primary mr-2" href="#studentDailyMonthReport">Show Day Wise Report</a>
-                    <a class="btn btn-outline-secondary" href="{{ route('student-attandence-report') }}">Reset</a>
+                <div class="col-lg-7 col-md-6 form-group mb-0 d-flex align-items-end justify-content-end mt-2 mt-md-0 flex-wrap">
+                    <button type="submit" class="btn btn-primary mr-2 mb-1"><i class="i-Magnifi-Glass1 mr-1"></i> Search</button>
+                    <a class="btn btn-outline-info mr-2 mb-1" href="{{ route('academic.attendance.monthly-report', request()->query()) }}"><i class="i-Calendar-4 mr-1"></i> Monthly Summary Format</a>
+                    @if($monthlyDetail)
+                        <a class="btn btn-outline-primary mr-2 mb-1" href="#studentDailyMonthReport"><i class="i-Calendar mr-1"></i> Day Wise Report</a>
+                    @endif
+                    <a class="btn btn-outline-secondary mb-1" href="{{ route('student-attandence-report') }}"><i class="i-Repeat mr-1"></i> Reset</a>
                 </div>
             </div>
         </form>
     </div>
 
     <div class="summary-grid mb-3">
-        <div class="summary-card"><span>Total Working Days</span><strong>{{ $summary['total_students'] }}</strong></div>
+        <div class="summary-card"><span>{{ $selectedStudent ? 'Total Working Days' : 'Total Records' }}</span><strong>{{ $summary['total_students'] }}</strong></div>
         <div class="summary-card"><span>Total Present</span><strong>{{ $summary['present'] }}</strong></div>
         <div class="summary-card"><span>Total Absent</span><strong>{{ $summary['absent'] }}</strong></div>
         <div class="summary-card"><span>Attendance %</span><strong>{{ number_format($summary['percentage'], 2) }}%</strong></div>
     </div>
 
     <div class="attendance-panel">
-        <h4 class="mb-1">{{ $selectedStudent ? $selectedStudent->student_name : 'Attendance History' }}</h4>
-        <p class="text-muted">{{ $selectedStudent ? 'Complete attendance history for the selected filters. Sundays and HRMS public holidays are excluded.' : 'Select a student to view attendance history.' }}</p>
+        <h4 class="mb-1">{{ $selectedStudent ? $selectedStudent->student_name . ' - Attendance History' : 'All Students Attendance Report' }}</h4>
+        <p class="text-muted">{{ $selectedStudent ? 'Complete attendance history for ' . $selectedStudent->student_name . '. Sundays and HRMS public holidays are excluded.' : 'Attendance records for all students matching the selected filters. Sundays and HRMS public holidays are excluded.' }}</p>
         <div class="table-responsive">
-            <table class="table table-hover" id="studentAttendanceTable">
+            <table class="table table-hover table-striped" id="studentAttendanceTable">
                 <thead>
                     <tr>
+                        <th style="width: 60px;">SNo</th>
+                        @if(!$selectedStudent)
+                            <th>Student Name</th>
+                            <th>Scholar / Roll No</th>
+                        @endif
                         <th>Date</th>
                         <th>Class</th>
                         <th>Section</th>
@@ -120,14 +127,21 @@
                 <tbody>
                     @forelse($history as $row)
                         <tr>
+                            <td>{{ ($history instanceof \Illuminate\Pagination\LengthAwarePaginator ? ($history->firstItem() + $loop->index) : $loop->iteration) }}</td>
+                            @if(!$selectedStudent)
+                                <td class="font-weight-600">
+                                    {{ optional($row->student)->student_name ?: 'Student #' . $row->student_id }}
+                                </td>
+                                <td>{{ optional($row->student)->scholar_no ?: optional($row->student)->form_number ?: '-' }}</td>
+                            @endif
                             <td>{{ optional($row->attendance->attendance_date)->format('d-m-Y') }}</td>
                             <td>{{ optional($row->attendance->className)->class_name ?: $row->attendance->class_name }}</td>
                             <td>{{ $row->attendance->section_name }}</td>
                             <td><span class="status-badge status-{{ $row->status }}">{{ ucwords(str_replace('_', ' ', $row->status)) }}</span></td>
-                            <td>{{ $row->remarks }}</td>
+                            <td>{{ $row->remarks ?: '-' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="text-center text-muted">No attendance data found.</td></tr>
+                        <tr><td colspan="{{ $selectedStudent ? 6 : 8 }}" class="text-center text-muted py-4">No attendance data found for the selected criteria.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -140,44 +154,68 @@
     <div class="attendance-panel mt-3" id="studentDailyMonthReport">
         <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
             <div>
-                <h4 class="mb-1">Daily Month Wise Report</h4>
-                <p class="text-muted mb-0">Day-wise status for the selected student and month.</p>
+                <h4 class="mb-1">{{ $selectedStudent ? $selectedStudent->student_name . ' - Day Wise Report' : 'Day Wise Attendance Matrix' }}</h4>
+                <p class="text-muted mb-0">{{ $selectedStudent ? 'Day-wise status for ' . $selectedStudent->student_name . '.' : 'Day-wise status for all students in the selected class and section.' }}</p>
             </div>
-            @if($monthlyDetail)
-                <strong>{{ $monthlyDetail['month_label'] }}</strong>
-            @endif
+            <div class="d-flex align-items-center flex-wrap">
+                @if($monthlyDetail)
+                    <strong class="mr-3">{{ $monthlyDetail['month_label'] }}</strong>
+                @endif
+                <a class="btn btn-sm btn-outline-info" href="{{ route('academic.attendance.monthly-report', request()->query()) }}">
+                    <i class="i-File-Clipboard-Text--Image mr-1"></i> Open Classic Summary Format
+                </a>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-bordered day-report-table" id="studentMonthWiseReportTable">
                 <thead>
                     <tr>
-                        <th>Student</th>
+                        <th rowspan="2" class="align-middle">Student</th>
                         @if($monthlyDetail)
                             @foreach($monthlyDetail['days'] as $day)
-                                <th>{{ $day }}</th>
+                                <th rowspan="2" class="align-middle text-center">{{ $day }}</th>
                             @endforeach
                         @endif
-                        <th>Days</th>
-                        <th>Present</th>
-                        <th>%</th>
+                        <th colspan="3" class="text-center bg-light">Current Month</th>
+                        <th colspan="3" class="text-center bg-light">Till Prev Month</th>
+                        <th colspan="3" class="text-center bg-light">Overall</th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if($monthlyDetail && $monthlyDetail['rows']->isNotEmpty())
                         @foreach($monthlyDetail['rows'] as $row)
                             <tr>
-                                <td>{{ $row['student_name'] }}</td>
+                                <td class="font-weight-600">{{ $row['student_name'] }}</td>
                                 @foreach($monthlyDetail['days'] as $day)
                                     @php $cell = $row['cells'][$day]; @endphp
                                     <td class="day-cell {{ $cell['class'] }}" title="{{ $cell['title'] }}">{{ $cell['label'] }}</td>
                                 @endforeach
-                                <td>{{ $row['working_days'] }}</td>
-                                <td>{{ number_format($row['present_days'], 2) }}</td>
-                                <td>{{ number_format($row['percentage'], 2) }}%</td>
+                                <td class="text-center">{{ number_format($row['current_month']['days'], 2) }}</td>
+                                <td class="text-center">{{ number_format($row['current_month']['present'], 2) }}</td>
+                                <td class="text-center font-weight-600">{{ number_format($row['current_month']['percentage'], 2) }}%</td>
+                                <td class="text-center">{{ number_format($row['till_prev_month']['days'], 2) }}</td>
+                                <td class="text-center">{{ number_format($row['till_prev_month']['present'], 2) }}</td>
+                                <td class="text-center font-weight-600">{{ number_format($row['till_prev_month']['percentage'], 2) }}%</td>
+                                <td class="text-center font-weight-bold">{{ number_format($row['overall']['days'], 2) }}</td>
+                                <td class="text-center font-weight-bold">{{ number_format($row['overall']['present'], 2) }}</td>
+                                <td class="text-center font-weight-bold {{ $row['overall']['percentage'] < 75 ? 'text-danger' : 'text-success' }}">
+                                    {{ number_format($row['overall']['percentage'], 2) }}%
+                                </td>
                             </tr>
                         @endforeach
                     @else
-                        <tr><td colspan="36" class="text-center text-muted">Select a student and month, then click Search.</td></tr>
+                        <tr><td colspan="45" class="text-center text-muted py-3">Select Class and Section, then click Search to view the day-wise matrix report.</td></tr>
                     @endif
                 </tbody>
             </table>

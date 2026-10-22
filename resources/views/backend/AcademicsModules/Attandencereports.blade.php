@@ -35,8 +35,11 @@
                 Session: {{ $filters['academic_session'] }}
             </span>
         </div>
-        <div class="no-print">
-            <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">Print / PDF</button>
+        <div class="no-print d-flex align-items-center">
+            <button type="button" class="btn btn-outline-secondary btn-sm mr-2" onclick="goBackToSource('{{ url()->previous() !== url()->current() ? url()->previous() : route('academic.attendance.monthly-report') }}')">
+                <i class="i-Arrow-Left mr-1 font-weight-bold"></i> Back
+            </button>
+            <button class="btn btn-outline-secondary btn-sm mr-1" onclick="window.print()">Print / PDF</button>
             <button class="btn btn-outline-success btn-sm" onclick="exportTable('attendanceReportTable','attendance-report.xls')">Excel</button>
         </div>
     </div>
@@ -82,10 +85,10 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-lg-6 col-md-6 form-group d-flex align-items-end">
-                    <button class="btn btn-primary mr-2">Generate</button>
-                    <a class="btn btn-outline-primary mr-2" href="#dailyMonthWiseReport">Show Day Wise Report</a>
-                    <a class="btn btn-outline-secondary" href="{{ route('Attandencereports') }}">Reset</a>
+                <div class="col-lg-6 col-md-6 form-group d-flex align-items-end flex-wrap">
+                    <button class="btn btn-primary mr-2 mb-1">Generate</button>
+                    <a class="btn btn-outline-info mr-2 mb-1" href="{{ route('academic.attendance.monthly-report', request()->query()) }}"><i class="i-Calendar-4 mr-1"></i> Monthly Summary Format</a>
+                    <a class="btn btn-outline-secondary mb-1" href="{{ route('Attandencereports') }}">Reset</a>
                 </div>
             </div>
         </form>
@@ -161,32 +164,49 @@
         {{ $records->links('pagination::bootstrap-4') }}
     </div>
 
+    {{--
     <div class="attendance-panel mt-3" id="dailyMonthWiseReport">
         <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
             <div>
                 <h4 class="mb-1">Daily Student Attendance Report</h4>
                 <p class="text-muted mb-0">Month-wise day detail with status colors. Sundays and HRMS holidays are shown as S/H.</p>
             </div>
-            @if($monthWiseReport)
-                <strong>{{ $monthWiseReport['month_label'] }}</strong>
-            @endif
+            <div class="d-flex align-items-center flex-wrap">
+                @if($monthWiseReport)
+                    <strong class="mr-3">{{ $monthWiseReport['month_label'] }}</strong>
+                @endif
+                <a class="btn btn-sm btn-outline-info" href="{{ route('academic.attendance.monthly-report', request()->query()) }}">
+                    <i class="i-File-Clipboard-Text--Image mr-1"></i> Open Classic Summary Format
+                </a>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-bordered day-report-table" id="dailyMonthWiseReportTable">
                 <thead>
                     <tr>
-                        <th>SNo</th>
-                        <th>Roll No</th>
-                        <th>Scholar No</th>
-                        <th>Student Name</th>
+                        <th rowspan="2" class="align-middle">SNo</th>
+                        <th rowspan="2" class="align-middle">Roll No</th>
+                        <th rowspan="2" class="align-middle">Scholar No</th>
+                        <th rowspan="2" class="align-middle">Student Name</th>
                         @if($monthWiseReport)
                             @foreach($monthWiseReport['days'] as $day)
-                                <th>{{ $day }}</th>
+                                <th rowspan="2" class="align-middle text-center">{{ $day }}</th>
                             @endforeach
                         @endif
-                        <th>Days</th>
-                        <th>Present</th>
-                        <th>%</th>
+                        <th colspan="3" class="text-center bg-light">Current Month</th>
+                        <th colspan="3" class="text-center bg-light">Till Prev Month</th>
+                        <th colspan="3" class="text-center bg-light">Overall</th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
+                        <th class="text-center">Days</th>
+                        <th class="text-center">Pres</th>
+                        <th class="text-center">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -196,23 +216,32 @@
                                 <td>{{ $loop->iteration }}</td>
                                 <td>{{ $row['roll_no'] }}</td>
                                 <td>{{ $row['scholar_no'] }}</td>
-                                <td>{{ $row['student_name'] }}</td>
+                                <td class="font-weight-600">{{ $row['student_name'] }}</td>
                                 @foreach($monthWiseReport['days'] as $day)
                                     @php $cell = $row['cells'][$day]; @endphp
                                     <td class="day-cell {{ $cell['class'] }}" title="{{ $cell['title'] }}">{{ $cell['label'] }}</td>
                                 @endforeach
-                                <td>{{ $row['working_days'] }}</td>
-                                <td>{{ number_format($row['present_days'], 2) }}</td>
-                                <td>{{ number_format($row['percentage'], 2) }}%</td>
+                                <td class="text-center">{{ number_format($row['current_month']['days'], 2) }}</td>
+                                <td class="text-center">{{ number_format($row['current_month']['present'], 2) }}</td>
+                                <td class="text-center font-weight-600">{{ number_format($row['current_month']['percentage'], 2) }}%</td>
+                                <td class="text-center">{{ number_format($row['till_prev_month']['days'], 2) }}</td>
+                                <td class="text-center">{{ number_format($row['till_prev_month']['present'], 2) }}</td>
+                                <td class="text-center font-weight-600">{{ number_format($row['till_prev_month']['percentage'], 2) }}%</td>
+                                <td class="text-center font-weight-bold">{{ number_format($row['overall']['days'], 2) }}</td>
+                                <td class="text-center font-weight-bold">{{ number_format($row['overall']['present'], 2) }}</td>
+                                <td class="text-center font-weight-bold {{ $row['overall']['percentage'] < 75 ? 'text-danger' : 'text-success' }}">
+                                    {{ number_format($row['overall']['percentage'], 2) }}%
+                                </td>
                             </tr>
                         @endforeach
                     @else
-                        <tr><td colspan="40" class="text-center text-muted">Select Class and Section, then click Generate.</td></tr>
+                        <tr><td colspan="48" class="text-center text-muted py-3">Select Class and Section, then click Generate.</td></tr>
                     @endif
                 </tbody>
             </table>
         </div>
     </div>
+    --}}
 </div>
 
 <script>
@@ -223,6 +252,37 @@
         link.href = 'data:application/vnd.ms-excel,' + html;
         link.download = filename;
         link.click();
+    }
+
+    (function() {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var ref = document.referrer;
+            if (ref && !ref.includes(window.location.pathname)) {
+                sessionStorage.setItem(pageKey, ref);
+            }
+        } catch (e) {}
+    })();
+
+    function goBackToSource(fallbackUrl) {
+        try {
+            var pageKey = 'back_source_' + window.location.pathname;
+            var saved = sessionStorage.getItem(pageKey);
+            if (saved && saved !== window.location.href && !saved.includes(window.location.pathname)) {
+                sessionStorage.removeItem(pageKey);
+                window.location.href = saved;
+                return;
+            }
+        } catch (e) {}
+        if (document.referrer && document.referrer !== window.location.href && !document.referrer.includes(window.location.pathname)) {
+            window.location.href = document.referrer;
+            return;
+        }
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        window.location.href = fallbackUrl;
     }
 </script>
 @endsection

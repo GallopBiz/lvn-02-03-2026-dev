@@ -42,9 +42,11 @@
                               <div class="card-title"> Attandence </div>
                                 <div class="separator-breadcrumb border-top"></div>
                                   <div class="ul-widget-app__browser-list">
-                                    <a href="{{ 'student-attandence-report' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Student Attandence Report</span></div></a>
+                                    {{-- <a href="{{ 'student-attandence-report' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Student Attandence Report</span></div></a> --}}
+                                    <a href="{{ route('academic.attendance.monthly-report') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18 font-weight-bold text-primary">Monthly Attendance Summary</span></div></a>
                                     <a href="{{ 'Attandencereports' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Attandence Reports</span></div></a>
                                     <a href="{{ route('academic.attendance.collective') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Student Collective Attendance</span></div></a>
+                                    <a href="{{ route('academic.attendance.manual') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18 font-weight-bold text-primary">Manual Student Attendance</span></div></a>
                                     <a href="{{ 'dailyattandence' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Daily Attandence</span></div></a>
                                   </div>
                               </div>

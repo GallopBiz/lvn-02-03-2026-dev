@@ -20,9 +20,129 @@ class MarksheetController extends Controller
         $generatedSearch = trim((string) $request->query('generated_search', ''));
         $generatedClassId = $request->integer('generated_class_id') ?: null;
         $generatedExamId = $request->integer('generated_exam_id') ?: null;
+        $selectedClassId = $request->integer('class_id') ?: null;
+        $selectedSectionName = trim((string) $request->input('section_name', '')) ?: null;
+        $selectedExamId = $request->integer('exam_id') ?: null;
+
+        $classes = Classes::query()
+            ->orderBy('class_name')
+            ->get()
+            ->unique('class_name')
+            ->values();
+
+        $sectionsByClass = Classes::query()
+            ->where(function ($q) {
+                if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
+                    $q->where('is_delete', 0)->orWhereNull('is_delete');
+                }
+            })
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '')
+            ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
+            ->orderBy('section_name')
+            ->get()
+            ->groupBy('class_name')
+            ->map(function ($items) {
+                return $items->pluck('section_name')->unique()->values();
+            })
+            ->toArray();
+
+        $rawExams = Exam::with('classInfo')->latest('id')->get();
+
+        $groupedExams = $rawExams->groupBy(function ($exam) {
+            return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
+        })->map(function ($group) {
+            $first = $group->first();
+
+            $classesData = [];
+            foreach ($group as $examItem) {
+                $cName = optional($examItem->classInfo)->class_name;
+                $cId = (int) $examItem->class_id;
+                if ($cName || $cId) {
+                    $classesData[] = [
+                        'exam_id' => (int) $examItem->id,
+                        'class_id' => (int) $examItem->class_id,
+                        'class_name' => (string) ($cName ?: ('Class ' . $cId)),
+                        'display_name' => (string) ($cName ?: ('Class ' . $cId)),
+                    ];
+                }
+            }
+
+            $uniqueClasses = collect($classesData)->unique('class_id')->values()->all();
+            usort($uniqueClasses, function ($a, $b) {
+                return strnatcasecmp($a['class_name'], $b['class_name']);
+            });
+
+            $displayName = trim((string) $first->exam_name);
+            $examType = trim((string) $first->exam_type);
+            if ($examType !== '' && strcasecmp($displayName, $examType) !== 0) {
+                $displayName .= ' - ' . $examType;
+            }
+
+            return [
+                'id' => (int) $first->id,
+                'group_key' => (string) ($first->exam_group_id ?: $first->id),
+                'exam_name' => (string) $first->exam_name,
+                'exam_title' => (string) ($first->exam_title ?: $first->exam_name),
+                'exam_type' => (string) ($first->exam_type ?: ''),
+                'display_name' => $displayName,
+                'classes' => $uniqueClasses,
+                'all_exam_ids' => $group->pluck('id')->map(fn ($id) => (int) $id)->all(),
+            ];
+        })->values();
+
+        $selectedGroup = null;
+        if ($selectedExamId) {
+            $selectedGroup = $groupedExams->first(function ($g) use ($selectedExamId) {
+                return (int) $g['id'] === (int) $selectedExamId || in_array((int) $selectedExamId, $g['all_exam_ids'], true);
+            });
+            if ($selectedGroup) {
+                $selectedExamId = $selectedGroup['id'];
+            }
+        } elseif ($selectedClassId) {
+            $selectedGroup = $groupedExams->first(function ($g) use ($selectedClassId) {
+                return collect($g['classes'])->contains(fn ($c) => (int) $c['class_id'] === (int) $selectedClassId);
+            });
+            if ($selectedGroup) {
+                $selectedExamId = $selectedGroup['id'];
+            }
+        }
+
+        $availableClasses = [];
+        if ($selectedGroup) {
+            $availableClasses = $selectedGroup['classes'];
+        } elseif ($selectedClassId) {
+            $availableClasses = $classes->map(fn ($c) => [
+                'exam_id' => null,
+                'class_id' => (int) $c->id,
+                'class_name' => (string) $c->class_name,
+                'display_name' => (string) $c->class_name,
+            ])->all();
+        }
+
+        $resolvedExam = $this->resolveExamForClass($selectedExamId, $selectedClassId);
+        $resolvedExamId = $resolvedExam ? (int) $resolvedExam->id : $selectedExamId;
+
+        $filterExamIds = [];
+        if ($generatedExamId) {
+            $filterExamIds = [$generatedExamId];
+            $matchedGenGroup = $groupedExams->first(function ($g) use ($generatedExamId) {
+                return (int) $g['id'] === (int) $generatedExamId || in_array((int) $generatedExamId, $g['all_exam_ids'], true);
+            });
+            if ($matchedGenGroup) {
+                $filterExamIds = $matchedGenGroup['all_exam_ids'];
+            }
+        }
+
+        $perPage = $request->integer('per_page', 20);
+        $allowedPerPage = [10, 20, 50, 100, 200, 500];
+        if (!in_array($perPage, $allowedPerPage, true)) {
+            $perPage = 20;
+        }
+
         $generatedMarksheets = Marksheet::query()
             ->when($generatedClassId, fn ($query) => $query->where('class_id', $generatedClassId))
-            ->when($generatedExamId, fn ($query) => $query->where('exam_id', $generatedExamId))
+            ->when(!empty($filterExamIds), fn ($query) => $query->whereIn('exam_id', $filterExamIds))
             ->when($generatedSearch !== '', function ($query) use ($generatedSearch) {
                 $like = '%' . str_replace(' ', '%', $generatedSearch) . '%';
                 $query->where(function ($inner) use ($like) {
@@ -35,49 +155,107 @@ class MarksheetController extends Controller
                 });
             })
             ->orderByRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.student_name')) ASC")
-            ->paginate(20)
-            ->appends($request->only('generated_search', 'generated_class_id', 'generated_exam_id', 'class_id'));
-        $classes = Classes::query()
-            ->orderBy('class_name')
-            ->get()
-            ->unique('class_name')
-            ->values();
-        $exams = Exam::with('classInfo')->latest('id')->get();
-        $students = $this->studentsForClass($request->integer('class_id'));
-        $selectedClassId = $request->integer('class_id') ?: null;
+            ->paginate($perPage)
+            ->appends($request->only('generated_search', 'generated_class_id', 'generated_exam_id', 'class_id', 'section_name', 'exam_id', 'per_page'));
+
+        $selectedClassName = null;
+        if ($selectedClassId) {
+            $matchedClass = Classes::find($selectedClassId);
+            if ($matchedClass) {
+                $selectedClassName = $matchedClass->class_name;
+            }
+        }
+        $availableSections = [];
+        if ($selectedClassName) {
+            $availableSections = $sectionsByClass[$selectedClassName] ?? ($sectionsByClass[ltrim($selectedClassName, '0')] ?? []);
+        }
+
+        $exams = $rawExams;
+        $students = $this->studentsForClass($selectedClassId, $selectedClassName, $selectedSectionName);
+        $marksMissing = false;
+        if ($selectedClassId) {
+            $marksMissing = !$this->hasMarksForClassAndExam($selectedClassId, $selectedExamId, $selectedClassName, $selectedSectionName);
+        }
 
         return view('backend.AcademicsModules.marksheet', compact(
             'generatedMarksheets',
             'generatedSearch',
             'generatedClassId',
             'generatedExamId',
+            'perPage',
             'classes',
+            'sectionsByClass',
+            'availableSections',
+            'selectedSectionName',
             'exams',
+            'groupedExams',
+            'availableClasses',
             'students',
-            'selectedClassId'
+            'selectedClassId',
+            'selectedExamId',
+            'resolvedExamId',
+            'marksMissing'
         ));
+    }
+
+    public function getStudentsJson(Request $request)
+    {
+        $classId = $request->integer('class_id') ?: null;
+        $className = trim((string) $request->input('class_name', '')) ?: null;
+        $sectionName = trim((string) $request->input('section_name', '')) ?: null;
+        $examId = $request->integer('exam_id') ?: null;
+        if (!$classId && !$className) {
+            return response()->json([
+                'students' => [],
+                'has_marks' => false,
+            ]);
+        }
+
+        $students = $this->studentsForClass($classId, $className, $sectionName);
+        $hasMarks = $this->hasMarksForClassAndExam($classId, $examId, $className, $sectionName);
+
+        $data = $students->map(function ($s) {
+            return [
+                'id' => $s->id,
+                'student_name' => $s->student_name,
+                'scholar_no' => $s->scholar_no ?? '',
+                'section_name' => $s->section_name ?? '',
+                'class_id' => $s->class_id ?? '',
+                'class_name' => $s->class_name ?? '',
+            ];
+        });
+
+        return response()->json([
+            'students' => $data,
+            'has_marks' => $hasMarks,
+        ]);
     }
 
     public function generate(Request $request)
     {
         $validated = $request->validate([
             'class_id' => 'required|integer',
+            'section_name' => 'nullable|string|max:100',
             'exam_id' => 'nullable|integer',
+            'resolved_exam_id' => 'nullable|integer',
             'student_id' => 'nullable|integer',
             'attendance' => 'nullable|string|max:50',
         ]);
 
         $classId = (int) $validated['class_id'];
-        $examId = !empty($validated['exam_id']) ? (int) $validated['exam_id'] : null;
+        $sectionName = !empty($validated['section_name']) ? trim($validated['section_name']) : null;
+        $rawExamId = !empty($validated['resolved_exam_id']) ? (int) $validated['resolved_exam_id'] : (!empty($validated['exam_id']) ? (int) $validated['exam_id'] : null);
+        $resolvedExam = $this->resolveExamForClass($rawExamId, $classId);
+        $examId = $resolvedExam ? (int) $resolvedExam->id : $rawExamId;
         $studentId = !empty($validated['student_id']) ? (int) $validated['student_id'] : null;
         $template = $this->fixedTemplate();
 
         $students = $studentId
             ? collect([$this->studentById($studentId)])->filter()
-            : $this->studentsForClass($classId);
+            : $this->studentsForClass($classId, null, $sectionName);
 
         if ($students->isEmpty()) {
-            return redirect()->route('marksheet', ['class_id' => $classId])->with('error', 'No students found for this class.');
+            return redirect()->route('marksheet', array_filter(['class_id' => $classId, 'section_name' => $sectionName, 'exam_id' => $rawExamId]))->with('error', 'No students found for this class / section.');
         }
 
         $count = 0;
@@ -109,7 +287,7 @@ class MarksheetController extends Controller
             $count++;
         }
 
-        return redirect()->route('marksheet', ['class_id' => $classId])->with('success', "{$count} marksheet(s) generated and saved.");
+        return redirect()->route('marksheet', array_filter(['class_id' => $classId, 'section_name' => $sectionName, 'exam_id' => $rawExamId]))->with('success', "{$count} marksheet(s) generated and saved.");
     }
 
     public function print(Request $request)
@@ -120,13 +298,16 @@ class MarksheetController extends Controller
         }
 
         $classId = $request->integer('class_id') ?: null;
-        $examId = $request->integer('exam_id') ?: null;
+        $sectionName = trim((string) $request->input('section_name', '')) ?: null;
+        $rawExamId = $request->integer('resolved_exam_id') ?: ($request->integer('exam_id') ?: null);
+        $resolvedExam = $this->resolveExamForClass($rawExamId, $classId);
+        $examId = $resolvedExam ? (int) $resolvedExam->id : $rawExamId;
         $studentId = $request->integer('student_id') ?: null;
         $template = $this->fixedTemplate();
         if ($classId && !$studentId) {
-            $students = $this->studentsForClass($classId);
+            $students = $this->studentsForClass($classId, null, $sectionName);
             if ($students->isEmpty()) {
-                return redirect()->route('marksheet', ['class_id' => $classId])->with('error', 'No students found for this class.');
+                return redirect()->route('marksheet', array_filter(['class_id' => $classId, 'section_name' => $sectionName, 'exam_id' => $rawExamId]))->with('error', 'No students found for this class / section.');
             }
             $sheets = $students->map(function ($student) use ($classId, $examId, $request, $template) {
                 $printData = $this->buildPrintData($classId, $examId, (int) $student->id, $request);
@@ -142,10 +323,47 @@ class MarksheetController extends Controller
         return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
     }
 
-    public function printGenerated(Marksheet $marksheet, Request $request)
+    public function printGenerated($marksheet, Request $request)
     {
-        ['template' => $template, 'printData' => $printData] = $this->savedPrintSheet($marksheet, $request);
-        $marksheet->forceFill(['printed_at' => now()])->save();
+        $marksheetModel = null;
+        if ($marksheet instanceof Marksheet) {
+            $marksheetModel = $marksheet;
+        } elseif (is_numeric($marksheet)) {
+            $marksheetModel = Marksheet::query()->find((int) $marksheet);
+        }
+
+        if ($marksheetModel) {
+            ['template' => $template, 'printData' => $printData] = $this->savedPrintSheet($marksheetModel, $request);
+            $marksheetModel->forceFill(['printed_at' => now()])->save();
+            $sheets = [compact('template', 'printData')];
+
+            return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
+        }
+
+        // When marks are not entered or marksheet is not found:
+        // Show a blank marksheet instead of 404!
+        $id = is_numeric($marksheet) ? (int) $marksheet : null;
+        $student = $id ? $this->studentById($id) : null;
+        $classId = null;
+        if ($student) {
+            if (!empty($student->class_id) && is_numeric($student->class_id)) {
+                $classId = (int) $student->class_id;
+            } elseif (!empty($student->class_name)) {
+                $matchedClass = Classes::query()->where('class_name', $student->class_name)->first();
+                $classId = $matchedClass ? (int) $matchedClass->id : null;
+            }
+        }
+        if (!$classId) {
+            $classId = $request->integer('class_id') ?: null;
+        }
+        if (!$classId) {
+            $firstClass = Classes::query()->orderBy('id')->first();
+            $classId = $firstClass ? (int) $firstClass->id : null;
+        }
+        $examId = $request->integer('resolved_exam_id') ?: ($request->integer('exam_id') ?: null);
+
+        $template = $this->fixedTemplate();
+        $printData = $this->buildPrintData($classId, $examId, $student ? (int) $student->id : null, $request);
         $sheets = [compact('template', 'printData')];
 
         return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
@@ -200,16 +418,37 @@ class MarksheetController extends Controller
 
     public function bulkDeleteGenerated(Request $request)
     {
-        $validated = $request->validate([
-            'marksheet_ids' => 'required|array|min:1',
-            'marksheet_ids.*' => 'integer',
-        ]);
+        $rawIds = $request->input('marksheet_ids');
+        if (is_string($rawIds)) {
+            $rawIds = explode(',', $rawIds);
+        }
+        $ids = collect((array) $rawIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($ids)) {
+            return redirect()->back()->with('error', 'Please select at least one generated marksheet to delete.');
+        }
 
         $count = Marksheet::query()
-            ->whereIn('id', $validated['marksheet_ids'])
+            ->whereIn('id', $ids)
             ->delete();
 
-        return redirect()->route('marksheet')->with('success', "{$count} generated marksheet(s) deleted.");
+        $redirectParams = array_filter($request->only([
+            'per_page',
+            'generated_search',
+            'generated_class_id',
+            'generated_exam_id',
+            'class_id',
+            'section_name',
+            'exam_id',
+        ]));
+
+        return redirect()->route('marksheet', $redirectParams)
+            ->with('success', "{$count} generated marksheet(s) deleted successfully.");
     }
 
     public function deleteGenerated(Marksheet $marksheet)
@@ -266,6 +505,12 @@ class MarksheetController extends Controller
         $examMap = $this->marksheetExamMap($classId, $layout, $exam);
         $rollNo = $this->rollNoFor($studentId, $classId, $examId);
 
+        $hasEnteredMarks = $studentId && $marks->isNotEmpty() && $marks->contains(function ($item) {
+            return ($item->mark_theory !== null && $item->mark_theory !== '')
+                || ($item->total_marks !== null && $item->total_marks !== '')
+                || (!empty($item->internal_assessment_marks) && $item->internal_assessment_marks !== '[]' && $item->internal_assessment_marks !== '{}');
+        });
+
         $rows = [];
         $grandTotal = 0.0;
         $maxTotal = 0.0;
@@ -277,12 +522,22 @@ class MarksheetController extends Controller
                 'subject' => $this->marksheetSubjectName($subject->subject_name ?? $subject->name ?? '-'),
                 'special_subject_formatting' => !empty($subject->do_not_print_in_main_scholastic_area),
                 'terms' => [],
-                'grand_total' => 0,
+                'grand_total' => '',
                 'grade' => '',
                 'result' => '',
             ];
 
             foreach ($layout['scholastic_terms'] as $termIndex => $term) {
+                if (!$hasEnteredMarks) {
+                    $row['terms'][$termIndex] = [
+                        'cells' => array_fill(0, count($term['columns'] ?? []), ''),
+                        'total' => '',
+                        'grade' => '',
+                        'result' => '',
+                    ];
+                    continue;
+                }
+
                 $termExam = $this->examForTerm($term, $termIndex, $examMap, $exam);
                 $ptExam = $this->ptExamForTerm($term, $termIndex, $examMap);
                 $termExamId = $termExam?->id;
@@ -323,29 +578,39 @@ class MarksheetController extends Controller
                     'grade' => $this->gradeFor($termTotal, $termMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null),
                     'result' => $termFailed ? 'Fail' : 'Pass',
                 ];
-                $row['grand_total'] += $termTotal;
+                $row['grand_total'] = (float) ($row['grand_total'] ?? 0) + $termTotal;
             }
 
-            $rowMax = max(1, $this->rowMax($layout));
-            $rowFailed = $this->isBelowFailPercent($row['grand_total'], $rowMax, $exam);
-            if (empty($row['special_subject_formatting'])) {
-                $hasFailingSubject = $hasFailingSubject || $rowFailed;
+            if ($hasEnteredMarks) {
+                $rowMax = max(1, $this->rowMax($layout));
+                $rowFailed = $this->isBelowFailPercent((float) $row['grand_total'], $rowMax, $exam);
+                if (empty($row['special_subject_formatting'])) {
+                    $hasFailingSubject = $hasFailingSubject || $rowFailed;
+                }
+                $row['grade'] = $this->gradeFor((float) $row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
+                $row['result'] = $rowFailed ? 'Fail' : 'Pass';
             }
-            $row['grade'] = $this->gradeFor($row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
-            $row['result'] = $rowFailed ? 'Fail' : 'Pass';
             $rows[] = $row;
         }
 
-        $percentageRaw = $maxTotal > 0 ? ($grandTotal / $maxTotal) * 100 : null;
-        $percentage = $percentageRaw !== null ? $this->roundPercentage($percentageRaw) : null;
-        $result = $percentageRaw === null
-            ? ''
-            : ($hasFailingSubject || $this->isBelowFailPercent($grandTotal, $maxTotal, $exam) ? 'Fail' : 'Pass');
-        $remarks = $result === 'Fail'
-            ? 'Needs Improvement'
-            : ($logic['default_remark'] ?? 'Passed and promoted to next class.');
+        if (!$hasEnteredMarks) {
+            $grandTotal = null;
+            $percentage = null;
+            $result = '';
+            $remarks = '';
+        } else {
+            $percentageRaw = $maxTotal > 0 ? ($grandTotal / $maxTotal) * 100 : null;
+            $percentage = $percentageRaw !== null ? $this->roundPercentage($percentageRaw) : null;
+            $result = $percentageRaw === null
+                ? ''
+                : ($hasFailingSubject || $this->isBelowFailPercent($grandTotal, $maxTotal, $exam) ? 'Fail' : 'Pass');
+            $remarks = $result === 'Fail'
+                ? 'Needs Improvement'
+                : ($logic['default_remark'] ?? 'Passed and promoted to next class.');
+        }
 
         return [
+            'is_blank' => !$hasEnteredMarks,
             'layout' => $layout,
             'grading' => $grading,
             'student' => $student,
@@ -359,7 +624,7 @@ class MarksheetController extends Controller
             'percentage' => $percentage,
             'result' => $result,
             'remarks' => $remarks,
-            'attendance' => $this->collectiveAttendanceForMarksheet($studentId, $classId, $examId, $this->resolveDynamicSessionYear($request), $request->input('attendance', '')),
+            'attendance' => $hasEnteredMarks ? $this->collectiveAttendanceForMarksheet($studentId, $classId, $examId, $this->resolveDynamicSessionYear($request), $request->input('attendance', '')) : '',
             'date' => $request->input('date', now()->format('F d, Y')),
             'session_year' => $this->resolveDynamicSessionYear($request),
         ];
@@ -497,27 +762,77 @@ class MarksheetController extends Controller
         return (object) ['name' => $name];
     }
 
-    private function studentsForClass(?int $classId)
+    private function studentsForClass(?int $classId = null, ?string $className = null, ?string $sectionName = null)
     {
         if (!Schema::connection('dynamic')->hasTable('student_registration')) {
             return collect();
         }
 
+        if (!$classId && !$className) {
+            return collect();
+        }
+
         $class = $classId ? Classes::query()->find($classId) : null;
+        if (!$className && $class) {
+            $className = $class->class_name;
+        }
+
+        $siblingClassIds = [];
+        if ($className) {
+            $siblingClassIds = Classes::query()
+                ->where('class_name', $className)
+                ->orWhere('class_name', ltrim($className, '0'))
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+        } elseif ($classId) {
+            $siblingClassIds = [(string) $classId];
+        }
+
+        $sectionClassIds = [];
+        if ($sectionName) {
+            $secQuery = Classes::query()
+                ->where(function ($q) use ($sectionName) {
+                    $q->where('section_name', $sectionName)
+                        ->orWhere('section_name', 'like', '%' . $sectionName . '%');
+                });
+            if ($className) {
+                $secQuery->where(function ($q) use ($className) {
+                    $q->where('class_name', $className)
+                        ->orWhere('class_name', ltrim($className, '0'));
+                });
+            }
+            $sectionClassIds = $secQuery->pluck('id')->map(fn ($id) => (string) $id)->all();
+        }
 
         return DB::connection('dynamic')
             ->table('student_registration')
-            ->where('is_archived', 0)
-            ->when($classId, function ($q) use ($classId, $class) {
-                $q->where(function ($inner) use ($classId, $class) {
+            ->where(function ($q) {
+                $q->where('is_archived', 0)->orWhereNull('is_archived');
+            })
+            ->where(function ($inner) use ($classId, $className, $siblingClassIds) {
+                if (!empty($siblingClassIds)) {
+                    $inner->whereIn('class_id', $siblingClassIds);
+                } elseif ($classId) {
                     $inner->where('class_id', (string) $classId);
-                    if ($class && !empty($class->class_name)) {
-                        $inner->orWhere('class_name', $class->class_name);
+                }
+                if ($className) {
+                    $inner->orWhere('class_name', $className)
+                        ->orWhere('class_name', ltrim($className, '0'))
+                        ->orWhereRaw('LOWER(class_name) = ?', [strtolower($className)]);
+                }
+            })
+            ->when($sectionName, function ($q) use ($sectionName, $sectionClassIds) {
+                $q->where(function ($sub) use ($sectionName, $sectionClassIds) {
+                    $sub->where('section_name', $sectionName)
+                        ->orWhere('section_name', 'like', '%' . $sectionName . '%');
+                    if (!empty($sectionClassIds)) {
+                        $sub->orWhereIn('class_id', $sectionClassIds);
                     }
                 });
             })
             ->orderBy('student_name')
-            ->limit(300)
+            ->limit(500)
             ->get();
     }
 
@@ -527,7 +842,13 @@ class MarksheetController extends Controller
             return null;
         }
 
-        return DB::connection('dynamic')->table('student_registration')->where('is_archived', 0)->where('id', $studentId)->first();
+        return DB::connection('dynamic')
+            ->table('student_registration')
+            ->where(function ($q) {
+                $q->where('is_archived', 0)->orWhereNull('is_archived');
+            })
+            ->where('id', $studentId)
+            ->first();
     }
 
     private function subjectsFor(?int $classId, ?int $studentId)
@@ -735,6 +1056,7 @@ class MarksheetController extends Controller
         }
 
         $className = $classId ? Classes::query()->where('id', $classId)->value('class_name') : null;
+        $hasExamColumn = Schema::connection('dynamic')->hasColumn('academic_student_roll_no', 'exam_id');
 
         $row = DB::connection('dynamic')
             ->table('academic_student_roll_no')
@@ -749,7 +1071,7 @@ class MarksheetController extends Controller
                     }
                 });
             })
-            ->when($examId, function ($q) use ($examId) {
+            ->when($examId && $hasExamColumn, function ($q) use ($examId) {
                 $q->where(function ($inner) use ($examId) {
                     $inner->where('exam_id', (string) $examId)
                         ->orWhereNull('exam_id')
@@ -965,43 +1287,61 @@ class MarksheetController extends Controller
     private function cbseTermValues($termMark, $ptMark, $ptExam): array
     {
         $theory = $this->numericMark($this->markValue($termMark, 'mark_theory'));
-        $pt = $this->convertedPtMark($ptMark, $ptExam);
-        $nb = $this->internalAssessmentValue($termMark, ['NB', 'Notebook']);
+        $pt = $this->convertedPtMark($ptMark, $ptExam, $termMark);
+        $nb = $this->internalAssessmentValue($termMark, ['NB', 'Notebook', 'Portfolio', 'PF']);
         $mas = $this->internalAssessmentValue($termMark, ['MA/MAS', 'MAS', 'MA', 'Multiple Assessment']);
         $sea = $this->internalAssessmentValue($termMark, ['SE', 'SEA', 'Subject Enrichment']);
         $internalTotal = min(20, $pt + $nb + $mas + $sea);
 
         return [
-            'theory' => $this->roundMark($theory),
+            'theory' => $theory,
             'pt' => $pt,
             'nb' => $nb,
             'mas' => $mas,
             'sea' => $sea,
-            'internal_total' => $this->roundMark($internalTotal),
-            'final_total' => $this->roundMark(min(100, $theory + $internalTotal)),
+            'internal_total' => round($internalTotal, 2),
+            'final_total' => round(min(100, $theory + $internalTotal), 2),
         ];
     }
 
-    private function convertedPtMark($ptMark, $ptExam): float
+    private function convertedPtMark($ptMark, $ptExam, $termMark = null): float
     {
-        if (!$ptMark) {
+        if (!$ptMark && !$termMark) {
             return 0.0;
         }
 
-        $obtained = $this->numericMark($this->markValue($ptMark, 'mark_theory'));
+        $raw = null;
+        if ($ptMark) {
+            $raw = $this->markValue($ptMark, 'mark_theory');
+            if ($raw === '' || $raw === null) {
+                $raw = $this->markValue($ptMark, 'total_marks');
+            }
+        }
+
+        if (($raw === '' || $raw === null) && $termMark) {
+            $internal = $this->internalAssessmentMarks($termMark);
+            foreach ($internal as $key => $value) {
+                $norm = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
+                if (in_array($norm, ['pt', 'periodictest', 'pt1', 'pt2'], true) && $value !== null && $value !== '') {
+                    $raw = $value;
+                    break;
+                }
+            }
+        }
+
+        if ($raw === '' || $raw === null || !is_numeric($raw)) {
+            return 0.0;
+        }
+
+        $obtained = (float) $raw;
         if ($obtained <= 0) {
-            $obtained = $this->numericMark($this->markValue($ptMark, 'total_marks'));
+            return 0.0;
         }
 
-        $max = (float) ($ptExam->max_marks_theory ?? 0);
-        if ($max <= 0) {
-            $max = (float) ($ptExam->max_marks ?? 0);
-        }
-        if ($max <= 0) {
-            $max = max(1, $obtained);
-        }
+        // Converted Marks = (Obtained PT Marks ÷ 40) × 5, rounded off to nearest whole number
+        $converted = ($obtained / 40.0) * 5.0;
 
-        return $this->roundPtMark(min(5, ($obtained / $max) * 5));
+        return (float) round(min(5.0, max(0.0, $converted)), 0, PHP_ROUND_HALF_UP);
     }
 
     private function internalAssessmentValue($mark, array $keys): float
@@ -1018,7 +1358,7 @@ class MarksheetController extends Controller
         foreach ($internalMarks as $key => $value) {
             $normalizedKey = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
             if (in_array($normalizedKey, $normalizedKeys, true)) {
-                return $this->roundMark(min(5, $this->numericMark($value)));
+                return min(5.0, $this->numericMark($value));
             }
         }
 
@@ -1032,12 +1372,12 @@ class MarksheetController extends Controller
 
     private function roundMark(float $value): float
     {
-        return round($value, 0, PHP_ROUND_HALF_UP);
+        return round($value, 2, PHP_ROUND_HALF_UP);
     }
 
     private function roundPtMark(float $value): float
     {
-        return $this->roundMark($value);
+        return round($value, 0, PHP_ROUND_HALF_UP);
     }
 
     private function roundPercentage(float $value): float
@@ -1052,7 +1392,11 @@ class MarksheetController extends Controller
 
     private function formatMarkValue(float $value): string
     {
-        return number_format($this->roundMark($value), 2, '.', '');
+        if (abs($value - round($value)) < 0.005) {
+            return (string) (int) round($value);
+        }
+
+        return number_format($value, 2, '.', '');
     }
 
     private function internalAssessmentMarks($mark): array
@@ -1133,24 +1477,40 @@ class MarksheetController extends Controller
             return '';
         }
 
-        $range = DB::connection('dynamic')->table('grademaster')
-            ->where('is_delete', 0)
-            ->whereRaw('LOWER(TRIM(subject_type)) = ?', [strtolower($subjectType)])
+        $query = DB::connection('dynamic')->table('grademaster')
+            ->where(function ($q) {
+                if (Schema::connection('dynamic')->hasColumn('grademaster', 'is_delete')) {
+                    $q->where('is_delete', 0)->orWhereNull('is_delete');
+                }
+            })
             ->whereRaw('CAST(min_per AS DECIMAL(10,2)) <= ?', [$marks])
             ->whereRaw('CAST(max_per AS DECIMAL(10,2)) >= ?', [$marks])
-            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC')
-            ->get()
-            ->first(function ($item) use ($className) {
-                $classes = collect(json_decode($item->groups ?? '[]', true) ?: []);
-                return $classes->isEmpty() || $classes->contains($className);
-            });
+            ->orderByRaw('CAST(min_per AS DECIMAL(10,2)) DESC');
+
+        if (!empty($subjectType)) {
+            if (Schema::connection('dynamic')->hasColumn('grademaster', 'subject_type')) {
+                $query->whereRaw('LOWER(TRIM(subject_type)) = ?', [strtolower(trim($subjectType))]);
+            } elseif (Schema::connection('dynamic')->hasColumn('grademaster', 'applicable')) {
+                $query->where(function ($q) use ($subjectType) {
+                    $q->whereRaw('LOWER(TRIM(applicable)) = ?', [strtolower(trim($subjectType))])
+                        ->orWhereNull('applicable')
+                        ->orWhere('applicable', '');
+                });
+            }
+        }
+
+        $range = $query->get()->first(function ($item) use ($className) {
+            $classes = collect(json_decode($item->groups ?? '[]', true) ?: []);
+            return $classes->isEmpty() || !$className || $classes->contains($className);
+        });
 
         return (string) ($range->grade ?? '');
     }
 
     private function resolveDynamicSessionYear(Request $request): ?string
     {
-        $year = $request->session()->get('selectedYear') ?: $request->cookie('selectedYear');
+        $year = $request->hasSession() ? $request->session()->get('selectedYear') : null;
+        $year = $year ?: $request->cookie('selectedYear');
         $year = $year ?: Config::get('database.connections.dynamic.database');
         if (is_string($year) && preg_match('/^\d{4}_\d{4}$/', $year)) {
             return $year;
@@ -1158,4 +1518,120 @@ class MarksheetController extends Controller
 
         return null;
     }
+
+    private function resolveExamForClass(?int $examId, ?int $classId = null, ?string $className = null): ?Exam
+    {
+        if (!$examId) {
+            return null;
+        }
+
+        $exam = Exam::with('classInfo')->find($examId);
+        if (!$exam) {
+            return null;
+        }
+
+        // 1. If exam directly matches class_id
+        if ($classId && (int) $exam->class_id === (int) $classId) {
+            return $exam;
+        }
+
+        // 2. If exam directly matches class_name
+        $examClassName = optional($exam->classInfo)->class_name;
+        if ($className && $examClassName && (
+            (string) $examClassName === (string) $className ||
+            ltrim((string) $examClassName, '0') === ltrim((string) $className, '0')
+        )) {
+            return $exam;
+        }
+
+        // 3. Search siblings in the same exam group or with identical exam_name and exam_type
+        $siblingQuery = Exam::with('classInfo')->where('id', '!=', $examId);
+
+        if (!empty($exam->exam_group_id)) {
+            $siblingQuery->where('exam_group_id', $exam->exam_group_id);
+        } else {
+            $siblingQuery->where('exam_name', $exam->exam_name);
+            if (!empty($exam->exam_type)) {
+                $siblingQuery->where('exam_type', $exam->exam_type);
+            }
+        }
+
+        $siblings = $siblingQuery->get();
+
+        foreach ($siblings as $sibling) {
+            if ($classId && (int) $sibling->class_id === (int) $classId) {
+                return $sibling;
+            }
+            $sibClassName = optional($sibling->classInfo)->class_name;
+            if ($className && $sibClassName && (
+                (string) $sibClassName === (string) $className ||
+                ltrim((string) $sibClassName, '0') === ltrim((string) $className, '0')
+            )) {
+                return $sibling;
+            }
+        }
+
+        // 4. If neither classId nor className was passed, return the original exam
+        if (!$classId && !$className) {
+            return $exam;
+        }
+
+        return $exam;
+    }
+
+    private function hasMarksForClassAndExam(?int $classId, ?int $examId = null, ?string $className = null, ?string $sectionName = null): bool
+    {
+        if (!$classId && !$className) {
+            return true;
+        }
+
+        if (!Schema::connection('dynamic')->hasTable('academic_students_marks') || !Schema::connection('dynamic')->hasTable('previosly_saved_marks_entry')) {
+            return false;
+        }
+
+        $classIds = [];
+        if ($classId) {
+            $classIds = $this->marksClassIdsFor($classId);
+            $cls = Classes::find($classId);
+            if ($cls && !$className) {
+                $className = $cls->class_name;
+            }
+        }
+        if ($className) {
+            $siblingIds = Classes::query()->where('class_name', $className)->orWhere('class_name', ltrim($className, '0'))->pluck('id')->all();
+            $classIds = array_values(array_unique(array_merge($classIds, $siblingIds)));
+        }
+
+        $examIds = [];
+        if ($examId) {
+            $examIds[] = $examId;
+            $resolvedExam = $this->resolveExamForClass($examId, $classId, $className);
+            if ($resolvedExam) {
+                $examIds[] = (int) $resolvedExam->id;
+            }
+            $exam = Exam::find($examId);
+            if ($exam && !empty($exam->exam_group_id)) {
+                $siblingExamIds = Exam::where('exam_group_id', $exam->exam_group_id)->pluck('id')->all();
+                $examIds = array_merge($examIds, $siblingExamIds);
+            }
+        }
+        $examIds = array_values(array_unique(array_filter($examIds)));
+
+        $query = DB::connection('dynamic')
+            ->table('previosly_saved_marks_entry as me')
+            ->join('academic_students_marks as sm', 'sm.marks_id', '=', 'me.id')
+            ->when(count($classIds) > 0, fn ($q) => $q->whereIn('me.class_id', array_map('strval', $classIds)))
+            ->when(count($examIds) > 0, fn ($q) => $q->whereIn('me.exam_id', array_map('strval', $examIds)))
+            ->when(!empty($sectionName), fn ($q) => $q->where('me.section_name', $sectionName));
+
+        if (Schema::connection('dynamic')->hasColumn('previosly_saved_marks_entry', 'is_delete')) {
+            $query->where(fn ($q) => $q->where('me.is_delete', 0)->orWhereNull('me.is_delete'));
+        }
+        if (Schema::connection('dynamic')->hasColumn('academic_students_marks', 'is_delete')) {
+            $query->where(fn ($q) => $q->where('sm.is_delete', 0)->orWhereNull('sm.is_delete'));
+        }
+
+        return $query->exists();
+    }
 }
+

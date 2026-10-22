@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AttendanceController extends Controller
 {
@@ -241,24 +242,33 @@ class AttendanceController extends Controller
         $students = $this->studentOptions($filters['class_id'], $filters['section_name'], $studentSearch);
 
         $selectedStudent = $filters['student_id'] ? Student_registration::find($filters['student_id']) : null;
-        $history = collect();
-        $summary = $this->emptySummary(0);
+        $historyQuery = AttendanceDetail::with(['attendance.className', 'student'])
+            ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
+            ->where('academic_attendance.is_delete', 0)
+            ->whereHas('attendance', function ($query) use ($filters) {
+                $this->applyAttendanceFilters($query, $filters);
+            })
+            ->when($selectedStudent, function ($q) use ($selectedStudent) {
+                $q->where('academic_attendance_details.student_id', $selectedStudent->id);
+            })
+            ->when(!$selectedStudent && $studentSearch !== '', function ($q) use ($studentSearch) {
+                $q->whereHas('student', function ($sq) use ($studentSearch) {
+                    $like = '%' . str_replace(' ', '%', $studentSearch) . '%';
+                    $sq->where(function ($inner) use ($like) {
+                        $inner->where('student_name', 'like', $like)
+                            ->orWhere('form_number', 'like', $like)
+                            ->orWhere('scholar_no', 'like', $like);
+                    });
+                });
+            })
+            ->orderByDesc('academic_attendance.attendance_date')
+            ->select('academic_attendance_details.*');
 
-        if ($selectedStudent) {
-            $historyQuery = AttendanceDetail::with('attendance.className')
-                ->where('student_id', $selectedStudent->id)
-                ->whereHas('attendance', function ($query) use ($filters) {
-                    $this->applyAttendanceFilters($query, $filters);
-                })
-                ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
-                ->orderByDesc('academic_attendance.attendance_date')
-                ->select('academic_attendance_details.*');
+        $summary = $this->summaryFromDetails((clone $historyQuery)->get());
+        $history = $historyQuery->paginate(50)->appends($request->query());
 
-            $summary = $this->summaryFromDetails((clone $historyQuery)->get());
-            $history = $historyQuery->paginate(40)->appends($request->query());
-        }
-        $monthlyDetail = $selectedStudent && $filters['month'] && $filters['class_id'] && $filters['section_name']
-            ? $this->monthWiseAttendanceMatrix($filters, $selectedStudent->id)
+        $monthlyDetail = ($filters['class_id'] && $filters['section_name'])
+            ? $this->monthWiseAttendanceMatrix($filters, $selectedStudent ? $selectedStudent->id : null)
             : null;
 
         return view('backend.AcademicsModules.StudentAttandenc', compact(
@@ -320,6 +330,54 @@ class AttendanceController extends Controller
         ));
     }
 
+    public function monthlyReport(Request $request)
+    {
+        $filters = $this->filters($request);
+
+        $selectedYear = (int) ($request->query('year') ?: now()->format('Y'));
+        $selectedMonth = (int) ($request->query('month') ?: now()->format('m'));
+
+        if ($request->filled('month_year')) {
+            $parts = explode('-', (string) $request->query('month_year'));
+            if (count($parts) === 2) {
+                $selectedYear = (int) $parts[0];
+                $selectedMonth = (int) $parts[1];
+            }
+        }
+
+        $filters['year'] = $selectedYear;
+        $filters['month'] = sprintf('%04d-%02d', $selectedYear, $selectedMonth);
+
+        $classes = $this->classes();
+        $sections = $this->sections($filters['class_id']);
+
+        $selectedClass = $filters['class_id']
+            ? (Classes::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first()
+                ?: (class_exists(Classname::class) ? Classname::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first() : null))
+            : null;
+
+        $report = ($filters['class_id'] && $filters['section_name'])
+            ? $this->monthWiseAttendanceMatrix($filters)
+            : null;
+
+        $availableYears = range((int) now()->format('Y') - 2, (int) now()->format('Y') + 2);
+        if (!in_array($selectedYear, $availableYears)) {
+            $availableYears[] = $selectedYear;
+            sort($availableYears);
+        }
+
+        return view('backend.AcademicsModules.attendance_monthly_report', [
+            'classes' => $classes,
+            'selectedClass' => $selectedClass,
+            'sections' => $sections,
+            'filters' => $filters,
+            'selectedYear' => $selectedYear,
+            'selectedMonth' => $selectedMonth,
+            'availableYears' => $availableYears,
+            'report' => $report,
+        ]);
+    }
+
     public function collective(Request $request)
     {
         $filters = $this->collectiveFilters($request);
@@ -340,9 +398,52 @@ class AttendanceController extends Controller
         $classes = $this->classes();
         $sections = $this->sections($filters['class_id']);
         $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
-        $exams = Exam::with('classInfo')
-            ->orderByDesc('id')
-            ->get();
+        $selectedClass = null;
+        $selectedClassName = null;
+        if (!empty($filters['class_id'])) {
+            $byName = Classes::where('class_name', (string) $filters['class_id'])->first();
+            if ($byName) {
+                $selectedClass = $byName;
+                $selectedClassName = $byName->class_name;
+            } else {
+                $byId = Classes::find((int) $filters['class_id']);
+                if ($byId) {
+                    $selectedClass = $byId;
+                    $selectedClassName = $byId->class_name;
+                } else {
+                    $selectedClassName = (string) $filters['class_id'];
+                }
+            }
+        }
+
+        $classIds = $selectedClassName
+            ? Classes::where('class_name', $selectedClassName)->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : [];
+
+        $examsQuery = Exam::query()->orderByDesc('id');
+        if ($selectedClassName) {
+            $examsQuery->where(function ($q) use ($classIds, $selectedClassName) {
+                if (!empty($classIds)) {
+                    $q->whereIn('class_id', $classIds);
+                }
+                if (!is_numeric($selectedClassName)) {
+                    $q->orWhere('class_id', $selectedClassName);
+                }
+            });
+        }
+        $exams = $examsQuery->get()->unique('exam_name')->values();
+
+        if ($filters['exam_id']) {
+            if ($exams->isEmpty()) {
+                $filters['exam_id'] = null;
+                $filters['exam_name'] = null;
+            } elseif (!$exams->contains('id', (int) $filters['exam_id'])) {
+                $prevExam = Exam::find($filters['exam_id']);
+                $matchingSameName = $prevExam ? $exams->firstWhere('exam_name', $prevExam->exam_name) : null;
+                $filters['exam_id'] = $matchingSameName ? $matchingSameName->id : null;
+                $filters['exam_name'] = $matchingSameName ? $matchingSameName->exam_name : null;
+            }
+        }
 
         $students = collect();
         $collectiveRows = collect();
@@ -380,7 +481,8 @@ class AttendanceController extends Controller
             'sundays',
             'holidays',
             'editingCollective',
-            'savedCollectives'
+            'savedCollectives',
+            'selectedClass'
         ));
     }
 
@@ -457,18 +559,71 @@ class AttendanceController extends Controller
         return redirect()->route('academic.attendance.collective')->with('success', 'Collective attendance saved successfully.');
     }
 
-    public function destroyCollective(AttendanceCollective $collective)
+    public function destroyCollective($collective)
     {
-        $collective->update(['is_delete' => 1]);
+        $model = $this->resolveCollectiveModel($collective);
+        if (!$model) {
+            abort(404, 'Attendance collective record not found.');
+        }
+
+        $model->update(['is_delete' => 1]);
 
         return redirect()->route('academic.attendance.collective')->with('success', 'Collective attendance deleted successfully.');
     }
 
-    public function printCollective(AttendanceCollective $collective)
+    public function printCollective($collective)
     {
-        $collective->load('details', 'teacher', 'className');
+        $model = $this->resolveCollectiveModel($collective);
+        if (!$model) {
+            abort(404, 'Attendance collective record not found.');
+        }
 
-        return view('backend.AcademicsModules.attendance_collective_print', compact('collective'));
+        $model->load('details', 'teacher', 'className');
+
+        return view('backend.AcademicsModules.attendance_collective_print', ['collective' => $model]);
+    }
+
+    private function resolveCollectiveModel($collective): ?AttendanceCollective
+    {
+        if ($collective instanceof AttendanceCollective) {
+            return $collective;
+        }
+
+        $id = is_numeric($collective) ? (int) $collective : null;
+        if (!$id) {
+            return null;
+        }
+
+        // Try standard find
+        $model = AttendanceCollective::where('is_delete', 0)->find($id);
+        if ($model) {
+            return $model;
+        }
+
+        // Try dynamic connection
+        try {
+            $model = AttendanceCollective::on('dynamic')->where('is_delete', 0)->find($id);
+            if ($model) {
+                return $model;
+            }
+        } catch (\Throwable $e) {}
+
+        // Fallback across available session databases
+        $dbs = ['2025_2026', '2026_2027', 'gb_school_erp_26'];
+        foreach ($dbs as $dbName) {
+            try {
+                $exists = DB::select("SELECT id FROM `$dbName`.`academic_attendance_collectives` WHERE id = ? AND (is_delete = 0 OR is_delete IS NULL)", [$id]);
+                if (!empty($exists)) {
+                    Config::set('database.connections.dynamic.database', $dbName);
+                    Config::set('database.default', 'dynamic');
+                    DB::purge('dynamic');
+                    DB::reconnect('dynamic');
+                    return AttendanceCollective::on('dynamic')->find($id);
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return null;
     }
 
     private function filters(Request $request): array
@@ -613,7 +768,8 @@ class AttendanceController extends Controller
         $month = Carbon::createFromFormat('Y-m', $monthStr);
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
-        $days = range(1, (int) $end->format('d'));
+        $daysInMonth = (int) $end->format('d');
+        $days = range(1, $daysInMonth);
         $nonWorkingDays = $this->nonWorkingDaysForRange($start, $end);
 
         $studentsQuery = $this->studentsForClass($filters['class_id'], $filters['section_name']);
@@ -622,17 +778,100 @@ class AttendanceController extends Controller
         }
         $students = $studentsQuery->get();
 
+        $classObj = Classes::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first();
+        if (!$classObj && class_exists(Classname::class)) {
+            $classObj = Classname::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first();
+        }
+        $classIds = array_values(array_unique(array_filter([
+            $filters['class_id'],
+            optional($classObj)->id,
+            optional($classObj)->class_name
+        ])));
+
         $attendanceRecords = Attendance::with('details')
             ->where('is_delete', 0)
-            ->where('class_id', $filters['class_id'])
+            ->whereIn('class_id', $classIds)
             ->where('section_name', $filters['section_name'])
-            ->where('academic_session', $filters['academic_session'])
             ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
+            ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
+                $q->where('academic_session', $filters['academic_session']);
+            })
             ->get()
             ->keyBy(fn ($record) => optional($record->attendance_date)->format('Y-m-d'));
 
-        $rows = $students->map(function ($student) use ($days, $month, $attendanceRecords, $nonWorkingDays) {
-            $presentDays = 0;
+        // Calculate "Till Previous Month"
+        $monthNum = (int) $month->format('m');
+        $yearNum = (int) $month->format('Y');
+        $sessionStart = ($monthNum >= 4)
+            ? Carbon::createFromDate($yearNum, 4, 1)->startOfDay()
+            : Carbon::createFromDate($yearNum - 1, 4, 1)->startOfDay();
+
+        $hasPrevPeriod = $start->greaterThan($sessionStart);
+        $prevWorkingDays = 0;
+        $prevPresentCounts = collect();
+
+        if ($hasPrevPeriod) {
+            $prevStart = $sessionStart->copy();
+            $prevEnd = $start->copy()->subDay()->endOfDay();
+
+            $prevQuery = Attendance::where('is_delete', 0)
+                ->whereIn('class_id', $classIds)
+                ->where('section_name', $filters['section_name'])
+                ->whereBetween('attendance_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
+                ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
+                    $q->where('academic_session', $filters['academic_session']);
+                });
+            $this->applyWorkingDayOnlyFilter($prevQuery);
+            $prevWorkingDays = (int) $prevQuery->distinct('attendance_date')->count('attendance_date');
+
+            $prevPresentQuery = AttendanceDetail::query()
+                ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
+                ->where('academic_attendance.is_delete', 0)
+                ->whereIn('academic_attendance.class_id', $classIds)
+                ->where('academic_attendance.section_name', $filters['section_name'])
+                ->whereBetween('academic_attendance.attendance_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
+                ->whereIn('academic_attendance_details.status', ['present', 'half_day'])
+                ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
+                    $q->where('academic_attendance.academic_session', $filters['academic_session']);
+                })
+                ->when(true, function ($q) {
+                    $this->applyWorkingDayOnlyFilter($q);
+                });
+
+            if ($onlyStudentId) {
+                $prevPresentQuery->where('academic_attendance_details.student_id', $onlyStudentId);
+            }
+
+            $prevPresentCounts = $prevPresentQuery
+                ->selectRaw('academic_attendance_details.student_id, SUM(CASE WHEN academic_attendance_details.status = "half_day" THEN 0.5 ELSE 1.0 END) as total_present')
+                ->groupBy('academic_attendance_details.student_id')
+                ->pluck('total_present', 'student_id');
+        }
+
+        // Fetch latest roll numbers generated from Roll No Tool (academic_student_roll_no)
+        $rollMap = collect();
+        $studentIds = $students->pluck('id')->filter()->values();
+        if ($studentIds->isNotEmpty()) {
+            $hasRollTable = Schema::connection('dynamic')->hasTable('academic_student_roll_no');
+            $rollConn = $hasRollTable
+                ? 'dynamic'
+                : (Schema::hasTable('academic_student_roll_no') ? Config::get('database.default') : null);
+
+            if ($rollConn) {
+                $rollRows = DB::connection($rollConn)
+                    ->table('academic_student_roll_no')
+                    ->whereIn('student_id', $studentIds)
+                    ->whereNotNull('roll_no')
+                    ->where('roll_no', '!=', '')
+                    ->orderBy('id', 'desc')
+                    ->get(['student_id', 'roll_no']);
+
+                $rollMap = $rollRows->unique('student_id')->pluck('roll_no', 'student_id');
+            }
+        }
+
+        $rows = $students->map(function ($student) use ($days, $month, $attendanceRecords, $nonWorkingDays, $prevWorkingDays, $prevPresentCounts, $rollMap) {
+            $presentDays = 0.0;
             $workingDays = 0;
             $cells = [];
 
@@ -641,9 +880,11 @@ class AttendanceController extends Controller
                 $nonWorking = $nonWorkingDays[$date] ?? null;
 
                 if ($nonWorking) {
+                    $isSunday = ($nonWorking['type'] === 'sunday');
                     $cells[$day] = [
-                        'label' => $nonWorking['type'] === 'sunday' ? 'S' : 'H',
-                        'class' => 'day-holiday',
+                        'label' => $isSunday ? 'S' : 'H',
+                        'class' => $isSunday ? 'day-sunday' : 'day-holiday',
+                        'type' => $nonWorking['type'],
                         'title' => $nonWorking['label'],
                     ];
                     continue;
@@ -654,6 +895,7 @@ class AttendanceController extends Controller
                     $cells[$day] = [
                         'label' => '-',
                         'class' => 'day-empty',
+                        'type' => 'empty',
                         'title' => 'Attendance not taken',
                     ];
                     continue;
@@ -666,34 +908,67 @@ class AttendanceController extends Controller
                 $cells[$day] = [
                     'label' => $label,
                     'class' => 'day-' . ($status ?: 'empty'),
+                    'type' => $status ?: 'empty',
                     'title' => $status ? ucwords(str_replace('_', ' ', $status)) : 'Not marked',
                 ];
 
                 if ($status === 'present') {
-                    $presentDays++;
+                    $presentDays += 1.0;
                 } elseif ($status === 'half_day') {
                     $presentDays += 0.5;
                 }
             }
 
-            $percentage = $workingDays > 0 ? round(($presentDays / $workingDays) * 100, 2) : 0;
+            $percentage = $workingDays > 0 ? round(($presentDays / $workingDays) * 100, 2) : 0.00;
+
+            $prevPresent = (float) ($prevPresentCounts[$student->id] ?? 0);
+            $prevPercentage = $prevWorkingDays > 0 ? round(($prevPresent / $prevWorkingDays) * 100, 2) : 0.00;
+
+            $overallWorking = $workingDays + $prevWorkingDays;
+            $overallPresent = $presentDays + $prevPresent;
+            $overallPercentage = $overallWorking > 0 ? round(($overallPresent / $overallWorking) * 100, 2) : 0.00;
+
+            $latestRoll = $rollMap->get($student->id) ?? $rollMap->get((string) $student->id);
+            $resolvedRollNo = !empty($latestRoll)
+                ? (string) $latestRoll
+                : (string) ($student->roll_no ?? $student->roll_number ?? '');
 
             return [
                 'student_id' => $student->id,
                 'student_name' => $student->student_name,
-                'roll_no' => $student->form_number,
-                'scholar_no' => $student->scholar_no ?: $student->id,
+                'roll_no' => $resolvedRollNo,
+                'scholar_no' => $student->scholar_no ?: ($student->form_number ?: $student->id),
                 'cells' => $cells,
                 'present_days' => $presentDays,
                 'working_days' => $workingDays,
                 'percentage' => $percentage,
+                'current_month' => [
+                    'days' => (float) $workingDays,
+                    'present' => (float) $presentDays,
+                    'percentage' => (float) $percentage,
+                ],
+                'till_prev_month' => [
+                    'days' => (float) $prevWorkingDays,
+                    'present' => (float) $prevPresent,
+                    'percentage' => (float) $prevPercentage,
+                ],
+                'overall' => [
+                    'days' => (float) $overallWorking,
+                    'present' => (float) $overallPresent,
+                    'percentage' => (float) $overallPercentage,
+                ],
             ];
         })->values();
 
         return [
             'month_label' => $month->format('F Y'),
+            'month_short' => $month->format('M'),
+            'month_num' => (int) $month->format('m'),
+            'year' => (int) $month->format('Y'),
             'days' => $days,
+            'days_in_month' => $daysInMonth,
             'rows' => $rows,
+            'prev_working_days' => $prevWorkingDays,
         ];
     }
 

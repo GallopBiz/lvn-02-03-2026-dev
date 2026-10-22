@@ -8,6 +8,25 @@
     </div>
     <div class="separator-breadcrumb border-top"></div>
 
+    @if(!empty($missingMarksClasses) && count($missingMarksClasses) > 0)
+        <div class="alert alert-warning mb-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h5 class="alert-heading mb-1 font-weight-bold">
+                        <i class="i-Warning-Window mr-2 font-weight-bold"></i> Marks Not Entered
+                    </h5>
+                    <p class="mb-0">
+                        Marks have not been entered yet for class: <strong>{{ implode(', ', $missingMarksClasses) }}</strong>.
+                        Report cards and mark totals will show blank or zero marks until entered in the marks entry module.
+                    </p>
+                </div>
+                <a href="{{ url('marks') }}" target="_blank" class="btn btn-warning font-weight-bold text-dark ml-3 text-nowrap">
+                    <i class="i-Pen-4 mr-1"></i> Go to Marks Entry
+                </a>
+            </div>
+        </div>
+    @endif
+
     <div class="card mb-4">
         <div class="card-body">
             <form method="GET" action="{{ route('academic.consolidated-marksheets.index') }}" class="row align-items-end">
@@ -35,12 +54,26 @@
                 </div>
                 <div class="col-md-3 form-group mb-md-0">
                     <label>Exam Name</label>
-                    <select class="form-control" name="exam_id">
+                    <select class="form-control" name="exam_id" id="exam_id">
                         <option value="">Auto Term I / Term II</option>
-                        @foreach($exams as $exam)
-                            <option value="{{ $exam->id }}" {{ (string) request('exam_id') === (string) $exam->id ? 'selected' : '' }}>
-                                {{ $exam->exam_name }} - {{ $exam->exam_type }}{{ $exam->classInfo ? ' ('.$exam->classInfo->class_name.')' : '' }}
-                            </option>
+                        <?php
+                            $reqClassName = (string) request('class_name');
+                            $reqExamId = request('exam_id');
+                        ?>
+                        @foreach($groupedExams as $gExam)
+                            <?php
+                                $appliesToClass = empty($reqClassName)
+                                    || empty($gExam['class_names'])
+                                    || in_array($reqClassName, $gExam['class_names'], true)
+                                    || in_array(ltrim($reqClassName, '0'), $gExam['class_names'], true);
+                                $isSelected = (string) $reqExamId === (string) $gExam['id']
+                                    || (isset($gExam['all_exam_ids']) && in_array((int) $reqExamId, $gExam['all_exam_ids'], true));
+                            ?>
+                            @if($appliesToClass)
+                                <option value="{{ $gExam['id'] }}" {{ $isSelected ? 'selected' : '' }}>
+                                    {{ $gExam['display_name'] }}
+                                </option>
+                            @endif
                         @endforeach
                     </select>
                 </div>
@@ -63,6 +96,18 @@
                     </div>
                     <span class="badge badge-primary">{{ count($report['students']) }} student(s)</span>
                 </div>
+
+                @if(empty($report['has_marks']))
+                    <div class="alert alert-warning py-2 px-3 d-flex align-items-center justify-content-between mb-3">
+                        <span>
+                            <i class="i-Warning-Window mr-2 font-weight-bold"></i>
+                            <strong>Marks Missing:</strong> Marks have not been entered yet for this class / section.
+                        </span>
+                        <a href="{{ url('marks') }}" target="_blank" class="btn btn-sm btn-outline-warning text-dark font-weight-bold">
+                            <i class="i-Pen-4 mr-1"></i> Enter Marks
+                        </a>
+                    </div>
+                @endif
 
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm">
@@ -96,7 +141,21 @@
         </div>
     @empty
         @if(request()->hasAny(['class_name', 'section_name', 'class_id', 'exam_id']))
-            <div class="alert alert-warning">No consolidated marks found for the selected filters.</div>
+            <div class="alert alert-warning p-4 mb-4">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="alert-heading mb-1 font-weight-bold">
+                            <i class="i-Warning-Window mr-2 font-weight-bold"></i> No Marks Found / Not Entered
+                        </h5>
+                        <p class="mb-0">
+                            Marks have not been entered yet for the selected class/exam in the marks entry module.
+                        </p>
+                    </div>
+                    <a href="{{ url('marks') }}" target="_blank" class="btn btn-warning font-weight-bold text-dark ml-3 text-nowrap">
+                        <i class="i-Pen-4 mr-1"></i> Go to Marks Entry
+                    </a>
+                </div>
+            </div>
         @endif
     @endforelse
 </div>
@@ -104,12 +163,15 @@
 <script>
     (function () {
         var sectionsByClass = @json($sectionsByClass);
+        var groupedExams = @json($groupedExams);
         var classSelect = document.getElementById('class_name');
         var sectionSelect = document.getElementById('section_name');
+        var examSelect = document.getElementById('exam_id');
         var selectedSection = @json(request('section_name'));
+        var selectedExamId = @json(request('exam_id'));
 
         function renderSections() {
-            var className = classSelect.value;
+            var className = classSelect ? classSelect.value.trim() : '';
             var sections = className ? (sectionsByClass[className] || []) : Object.values(sectionsByClass).flat();
             sections = sections.filter(function (section, index, self) {
                 return section && self.indexOf(section) === index;
@@ -125,10 +187,46 @@
             });
         }
 
-        classSelect.addEventListener('change', function () {
-            selectedSection = '';
-            renderSections();
-        });
+        function renderExams() {
+            if (!examSelect) return;
+            var className = classSelect ? classSelect.value.trim() : '';
+            var currentVal = examSelect.value || selectedExamId;
+
+            var filtered = groupedExams.filter(function (g) {
+                if (!className) return true;
+                if (!g.class_names || g.class_names.length === 0) return true;
+                return g.class_names.some(function (cName) {
+                    return String(cName).toLowerCase() === String(className).toLowerCase() ||
+                           String(cName).replace(/^0+/, '') === String(className).replace(/^0+/, '');
+                });
+            });
+
+            examSelect.innerHTML = '<option value="">Auto Term I / Term II</option>';
+            var matched = false;
+            filtered.forEach(function (g) {
+                var opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.display_name;
+                if (currentVal && (String(g.id) === String(currentVal) || (g.all_exam_ids && g.all_exam_ids.map(String).indexOf(String(currentVal)) !== -1))) {
+                    opt.selected = true;
+                    matched = true;
+                }
+                examSelect.appendChild(opt);
+            });
+
+            if (currentVal && !matched) {
+                examSelect.value = '';
+            }
+        }
+
+        if (classSelect) {
+            classSelect.addEventListener('change', function () {
+                selectedSection = '';
+                selectedExamId = '';
+                renderSections();
+                renderExams();
+            });
+        }
     })();
 </script>
 @endsection
