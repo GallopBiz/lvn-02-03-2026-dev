@@ -55,13 +55,13 @@
 
     .date {
         text-align: right;
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .title {
         text-align: center;
         font-weight: bold;
-        font-size: 16px;
+        font-size: 17px;
         line-height: 1.35;
         margin: 1mm 0 2mm;
     }
@@ -71,7 +71,7 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         padding: 2mm 4mm;
-        font-size: 14px;
+        font-size: 15px;
         line-height: 1.35;
     }
 
@@ -90,8 +90,8 @@
         max-width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 12.5px;
-        line-height: 1.08;
+        font-size: 13.5px;
+        line-height: 1.1;
     }
 
     .marks th,
@@ -132,7 +132,7 @@
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 13px;
+        font-size: 14px;
     }
 
     .co-table th,
@@ -149,16 +149,26 @@
     }
 
     .summary {
-        display: grid;
-        grid-template-columns: 1fr 32mm 34mm 32mm;
-        gap: 5mm;
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        font-size: 14px;
+        font-size: 15px;
         margin-top: 3mm;
     }
 
     .remarks {
         font-weight: bold;
+    }
+
+    .summary-stats {
+        display: flex;
+        align-items: center;
+        gap: 12mm;
+        white-space: nowrap;
+    }
+
+    .summary-stats div {
+        font-size: 15px;
     }
 
     @media print {
@@ -167,6 +177,15 @@
             background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }
+
+        .main-header,
+        .header-menu,
+        .sidebar-left,
+        .side-content-wrap,
+        .app-footer {
+            display: none !important;
+            visibility: hidden !important;
         }
 
         .main-content,
@@ -303,6 +322,10 @@
                 <section class="student-box">
                     <table>
                         <tr>
+                            <td>Scholar No.</td>
+                            <td>: {{ $printData['student_meta']['scholar_no'] ?? '' }}</td>
+                        </tr>
+                        <tr>
                             <td>Student's Name</td>
                             <td>: {{ $printData['student_meta']['student_name'] ?? '' }}</td>
                         </tr>
@@ -317,20 +340,20 @@
                     </table>
                     <table>
                         <tr>
-                            <td>Scholar No</td>
-                            <td>: {{ $printData['student_meta']['scholar_no'] ?? '' }}</td>
-                        </tr>
-                        <tr>
-                            <td>Roll No</td>
+                            <td>Roll No.</td>
                             <td>: {{ $printData['roll_no'] ?? '' }}</td>
                         </tr>
                         <tr>
-                            <td>Date of Birth</td>
-                            <td>: {{ $printData['student_meta']['date_of_birth'] ?? '' }}</td>
+                            <td>Class-Section</td>
+                            <td>: {{ $printData['class_section'] ?? trim((optional($printData['class'])->class_name ?? '') . (optional($printData['class'])->section_name ? ' - ' . optional($printData['class'])->section_name : '')) }}</td>
                         </tr>
                         <tr>
-                            <td>Class</td>
-                            <td>: {{ optional($printData['class'])->class_name }}</td>
+                            <td>Attendance</td>
+                            <td>: {{ $printData['attendance'] ?? '' }}</td>
+                        </tr>
+                        <tr>
+                            <td>Date Of Birth</td>
+                            <td>: {{ $printData['student_meta']['date_of_birth'] ?? '' }}</td>
                         </tr>
                     </table>
                 </section>
@@ -427,9 +450,10 @@
 
                 <section class="summary">
                     <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] ?? '' }}</div>
-                    <div>Percentage : {{ ($printData['percentage'] !== null && $printData['percentage'] !== '' && empty($printData['is_blank'])) ? $formatPercentage($printData['percentage']) : '' }}</div>
-                    <div>Attendance : {{ $printData['attendance'] ?? '' }}</div>
-                    <div>Result : {{ $printData['result'] ?? '' }}</div>
+                    <div class="summary-stats">
+                        <div>Percentage : {{ ($printData['percentage'] !== null && $printData['percentage'] !== '' && empty($printData['is_blank'])) ? $formatPercentage($printData['percentage']) : '' }}</div>
+                        <div>Result : {{ $printData['result'] ?? '' }}</div>
+                    </div>
                 </section>
             </main>
             @endforeach

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class MarksheetController extends Controller
 {
@@ -140,9 +141,10 @@ class MarksheetController extends Controller
             $perPage = 20;
         }
 
+        $latestMarksheetIds = $this->getLatestMarksheetIds($generatedClassId, $filterExamIds);
+
         $generatedMarksheets = Marksheet::query()
-            ->when($generatedClassId, fn ($query) => $query->where('class_id', $generatedClassId))
-            ->when(!empty($filterExamIds), fn ($query) => $query->whereIn('exam_id', $filterExamIds))
+            ->whereIn('id', !empty($latestMarksheetIds) ? $latestMarksheetIds : [0])
             ->when($generatedSearch !== '', function ($query) use ($generatedSearch) {
                 $like = '%' . str_replace(' ', '%', $generatedSearch) . '%';
                 $query->where(function ($inner) use ($like) {
@@ -268,11 +270,11 @@ class MarksheetController extends Controller
             Marksheet::query()->updateOrCreate(
                 [
                     'student_id' => (int) $student->id,
-                    'class_id' => $classId,
                     'exam_id' => $examId,
-                    'session_year' => $printData['session_year'],
                 ],
                 [
+                    'class_id' => $classId,
+                    'session_year' => $printData['session_year'],
                     'snapshot' => [
                         'template_name' => $template->name,
                         'student_name' => $printData['student_meta']['student_name'],
@@ -649,11 +651,41 @@ class MarksheetController extends Controller
             ->select('acd.attendance_percentage', 'acd.present_days', 'acd.working_days')
             ->first();
 
-        if (!$record) {
+        if ($record) {
+            return number_format((float) $record->attendance_percentage, 2) . '%';
+        }
+
+        if ($fallback !== '') {
             return $fallback;
         }
 
-        return number_format((float) $record->attendance_percentage, 2) . '%';
+        if (Schema::connection('dynamic')->hasTable('academic_attendance_details') && Schema::connection('dynamic')->hasTable('academic_attendance')) {
+            $dailyQuery = DB::connection('dynamic')
+                ->table('academic_attendance_details as aad')
+                ->join('academic_attendance as aa', 'aad.attendance_id', '=', 'aa.id')
+                ->where('aad.student_id', $studentId)
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('academic_attendance', 'is_delete')) {
+                        $q->where('aa.is_delete', 0)->orWhereNull('aa.is_delete');
+                    }
+                });
+
+            if ($classId) {
+                $classIds = $this->marksClassIdsFor($classId);
+                $dailyQuery->whereIn('aa.class_id', array_map('strval', $classIds));
+            }
+            if (!empty($sessionVariants)) {
+                $dailyQuery->whereIn('aa.academic_session', $sessionVariants);
+            }
+
+            $totalDays = $dailyQuery->count();
+            if ($totalDays > 0) {
+                $presentDays = (clone $dailyQuery)->whereIn(DB::raw('LOWER(aad.status)'), ['present', 'p', 'half_day', 'pl'])->count();
+                return number_format(($presentDays / $totalDays) * 100, 2) . '%';
+            }
+        }
+
+        return '';
     }
 
     private function sessionYearVariants(?string $sessionYear): array
@@ -944,10 +976,11 @@ class MarksheetController extends Controller
         if ($examId) {
             $examIds[] = $examId;
         }
-        if ($classId && Schema::connection('dynamic')->hasTable('academic_exam')) {
+        $classIds = $this->marksClassIdsFor($classId);
+        if (!empty($classIds) && Schema::connection('dynamic')->hasTable('academic_exam')) {
             $examIds = array_merge($examIds, DB::connection('dynamic')
                 ->table('academic_exam')
-                ->where('class_id', $classId)
+                ->whereIn('class_id', $classIds)
                 ->whereIn('exam_type', ['PT 1', 'PT-1', 'PT 2', 'PT-2', 'Term 1', 'Term-1', 'Term 2', 'Term-2'])
                 ->pluck('id')
                 ->map(fn ($id) => (int) $id)
@@ -959,7 +992,7 @@ class MarksheetController extends Controller
             ->table('academic_students_marks as sm')
             ->join('previosly_saved_marks_entry as me', 'me.id', '=', 'sm.marks_id')
             ->where('sm.student_id', (string) $studentId)
-            ->when($classId, fn ($q) => $q->whereIn('me.class_id', array_map('strval', $this->marksClassIdsFor($classId))))
+            ->when(!empty($classIds), fn ($q) => $q->whereIn('me.class_id', array_map('strval', $classIds)))
             ->when(count($examIds) > 0, fn ($q) => $q->whereIn('me.exam_id', array_map('strval', $examIds)));
 
         if (Schema::connection('dynamic')->hasColumn('academic_students_marks', 'is_delete')) {
@@ -988,7 +1021,8 @@ class MarksheetController extends Controller
         if ($examIds->isNotEmpty()) {
             $query->whereIn('id', $examIds);
         } else {
-            $query->when($classId, fn ($q) => $q->where('class_id', $classId))
+            $classIds = $this->marksClassIdsFor($classId);
+            $query->when(!empty($classIds), fn ($q) => $q->whereIn('class_id', $classIds))
                 ->whereIn('exam_type', ['PT 1', 'PT-1', 'PT 2', 'PT-2', 'Term 1', 'Term-1', 'Term 2', 'Term-2']);
         }
 
@@ -1039,10 +1073,27 @@ class MarksheetController extends Controller
 
         $ids = [$classId];
         $className = Classes::query()->where('id', $classId)->value('class_name');
-        if ($className && Schema::connection('dynamic')->hasTable('class_name')) {
-            $marksClassId = Classname::query()->where('class_name', $className)->value('id');
-            if ($marksClassId) {
-                $ids[] = (int) $marksClassId;
+        if ($className) {
+            $siblingIds = Classes::query()
+                ->where(function ($q) use ($className) {
+                    $q->where('class_name', $className)
+                        ->orWhere('class_name', ltrim($className, '0'));
+                })
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $ids = array_merge($ids, $siblingIds);
+
+            if (Schema::connection('dynamic')->hasTable('class_name')) {
+                $marksClassIds = Classname::query()
+                    ->where(function ($q) use ($className) {
+                        $q->where('class_name', $className)
+                            ->orWhere('class_name', ltrim($className, '0'));
+                    })
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+                $ids = array_merge($ids, $marksClassIds);
             }
         }
 
@@ -1179,14 +1230,36 @@ class MarksheetController extends Controller
             }
         }
 
+        $dobRaw = $student->date_of_birth ?? ($json['student_dob'] ?? '');
+        $dobFormatted = $this->formatDobDate($dobRaw);
+
         return [
             'student_name' => $student->student_name ?? '',
             'mother_name' => $this->nameWithPrefix($json, ['mothername', 'mother_name', 'Mother Name', 'mother', 'student_mother_name'], ['mothername_prefix', 'mother_name_prefix']),
             'father_name' => $this->nameWithPrefix($json, ['fathername', 'father_name', 'Father Name', 'father', 'student_father_name'], ['fathername_prefix', 'father_name_prefix']),
             'scholar_no' => $student->scholar_no ?? '',
-            'date_of_birth' => $student->date_of_birth ?? '',
+            'date_of_birth' => $dobFormatted,
             'phone' => $student->phone_number ?? $student->mobile_number ?? '',
         ];
+    }
+
+    private function formatDobDate(?string $dob): string
+    {
+        if (empty($dob)) {
+            return '';
+        }
+
+        if (preg_match('/^(\d{1,2})[-.\/](\d{1,2})[-.\/](00)(\d{2})$/', $dob, $m)) {
+            $dob = sprintf('%02d-%02d-20%02d', $m[1], $m[2], $m[4]);
+        } elseif (preg_match('/^(00)(\d{2})[-.\/](\d{1,2})[-.\/](\d{1,2})$/', $dob, $m)) {
+            $dob = sprintf('20%02d-%02d-%02d', $m[2], $m[3], $m[4]);
+        }
+
+        try {
+            return Carbon::parse($dob)->format('d-M-Y');
+        } catch (\Throwable $e) {
+            return $dob;
+        }
     }
 
     private function nameWithPrefix(array $data, array $nameKeys, array $prefixKeys): string
@@ -1632,6 +1705,62 @@ class MarksheetController extends Controller
         }
 
         return $query->exists();
+    }
+
+    private function normalizeExamIdentifier($rawExam, $examId = null): string
+    {
+        if (empty($rawExam)) {
+            return 'exam_' . ($examId ?? 'unknown');
+        }
+
+        $norm = (string) $rawExam;
+        $norm = preg_replace('/\s*\([^)]*\)/', '', $norm);
+        $norm = preg_replace('/\b20\d\d[-_]20?\d\d\b/', '', $norm);
+        $norm = preg_replace('/\b20\d\d\b/', '', $norm);
+        $norm = strtolower(trim(preg_replace('/[\s\-_]+/', ' ', $norm)));
+        $norm = preg_replace('/\bperiodic\s*test\b/', 'pt', $norm);
+        $norm = preg_replace('/\bhalf\s*yearly\b/', 'hy', $norm);
+        $cleaned = trim(preg_replace('/\b(exam|examination|test)\b/', '', $norm));
+        if ($cleaned !== '') {
+            $norm = trim(preg_replace('/\s+/', ' ', $cleaned));
+        }
+
+        return $norm !== '' ? $norm : ('exam_' . ($examId ?? 'unknown'));
+    }
+
+    private function getLatestMarksheetIds(?int $classId = null, array $filterExamIds = []): array
+    {
+        if (!empty($filterExamIds)) {
+            return Marksheet::query()
+                ->when($classId, fn ($q) => $q->where('class_id', $classId))
+                ->whereIn('exam_id', $filterExamIds)
+                ->groupBy('student_id')
+                ->selectRaw('MAX(id) as id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $rows = Marksheet::query()
+            ->when($classId, fn ($q) => $q->where('class_id', $classId))
+            ->select('id', 'student_id', 'exam_id', 'snapshot')
+            ->orderByDesc('id')
+            ->get();
+
+        $seen = [];
+        $latestIds = [];
+        foreach ($rows as $row) {
+            $snap = $row->snapshot ?: [];
+            $rawExam = $snap['exam_name'] ?? ('exam_' . $row->exam_id);
+            $normExam = $this->normalizeExamIdentifier($rawExam, $row->exam_id);
+            $key = $row->student_id . '|' . $normExam;
+            if (!isset($seen[$key])) {
+                $seen[$key] = true;
+                $latestIds[] = (int) $row->id;
+            }
+        }
+
+        return $latestIds;
     }
 }
 

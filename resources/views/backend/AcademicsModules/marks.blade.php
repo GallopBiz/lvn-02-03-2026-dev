@@ -116,13 +116,13 @@
 
                             <div class="form-group mb-3">
                                 <label for="subject_name">Subject:</label>
-                                <select required name="subject_name" class="form-control" id="subject_name" @if (!empty($stream_master)) disabled @endif>
-                                    <option value="">-- Please select --</option>
+                                <select required name="subject_name" class="form-control" id="subject_name" data-selected-subject="{{ !empty($stream_master) ? $stream_master->subject_id : '' }}" @if (!empty($stream_master)) disabled @endif>
                                     @if (!empty($stream_master))
                                         <option selected value="{{ $stream_master->subject_id }}" data-subject-type="{{ $stream_master->Subject->subject_type ?? '' }}">{{ $stream_master->Subject->subject_name }}</option>
                                     @else
-                                        @foreach ($subjectlist as $subjectlist)
-                                            <option value="{{ $subjectlist->id }}" data-subject-type="{{ $subjectlist->subject_type ?? '' }}">{{ $subjectlist->subject_name }}</option>
+                                        <option value="">-- Please select --</option>
+                                        @foreach ($subjectlist as $subjectItem)
+                                            <option value="{{ $subjectItem->id }}" data-subject-type="{{ $subjectItem->subject_type ?? '' }}">{{ $subjectItem->subject_name }}</option>
                                         @endforeach
                                     @endif
                                 </select>
@@ -399,8 +399,13 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         var select = document.getElementById('subject_name');
+        if (!select) return;
+        var selectedVal = select.value;
         for (var i = 0; i < select.options.length; i++) {
-            select.options[i].innerText = capitalizeFirstLetter(select.options[i].innerText);
+            select.options[i].text = capitalizeFirstLetter(select.options[i].text);
+        }
+        if (selectedVal) {
+            select.value = selectedVal;
         }
     });
 
@@ -460,7 +465,10 @@
 
         const theory = Number(exam.max_marks_theory || 0);
         const practical = Number(exam.max_marks_practical || 0);
-        const total = theory + practical;
+        let total = theory + practical;
+        if (isInternalAssessmentEnabled() || theory === 80) {
+            total = 100;
+        }
 
         $('#max_marks_theory').val(theory || '');
         $('#max_marks_practical').val(practical || '');
@@ -475,12 +483,19 @@
         }
 
         applyExamLockState(exam);
+
+        $('.student-row').each(function () {
+            recalculateStudentTotal($(this));
+        });
     }
 
     function refreshTotalMaxMarks() {
         const theory = Number($('#max_marks_theory').val() || 0);
         const practical = Number($('#max_marks_practical').val() || 0);
-        const total = theory + practical;
+        let total = theory + practical;
+        if (isInternalAssessmentEnabled() || theory === 80) {
+            total = 100;
+        }
 
         $('#max_marks').val(total || '');
         if (total > 0) {
@@ -509,8 +524,19 @@
         return exam && /\bPT\s*[-]?\s*[12]\b/i.test(String(exam.exam_name || ''));
     }
 
+    function roundHalfUp(value) {
+        const val = Number(value);
+        if (isNaN(val)) return 0;
+        const absVal = Math.abs(val);
+        const roundedVal = Math.round(absVal * 10000) / 10000;
+        const decimal = roundedVal - Math.floor(roundedVal);
+        const roundedDecimal = Math.round(decimal * 10000) / 10000;
+        const result = (roundedDecimal < 0.5) ? Math.floor(roundedVal) : Math.ceil(roundedVal);
+        return (val < 0) ? -result : result;
+    }
+
     function roundMark(value) {
-        return Math.round((Number(value) || 0) * 100) / 100;
+        return roundHalfUp(value);
     }
 
     function convertPtMarksToFivePoint(obtainedMarks) {
@@ -534,6 +560,9 @@
     }
 
     function filterSubjectDropdownByType() {
+        @if(!empty($stream_master))
+            return;
+        @endif
         const selectedType = normalizeSubjectType(selectedSubjectTypeFilter());
         $('#subject_name option').each(function () {
             const optionType = normalizeSubjectType($(this).data('subject-type') || '');
@@ -543,21 +572,42 @@
         });
 
         const selectedOption = $('#subject_name option:selected');
-        if (selectedOption.length && !selectedOption.is(':visible')) {
+        if (selectedOption.length && selectedType && normalizeSubjectType(selectedOption.data('subject-type')) !== selectedType && selectedOption.val() !== '') {
             $('#subject_name').val('');
         }
     }
 
     function gradeFromMaster(totalMarks) {
-        const maxMarks = numericValue($('#max_marks').val());
-        const percentage = (maxMarks > 0) ? (totalMarks / maxMarks) * 100 : totalMarks;
+        let maxMarks = numericValue($('#max_marks').val());
+        if (isInternalAssessmentEnabled() || maxMarks <= 0) {
+            if (isInternalAssessmentEnabled()) {
+                maxMarks = 100;
+            } else {
+                const theory = numericValue($('#max_marks_theory').val());
+                const practical = isPracticalEnabled() ? numericValue($('#max_marks_practical').val()) : 0;
+                maxMarks = theory + practical;
+                if (maxMarks <= 0) {
+                    const exam = selectedExam();
+                    if (exam) {
+                        maxMarks = Number(exam.max_marks_theory || 0) + Number(exam.max_marks_practical || 0);
+                    }
+                }
+            }
+        }
+        if (maxMarks <= 0) {
+            maxMarks = 100;
+        }
+        const rawPercentage = (maxMarks > 0) ? (totalMarks / maxMarks) * 100 : totalMarks;
+        const percentage = roundHalfUp(rawPercentage);
 
         if (!gradeRanges || gradeRanges.length === 0) {
             return '';
         }
 
-        for (let i = 0; i < gradeRanges.length; i++) {
-            const range = gradeRanges[i];
+        const sortedRanges = [...gradeRanges].sort((a, b) => Number(b.min_per || 0) - Number(a.min_per || 0));
+
+        for (let i = 0; i < sortedRanges.length; i++) {
+            const range = sortedRanges[i];
             const min = Number(range.min_per || 0);
             const max = Number(range.max_per || 100);
             if (percentage >= min && percentage <= max) {
@@ -565,15 +615,20 @@
             }
         }
 
-        for (let i = 0; i < gradeRanges.length; i++) {
-            const range = gradeRanges[i];
+        for (let i = 0; i < sortedRanges.length; i++) {
+            const range = sortedRanges[i];
             const min = Number(range.min_per || 0);
             if (percentage >= min) {
                 return range.grade || '';
             }
         }
 
-        return '';
+        const lowestRange = sortedRanges[sortedRanges.length - 1];
+        if (lowestRange && Number(lowestRange.min_per || 0) <= 0) {
+            return lowestRange.grade || 'E';
+        }
+
+        return 'E';
     }
 
     function recalculateStudentTotal(row) {
@@ -585,7 +640,8 @@
                 internalAssessmentTotal += numericValue($(this).val());
             });
         }
-        const total = roundMark(theory + practical + internalAssessmentTotal);
+        const rawTotal = theory + practical + internalAssessmentTotal;
+        const total = roundHalfUp(rawTotal);
         row.find('.total_marks').val(total);
         row.find('.grade').val(gradeFromMaster(total));
     }
@@ -630,6 +686,7 @@
 
     function toggleInternalAssessmentColumns() {
         $('.ia-column').toggleClass('d-none', !isInternalAssessmentEnabled());
+        refreshTotalMaxMarks();
         $('.student-row').each(function () {
             recalculateStudentTotal($(this));
         });
@@ -967,6 +1024,9 @@
                     setExamMaxMarks($("#exam_name").val());
                     toggleInternalAssessmentColumns();
                     togglePracticalColumns();
+                    $('.student-row').each(function () {
+                        recalculateStudentTotal($(this));
+                    });
                     toastr.success(`Loaded ${data.students.length} student(s).`, "Success");
                 },
                 error: function(xhr, status, error) {
@@ -1018,6 +1078,9 @@
         });
         @if(!empty($stream_master))
             setExamMaxMarks("{{ $stream_master->exam_id }}");
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
         @endif
         $('#max_marks_theory, #max_marks_practical').on('input', function() {
             refreshTotalMaxMarks();
@@ -1055,6 +1118,9 @@
         togglePracticalColumns();
         applyMarksEntryLockState();
         filterSubjectDropdownByType();
+        @if(!empty($stream_master))
+            $('#subject_name').val('{{ $stream_master->subject_id }}');
+        @endif
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })
@@ -1063,6 +1129,12 @@
                 $(this).val('');
             }
             recalculateStudentTotal($(this).closest('tr'));
+        });
+        $(document).on('input change', '.total_marks', function() {
+            const row = $(this).closest('tr');
+            const rounded = roundHalfUp($(this).val());
+            $(this).val(rounded);
+            row.find('.grade').val(gradeFromMaster(rounded));
         });
         function setMarksSaving(isSaving) {
             const submitBtn = $('#marks_submit_btn');
@@ -1130,7 +1202,7 @@
             subject_name: $("#subject_name").val(),
             max_marks_theory: $("#max_marks_theory").val(),
             max_marks_practical: $("#max_marks_practical").val(),
-            max_marks: $("#max_marks").val(),
+            max_marks: $("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0)),
             students: studentData
         };
         $.ajax({
@@ -1205,14 +1277,14 @@
         });
         let postData = {
             marks_id: $("#marks_id").val(),
-            teacher_name: $("#teacher_name").val(),
-            class_name: $("#class_name").val(),
-            section_name: $("#section_name").val(),
-            exam_name: $("#exam_name").val(),
-            subject_name: $("#subject_name").val(),
+            teacher_name: $("#teacher_name").val() || "{{ !empty($stream_master) ? $stream_master->teacher_id : '' }}",
+            class_name: $("#class_name").val() || "{{ !empty($stream_master) ? $stream_master->class_id : '' }}",
+            section_name: $("#section_name").val() || "{{ !empty($stream_master) ? $stream_master->section_name : '' }}",
+            exam_name: $("#exam_name").val() || "{{ !empty($stream_master) ? $stream_master->exam_id : '' }}",
+            subject_name: $("#subject_name").val() || "{{ !empty($stream_master) ? $stream_master->subject_id : '' }}",
             max_marks_theory: $("#max_marks_theory").val(),
             max_marks_practical: $("#max_marks_practical").val(),
-            max_marks: $("#max_marks").val(),
+            max_marks: $("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0)),
             students: studentData
         };
         $.ajax({

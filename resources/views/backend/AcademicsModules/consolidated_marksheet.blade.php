@@ -59,22 +59,22 @@
                         <?php
                             $reqClassName = (string) request('class_name');
                             $reqExamId = request('exam_id');
-                        ?>
-                        @foreach($groupedExams as $gExam)
-                            <?php
+                            foreach ($groupedExams as $gExam) {
                                 $appliesToClass = empty($reqClassName)
                                     || empty($gExam['class_names'])
                                     || in_array($reqClassName, $gExam['class_names'], true)
                                     || in_array(ltrim($reqClassName, '0'), $gExam['class_names'], true);
                                 $isSelected = (string) $reqExamId === (string) $gExam['id']
                                     || (isset($gExam['all_exam_ids']) && in_array((int) $reqExamId, $gExam['all_exam_ids'], true));
-                            ?>
-                            @if($appliesToClass)
-                                <option value="{{ $gExam['id'] }}" {{ $isSelected ? 'selected' : '' }}>
-                                    {{ $gExam['display_name'] }}
-                                </option>
-                            @endif
-                        @endforeach
+                                if ($appliesToClass) {
+                        ?>
+                                    <option value="{{ $gExam['id'] }}" {{ $isSelected ? 'selected' : '' }}>
+                                        {{ $gExam['display_name'] }}
+                                    </option>
+                        <?php
+                                }
+                            }
+                        ?>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -86,15 +86,46 @@
         </div>
     </div>
 
+    <style>
+        .consolidated-table { border-collapse: collapse !important; width: 100%; font-size: 11.5px; }
+        .consolidated-table th, .consolidated-table td { border: 1px solid #c2c8d0 !important; padding: 4px 6px; vertical-align: middle; }
+        .consolidated-table thead th { background: #eef2f7; color: #23272e; font-weight: 700; text-align: center; }
+        .consolidated-table tbody.student-group { border-top: 2px solid #4b545c !important; }
+        .consolidated-table tr.rollup td { background: #f6f8fb; font-weight: bold; }
+        .consolidated-header-box { border-bottom: 2px solid #e5e9f0; padding-bottom: 12px; margin-bottom: 15px; }
+    </style>
+
+    <?php
+        $formatMark = fn ($value) => is_numeric($value) && (float) $value != 0 ? number_format((float) $value, 2, '.', '') : (is_numeric($value) && (float) $value == 0 ? '0.00' : '-');
+        $formatPercentage = fn ($value) => is_numeric($value) ? number_format((float) $value, 2, '.', '') : '';
+        $hasSubject = function ($subjects, $subject) {
+            $needle = strtolower(preg_replace('/\s+/', ' ', trim((string) $subject)));
+            return collect($subjects)->contains(fn ($item) => str_contains($item, $needle) || str_contains($needle, $item));
+        };
+    ?>
+
     @forelse($reports as $report)
-        <div class="card mb-4">
+        <?php
+            $className = (string) ($report['class']->class_name ?? '');
+            $isClassOne = preg_match('/(^|\D)(1|i|one|first)(\D|$)/i', $className);
+        ?>
+        <div class="card mb-4 shadow-sm">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h4 class="card-title mb-1">{{ $report['class']->class_name }}{{ $report['class']->section_name ? ' - '.$report['class']->section_name : '' }}</h4>
-                        <div class="text-muted">{{ $report['exam_title'] }} | Session: {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
+                <div class="consolidated-header-box">
+                    <div class="text-center mb-2">
+                        <h4 class="font-weight-bold mb-1" style="letter-spacing: 0.5px;">Lokmanya Vidya Niketan</h4>
+                        <h5 class="text-primary font-weight-bold mb-1">{{ $report['exam_title'] ?? 'Consolidated Term - II (Annual) Examination' }}</h5>
+                        <div class="text-muted font-weight-500">Session : {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
                     </div>
-                    <span class="badge badge-primary">{{ count($report['students']) }} student(s)</span>
+                    <div class="d-flex justify-content-between align-items-center font-weight-bold text-dark px-1">
+                        <div>
+                            <i class="i-Student-Hat mr-1 text-primary"></i> Class-Section : <span class="text-primary">{{ $report['class']->class_name }}{{ $report['class']->section_name ? ' - '.$report['class']->section_name : '' }}</span>
+                            <span class="badge badge-pill badge-info px-2 py-1 ml-2 font-weight-normal">{{ count($report['students']) }} Student(s)</span>
+                        </div>
+                        <div class="text-right">
+                            <i class="i-Administrator mr-1 text-primary"></i> Class Teacher : <span>{{ $report['class_teacher'] ?: 'Not Assigned' }}</span>
+                        </div>
+                    </div>
                 </div>
 
                 @if(empty($report['has_marks']))
@@ -110,31 +141,144 @@
                 @endif
 
                 <div class="table-responsive">
-                    <table class="table table-bordered table-sm">
+                    <table class="table table-bordered table-sm consolidated-table text-center mb-0">
                         <thead>
                             <tr>
-                                <th>Student</th>
-                                <th>Scholar No</th>
-                                <th>Subjects</th>
-                                <th>Total</th>
-                                <th>%</th>
-                                <th>Division</th>
-                                <th>Result</th>
+                                <th rowspan="2" style="width: 45px;">Sr.<br>No.</th>
+                                <th rowspan="2" class="text-left" style="min-width: 140px;">Student Name</th>
+                                <th rowspan="2" style="min-width: 85px;">Sch. No<br>Att.</th>
+                                <th rowspan="2" class="text-left" style="min-width: 130px;">Subject</th>
+                                <th colspan="7">Term - I</th>
+                                <th colspan="10">Term - II</th>
+                            </tr>
+                            <tr>
+                                <th style="width: 40px;">PT<br><small>(5)</small></th>
+                                <th style="width: 40px;">MA<br><small>(5)</small></th>
+                                <th style="width: 40px;">PF<br><small>(5)</small></th>
+                                <th style="width: 40px;">SE<br><small>(5)</small></th>
+                                <th style="width: 48px;">HY<br><small>(80)</small></th>
+                                <th style="width: 55px;">Total<br><small>(100)</small></th>
+                                <th style="width: 45px;">Grade</th>
+                                <th style="width: 40px;">PT<br><small>(5)</small></th>
+                                <th style="width: 40px;">MA<br><small>(5)</small></th>
+                                <th style="width: 40px;">NBS<br><small>(5)</small></th>
+                                <th style="width: 40px;">SE<br><small>(5)</small></th>
+                                <th style="width: 48px;">ANN<br><small>(80)</small></th>
+                                <th style="width: 55px;">Total<br><small>(100)</small></th>
+                                <th style="width: 45px;">Grade</th>
+                                <th style="width: 55px;">Perc%</th>
+                                <th style="width: 50px;">Division</th>
+                                <th style="width: 45px;">Result</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            @foreach($report['students'] as $studentRow)
-                                <tr>
-                                    <td>{{ $studentRow['student']->student_name }}</td>
-                                    <td>{{ $studentRow['student']->scholar_no }}</td>
-                                    <td>{{ count($studentRow['subjects']) }}</td>
-                                    <td>{{ $formatMark($studentRow['grand_total']) }}</td>
-                                    <td>{{ $studentRow['percentage'] !== null ? $formatMark($studentRow['percentage']) : '' }}</td>
-                                    <td>{{ $studentRow['division'] }}</td>
-                                    <td>{{ $studentRow['result'] }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
+                        @foreach($report['students'] as $studentIndex => $studentRow)
+                            <?php
+                                $serialNo = $studentIndex + 1;
+                                $subjectRows = collect($studentRow['subjects']);
+                                $existingSubjects = $subjectRows->pluck('subject')->map(fn ($subject) => strtolower(preg_replace('/\s+/', ' ', trim((string) $subject))))->all();
+                                $classOneSubjects = $isClassOne
+                                    ? collect(['Computer', 'Sanskrit'])
+                                        ->reject(fn ($subject) => $hasSubject($existingSubjects, $subject))
+                                        ->map(fn ($subject) => [
+                                            'subject' => $subject,
+                                            'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                            'term_2' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                            'percentage' => null,
+                                            'division' => '',
+                                            'result' => '',
+                                            'result_short' => '',
+                                        ])
+                                        ->values()
+                                    : collect();
+                                $displaySubjects = $subjectRows->merge($classOneSubjects)->values();
+                                $rowspanCount = $displaySubjects->count() + ($subjectRows->count() > 0 ? 1 : 0);
+                            ?>
+                            <tbody class="student-group">
+                                @forelse($displaySubjects as $subjectIndex => $subject)
+                                    <tr>
+                                        @if($subjectIndex === 0)
+                                            <td rowspan="{{ $rowspanCount }}" class="align-middle font-weight-bold">{{ $serialNo }}</td>
+                                            <td rowspan="{{ $rowspanCount }}" class="align-middle text-left font-weight-bold text-dark">{{ $studentRow['student']->student_name }}</td>
+                                            <td rowspan="{{ $rowspanCount }}" class="align-middle">
+                                                <div class="font-weight-500">{{ $studentRow['student']->scholar_no }}</div>
+                                                <div class="text-muted small">{{ $studentRow['attendance'] ?: '/' }}</div>
+                                            </td>
+                                        @endif
+                                        <td class="text-left font-weight-500 text-dark">{{ $subject['subject'] }}</td>
+                                        <td>{{ is_numeric($subject['term_1']['pt']) ? $formatMark($subject['term_1']['pt']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_1']['mas']) ? $formatMark($subject['term_1']['mas']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_1']['pf']) ? $formatMark($subject['term_1']['pf']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_1']['sea']) ? $formatMark($subject['term_1']['sea']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_1']['theory']) ? $formatMark($subject['term_1']['theory']) : '-' }}</td>
+                                        <td class="font-weight-bold text-dark">{{ is_numeric($subject['term_1']['total']) ? $formatMark($subject['term_1']['total']) : '-' }}</td>
+                                        <td class="font-weight-bold">{{ $subject['term_1']['grade'] ?: '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_2']['pt']) ? $formatMark($subject['term_2']['pt']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_2']['mas']) ? $formatMark($subject['term_2']['mas']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_2']['pf']) ? $formatMark($subject['term_2']['pf']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_2']['sea']) ? $formatMark($subject['term_2']['sea']) : '-' }}</td>
+                                        <td>{{ is_numeric($subject['term_2']['theory']) ? $formatMark($subject['term_2']['theory']) : '-' }}</td>
+                                        <td class="font-weight-bold text-dark">{{ is_numeric($subject['term_2']['total']) ? $formatMark($subject['term_2']['total']) : '-' }}</td>
+                                        <td class="font-weight-bold">{{ $subject['term_2']['grade'] ?: '-' }}</td>
+                                        <td>{{ isset($subject['percentage']) && $subject['percentage'] !== null && $subject['percentage'] !== '' ? $formatPercentage($subject['percentage']) : '-' }}</td>
+                                        <td>{{ $subject['division'] ?? '-' }}</td>
+                                        <td>
+                                            <?php $res = $subject['result_short'] ?? ($subject['result'] === 'Pass' ? 'P' : ($subject['result'] === 'Fail' ? 'F' : '-')); ?>
+                                            @if($res === 'P')
+                                                <span class="badge badge-success px-2">P</span>
+                                            @elseif($res === 'F')
+                                                <span class="badge badge-danger px-2">F</span>
+                                            @else
+                                                -
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td>{{ $serialNo }}</td>
+                                        <td class="text-left font-weight-bold">{{ $studentRow['student']->student_name }}</td>
+                                        <td>
+                                            <div>{{ $studentRow['student']->scholar_no }}</div>
+                                            <div class="text-muted small">{{ $studentRow['attendance'] ?: '/' }}</div>
+                                        </td>
+                                        <td colspan="14" class="text-muted">No assigned subjects found</td>
+                                        <td>{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '-' }}</td>
+                                        <td>{{ $studentRow['division'] ?: '-' }}</td>
+                                        <td>
+                                            <?php $res = $studentRow['result_short'] ?? ($studentRow['result'] === 'Pass' ? 'P' : ($studentRow['result'] === 'Fail' ? 'F' : '')); ?>
+                                            @if($res === 'P')
+                                                <span class="badge badge-success px-2">P</span>
+                                            @elseif($res === 'F')
+                                                <span class="badge badge-danger px-2">F</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforelse
+                                @if($subjectRows->count() > 0)
+                                    <tr class="rollup">
+                                        <td colspan="5"></td>
+                                        <td>{{ (float) ($studentRow['term_1_theory_total'] ?? 0) > 0 ? $formatMark($studentRow['term_1_theory_total']) : '' }}</td>
+                                        <td class="font-weight-bold text-dark">{{ (float) ($studentRow['term_1_total'] ?? 0) > 0 ? $formatMark($studentRow['term_1_total']) : '' }}</td>
+                                        <td></td>
+                                        <td colspan="4"></td>
+                                        <td>{{ (float) ($studentRow['term_2_theory_total'] ?? 0) > 0 ? $formatMark($studentRow['term_2_theory_total']) : '' }}</td>
+                                        <td class="font-weight-bold text-primary">{{ (float) ($studentRow['term_2_total'] ?? 0) > 0 ? $formatMark($studentRow['term_2_total']) : ((float) ($studentRow['grand_total'] ?? 0) > 0 ? $formatMark($studentRow['grand_total']) : '') }}</td>
+                                        <td></td>
+                                        <td class="font-weight-bold text-primary">{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '' }}</td>
+                                        <td class="font-weight-bold text-primary">{{ $studentRow['division'] }}</td>
+                                        <td>
+                                            <?php $res = $studentRow['result_short'] ?? ($studentRow['result'] === 'Pass' ? 'P' : ($studentRow['result'] === 'Fail' ? 'F' : $studentRow['result'])); ?>
+                                            @if($res === 'P')
+                                                <span class="badge badge-success px-2 py-1">P</span>
+                                            @elseif($res === 'F')
+                                                <span class="badge badge-danger px-2 py-1">F</span>
+                                            @else
+                                                {{ $res }}
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endif
+                            </tbody>
+                        @endforeach
                     </table>
                 </div>
             </div>

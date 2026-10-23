@@ -75,8 +75,12 @@ class ConsolidatedMarksheetController extends Controller
         $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $classResolvedExam) {
             $subjects = $subjectsByStudent->get((int) $student->id, collect());
             $subjectRows = [];
-            $studentTotal = 0.0;
-            $studentMax = 0.0;
+            $term1Sum = 0.0;
+            $term2Sum = 0.0;
+            $term1TheorySum = 0.0;
+            $term2TheorySum = 0.0;
+            $hasTerm1Marks = false;
+            $hasTerm2Marks = false;
             $hasFailingSubject = false;
 
             foreach ($subjects as $subject) {
@@ -97,35 +101,65 @@ class ConsolidatedMarksheetController extends Controller
                     $subject->subject_type ?? null
                 );
 
-                $subjectFailed = $term1['result'] === 'Fail'
-                    || $term2['result'] === 'Fail'
-                    || $this->isBelowFailPercent($term1['total'] + $term2['total'], 200, $classResolvedExam);
+                $t1Total = is_numeric($term1['total']) ? (float) $term1['total'] : 0.0;
+                $t2Total = is_numeric($term2['total']) ? (float) $term2['total'] : 0.0;
+                $t1Theory = is_numeric($term1['theory']) ? (float) $term1['theory'] : 0.0;
+                $t2Theory = is_numeric($term2['theory']) ? (float) $term2['theory'] : 0.0;
+
+                if ($t1Total > 0 || $t1Theory > 0 || (is_numeric($term1['pt']) && (float) $term1['pt'] > 0)) {
+                    $hasTerm1Marks = true;
+                }
+                if ($t2Total > 0 || $t2Theory > 0 || (is_numeric($term2['pt']) && (float) $term2['pt'] > 0)) {
+                    $hasTerm2Marks = true;
+                }
+
+                $term1Sum += $t1Total;
+                $term2Sum += $t2Total;
+                $term1TheorySum += $t1Theory;
+                $term2TheorySum += $t2Theory;
+
+                $subjectFailed = ($term1['result'] === 'Fail')
+                    || ($term2['result'] === 'Fail');
                 $hasFailingSubject = $hasFailingSubject || $subjectFailed;
-                $studentTotal += $term1['total'] + $term2['total'];
-                $studentMax += 200;
+
+                // Subject percentage, division and short result for display (Annual / active term)
+                $subPercentage = $t2Total > 0 ? $t2Total : ($t1Total > 0 ? $t1Total : null);
+                $subDivision = $subPercentage !== null ? $this->divisionFor($subPercentage) : '';
+                $subResultShort = $subjectFailed ? 'F' : ($subPercentage !== null ? 'P' : '');
 
                 $subjectRows[] = [
                     'subject' => $subject->subject_name,
                     'term_1' => $term1,
                     'term_2' => $term2,
+                    'percentage' => $subPercentage,
+                    'division' => $subDivision,
                     'result' => $subjectFailed ? 'Fail' : 'Pass',
+                    'result_short' => $subResultShort,
                 ];
             }
 
-            $percentage = $studentMax > 0 ? $this->roundPercentage(($studentTotal / $studentMax) * 100) : null;
+            $subjectCount = count($subjectRows);
+            $activeTotal = $hasTerm2Marks ? $term2Sum : $term1Sum;
+            $activeMax = $subjectCount * 100;
+            $percentage = $activeMax > 0 ? $this->roundPercentage(($activeTotal / $activeMax) * 100) : null;
             $failed = $percentage === null
                 ? false
-                : ($hasFailingSubject || $this->isBelowFailPercent($studentTotal, $studentMax, $classResolvedExam));
+                : ($hasFailingSubject || $this->isBelowFailPercent($activeTotal, $activeMax, $classResolvedExam));
 
             return [
                 'student' => $student,
                 'attendance' => '',
                 'subjects' => $subjectRows,
-                'grand_total' => $studentTotal,
+                'grand_total' => $activeTotal,
+                'term_1_total' => $term1Sum,
+                'term_2_total' => $term2Sum,
+                'term_1_theory_total' => $term1TheorySum,
+                'term_2_theory_total' => $term2TheorySum,
                 'grade' => $percentage === null ? '' : $this->gradeFor($percentage, $class->class_name ?? null, null),
                 'percentage' => $percentage,
                 'division' => $this->divisionFor($percentage),
                 'result' => $percentage === null ? '' : ($failed ? 'Fail' : 'Pass'),
+                'result_short' => $percentage === null ? '' : ($failed ? 'F' : 'P'),
             ];
         })->values()->all();
 
@@ -575,12 +609,8 @@ class ConsolidatedMarksheetController extends Controller
 
     private function internalAssessmentValue($mark, array $keys): float
     {
-        if (!$mark || empty($mark->internal_assessment_marks)) {
-            return 0.0;
-        }
-
-        $decoded = json_decode((string) $mark->internal_assessment_marks, true);
-        if (!is_array($decoded)) {
+        $internalMarks = $this->internalAssessmentMarks($mark);
+        if ($internalMarks === []) {
             return 0.0;
         }
 
@@ -588,7 +618,7 @@ class ConsolidatedMarksheetController extends Controller
             ->map(fn ($key) => Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key)))
             ->all();
 
-        foreach ($decoded as $key => $value) {
+        foreach ($internalMarks as $key => $value) {
             $normalizedKey = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
             if (in_array($normalizedKey, $normalizedKeys, true)) {
                 return $this->roundMark(min(5, $this->numericMark($value)));
@@ -596,6 +626,21 @@ class ConsolidatedMarksheetController extends Controller
         }
 
         return 0.0;
+    }
+
+    private function internalAssessmentMarks($mark): array
+    {
+        if (!$mark || empty($mark->internal_assessment_marks)) {
+            return [];
+        }
+
+        if (is_array($mark->internal_assessment_marks)) {
+            return $mark->internal_assessment_marks;
+        }
+
+        $decoded = json_decode((string) $mark->internal_assessment_marks, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function numericMark($value): float

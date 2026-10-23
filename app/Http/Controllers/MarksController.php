@@ -235,8 +235,38 @@ class MarksController extends Controller
             ->select($studentMarksTable . '.*', 'student_registration.*') // Add fields as needed
             ->get();
         $rollMap = $this->studentRollMap($classlist->class_name ?? '', $stream_master->section_name ?? '', $stream_master->exam_id ?? null);
-        $marksData = $marksData->map(function ($marks) use ($rollMap) {
+        $exam = DB::connection('dynamic')->table('academic_exam')->where('id', $stream_master->exam_id)->first();
+        $examTheory = (float) ($exam->max_marks_theory ?? 0);
+        $examPractical = (float) ($exam->max_marks_practical ?? 0);
+        $hasIa = $marksData->contains(function ($row) {
+            if (!empty($row->internal_assessment_marks)) {
+                $decoded = is_string($row->internal_assessment_marks) ? json_decode($row->internal_assessment_marks, true) : $row->internal_assessment_marks;
+                return !empty($decoded);
+            }
+            return false;
+        });
+
+        if ($hasIa || $examTheory == 80) {
+            $examMaxMarks = 100.0;
+        } else {
+            $examMaxMarks = $examTheory + $examPractical;
+        }
+        if ($examMaxMarks <= 0) {
+            $examMaxMarks = 100.0;
+        }
+
+        $marksData = $marksData->map(function ($marks) use ($rollMap, $examMaxMarks) {
             $marks->roll_no = $rollMap->get($marks->student_id, '');
+            $totalMarks = is_numeric($marks->total_marks ?? null)
+                ? (float) $marks->total_marks
+                : (float) (($marks->mark_theory ?? 0) + ($marks->mark_practical ?? 0));
+            $totalMarks = $this->roundHalfUp($totalMarks);
+            $marks->total_marks = $totalMarks;
+            $calculatedGrade = $this->gradeFromMaster($totalMarks, $examMaxMarks);
+            if (empty($marks->grade) || $marks->grade === '' || $marks->grade !== $calculatedGrade) {
+                $marks->grade = $calculatedGrade;
+                $marks->overall_grade = $calculatedGrade;
+            }
             return $marks;
         });
             //dd($marksData);
@@ -825,16 +855,25 @@ class MarksController extends Controller
         return (bool) preg_match('/\bPT\s*[-]?\s*[12]\b/i', (string) $examName);
     }
 
+    private function roundHalfUp(float $value): float
+    {
+        $absVal = abs($value);
+        $decimal = $absVal - floor($absVal);
+        $roundedDecimal = round($decimal, 4);
+        $result = ($roundedDecimal < 0.5) ? floor($absVal) : ceil($absVal);
+        return ($value < 0) ? -$result : $result;
+    }
+
     private function roundMark(float $value): float
     {
-        return round($value, 0, PHP_ROUND_HALF_UP);
+        return $this->roundHalfUp($value);
     }
 
     private function applyTotalMarksRoundingToRequest(Request $request): void
     {
         $students = collect($request->students ?? [])->map(function ($student) {
             if (is_numeric($student['total_marks'] ?? null)) {
-                $student['total_marks'] = $this->roundMark((float) $student['total_marks']);
+                $student['total_marks'] = $this->roundHalfUp((float) $student['total_marks']);
             }
 
             return $student;
@@ -845,7 +884,31 @@ class MarksController extends Controller
 
     private function applyGradesToRequest(Request $request): void
     {
-        $maxMarks = (float) ($request->max_marks ?? 0);
+        $exam = null;
+        if ($request->filled('exam_name')) {
+            $exam = DB::connection('dynamic')->table('academic_exam')->where('id', $request->exam_name)->first();
+        }
+
+        $hasIa = collect($request->students ?? [])->contains(function ($s) {
+            if (empty($s['internal_assessment_marks'])) return false;
+            $ia = is_string($s['internal_assessment_marks']) ? json_decode($s['internal_assessment_marks'], true) : $s['internal_assessment_marks'];
+            return !empty($ia);
+        });
+
+        $examTheory = (float) ($exam->max_marks_theory ?? $request->max_marks_theory ?? 0);
+        $examPractical = (float) ($exam->max_marks_practical ?? $request->max_marks_practical ?? 0);
+
+        if ($hasIa || $examTheory == 80 || $request->boolean('internal_assessment_toggle') || $request->filled('internal_assessment_toggle')) {
+            $maxMarks = 100.0;
+        } else {
+            $maxMarks = (float) ($request->max_marks ?? 0);
+            if ($maxMarks <= 0) {
+                $maxMarks = $examTheory + $examPractical;
+            }
+        }
+        if ($maxMarks <= 0) {
+            $maxMarks = 100.0;
+        }
 
         $students = collect($request->students ?? [])->map(function ($student) use ($maxMarks) {
             $marks = is_numeric($student['total_marks'] ?? null)
@@ -862,6 +925,7 @@ class MarksController extends Controller
     private function gradeFromMaster(float $marks, float $maxMarks = 0): string
     {
         $percentage = ($maxMarks > 0) ? ($marks / $maxMarks) * 100 : $marks;
+        $percentage = $this->roundHalfUp($percentage);
         $ranges = $this->activeGradeRanges();
 
         if ($ranges->isEmpty()) {
@@ -883,7 +947,12 @@ class MarksController extends Controller
             }
         }
 
-        return '';
+        $lowest = $ranges->last();
+        if ($lowest && (float) ($lowest->min_per ?? 0) <= 0) {
+            return (string) $lowest->grade;
+        }
+
+        return 'E';
     }
 
     private function accessibleAcademicExams()
@@ -1025,7 +1094,8 @@ class MarksController extends Controller
 
     private function activeSessionName(): string
     {
-        return request()->session()->get('selectedYear')
+        $session = request()->hasSession() ? request()->session()->get('selectedYear') : null;
+        return $session
             ?? request()->cookie('selectedYear')
             ?? config('database.connections.dynamic.database');
     }

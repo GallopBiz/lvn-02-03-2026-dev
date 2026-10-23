@@ -91,11 +91,11 @@
                         <tr>
                             <th class="sr" rowspan="2">Sr.<br>No.</th>
                             <th class="name" rowspan="2">Student Name</th>
-                            <th class="scholar" rowspan="2">Scholar No<br>Attendance</th>
+                            <th class="scholar" rowspan="2">Sch. No<br>Att.</th>
                             <th class="subject" rowspan="2">Subject</th>
                             <th colspan="7">Term - I</th>
                             <th colspan="7">Term - II</th>
-                            <th class="percent" rowspan="2">%</th>
+                            <th class="percent" rowspan="2">Perc%</th>
                             <th class="division" rowspan="2">Division</th>
                             <th class="result" rowspan="2">Result</th>
                         </tr>
@@ -103,13 +103,13 @@
                             <th class="tiny">PT<br>(5)</th>
                             <th class="tiny">MAS<br>(5)</th>
                             <th class="tiny">PF<br>(5)</th>
-                            <th class="tiny">SEA<br>(5)</th>
+                            <th class="tiny">SE<br>(5)</th>
                             <th class="tiny">HY<br>(80)</th>
                             <th class="total">Total<br>(100)</th>
                             <th class="grade">Grade</th>
                             <th class="tiny">PT<br>(5)</th>
                             <th class="tiny">MAS<br>(5)</th>
-                            <th class="tiny">PF<br>(5)</th>
+                            <th class="tiny">NBS<br>(5)</th>
                             <th class="tiny">SE<br>(5)</th>
                             <th class="tiny">ANN<br>(80)</th>
                             <th class="total">Total<br>(100)</th>
@@ -128,6 +128,10 @@
                                         'subject' => $subject,
                                         'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
                                         'term_2' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                        'percentage' => null,
+                                        'division' => '',
+                                        'result' => '',
+                                        'result_short' => '',
                                     ])
                                     ->values()
                                 : collect();
@@ -142,27 +146,27 @@
                                         <td rowspan="{{ $rowspanCount }}">{{ $studentRow['student']->student_name }}</td>
                                         <td class="center" rowspan="{{ $rowspanCount }}">
                                             {{ $studentRow['student']->scholar_no }}<br>
-                                            {{ $studentRow['attendance'] }}
+                                            {{ $studentRow['attendance'] ?: '/' }}
                                         </td>
                                     @endif
                                     <td>{{ $subject['subject'] }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['pt']) ? $formatMark($subject['term_1']['pt']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['mas']) ? $formatMark($subject['term_1']['mas']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['pf']) ? $formatMark($subject['term_1']['pf']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['sea']) ? $formatMark($subject['term_1']['sea']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['theory']) ? $formatMark($subject['term_1']['theory']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_1']['total']) ? $formatMark($subject['term_1']['total']) : '' }}</td>
-                                    <td class="center">{{ $subject['term_1']['grade'] }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['pt']) ? $formatMark($subject['term_2']['pt']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['mas']) ? $formatMark($subject['term_2']['mas']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['pf']) ? $formatMark($subject['term_2']['pf']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['sea']) ? $formatMark($subject['term_2']['sea']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['theory']) ? $formatMark($subject['term_2']['theory']) : '' }}</td>
-                                    <td class="center">{{ is_numeric($subject['term_2']['total']) ? $formatMark($subject['term_2']['total']) : '' }}</td>
-                                    <td class="center">{{ $subject['term_2']['grade'] }}</td>
-                                    <td></td>
-                                    <td></td>
-                                    <td></td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['pt']) ? $formatMark($subject['term_1']['pt']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['mas']) ? $formatMark($subject['term_1']['mas']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['pf']) ? $formatMark($subject['term_1']['pf']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['sea']) ? $formatMark($subject['term_1']['sea']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['theory']) ? $formatMark($subject['term_1']['theory']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_1']['total']) ? $formatMark($subject['term_1']['total']) : '-' }}</td>
+                                    <td class="center">{{ $subject['term_1']['grade'] ?: '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['pt']) ? $formatMark($subject['term_2']['pt']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['mas']) ? $formatMark($subject['term_2']['mas']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['pf']) ? $formatMark($subject['term_2']['pf']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['sea']) ? $formatMark($subject['term_2']['sea']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['theory']) ? $formatMark($subject['term_2']['theory']) : '-' }}</td>
+                                    <td class="center">{{ is_numeric($subject['term_2']['total']) ? $formatMark($subject['term_2']['total']) : '-' }}</td>
+                                    <td class="center">{{ $subject['term_2']['grade'] ?: '-' }}</td>
+                                    <td class="center">{{ isset($subject['percentage']) && $subject['percentage'] !== null && $subject['percentage'] !== '' ? $formatPercentage($subject['percentage']) : '-' }}</td>
+                                    <td class="center">{{ $subject['division'] ?? '-' }}</td>
+                                    <td class="center">{{ $subject['result_short'] ?? ($subject['result'] === 'Pass' ? 'P' : ($subject['result'] === 'Fail' ? 'F' : '-')) }}</td>
                                 </tr>
                             @empty
                                 <tr class="student-start">
@@ -170,27 +174,27 @@
                                     <td>{{ $studentRow['student']->student_name }}</td>
                                     <td class="center">
                                         {{ $studentRow['student']->scholar_no }}<br>
-                                        {{ $studentRow['attendance'] }}
+                                        {{ $studentRow['attendance'] ?: '/' }}
                                     </td>
-                                    <td colspan="15" class="center">No assigned subjects found</td>
+                                    <td colspan="14" class="center">No assigned subjects found</td>
                                     <td class="center">{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '' }}</td>
                                     <td class="center">{{ $studentRow['division'] }}</td>
-                                    <td class="center">{{ $studentRow['result'] }}</td>
+                                    <td class="center">{{ $studentRow['result_short'] ?? ($studentRow['result'] === 'Pass' ? 'P' : ($studentRow['result'] === 'Fail' ? 'F' : '')) }}</td>
                                 </tr>
                             @endforelse
                             @if($subjectRows->count() > 0)
                                 <tr class="rollup">
                                     <td colspan="5"></td>
-                                    <td class="center">{{ $formatMark($subjectRows->sum(fn ($subject) => $subject['term_1']['theory'])) }}</td>
-                                    <td class="center">{{ $formatMark($subjectRows->sum(fn ($subject) => $subject['term_1']['total'])) }}</td>
+                                    <td class="center">{{ (float) ($studentRow['term_1_theory_total'] ?? 0) > 0 ? $formatMark($studentRow['term_1_theory_total']) : '' }}</td>
+                                    <td class="center">{{ (float) ($studentRow['term_1_total'] ?? 0) > 0 ? $formatMark($studentRow['term_1_total']) : '' }}</td>
                                     <td></td>
                                     <td colspan="4"></td>
-                                    <td class="center">{{ $formatMark($subjectRows->sum(fn ($subject) => $subject['term_2']['theory'])) }}</td>
-                                    <td class="center">{{ $formatMark($subjectRows->sum(fn ($subject) => $subject['term_2']['total'])) }}</td>
+                                    <td class="center">{{ (float) ($studentRow['term_2_theory_total'] ?? 0) > 0 ? $formatMark($studentRow['term_2_theory_total']) : '' }}</td>
+                                    <td class="center">{{ (float) ($studentRow['term_2_total'] ?? 0) > 0 ? $formatMark($studentRow['term_2_total']) : ((float) ($studentRow['grand_total'] ?? 0) > 0 ? $formatMark($studentRow['grand_total']) : '') }}</td>
                                     <td></td>
                                     <td class="center">{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '' }}</td>
                                     <td class="center">{{ $studentRow['division'] }}</td>
-                                    <td class="center">{{ $studentRow['result'] }}</td>
+                                    <td class="center">{{ $studentRow['result_short'] ?? ($studentRow['result'] === 'Pass' ? 'P' : ($studentRow['result'] === 'Fail' ? 'F' : $studentRow['result'])) }}</td>
                                 </tr>
                             @endif
                         </tbody>
