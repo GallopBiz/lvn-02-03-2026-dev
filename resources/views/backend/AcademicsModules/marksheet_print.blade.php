@@ -198,6 +198,38 @@
         font-size: 13.5px;
     }
 
+    .footer-area {
+        margin-top: 4mm;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        width: 100%;
+    }
+
+    .signature {
+        font-size: 13px;
+        font-weight: bold;
+        line-height: 1.25;
+    }
+
+    .signature:first-child {
+        text-align: left;
+    }
+
+    .signature:last-child {
+        text-align: right;
+    }
+
+    .abbr-box {
+        border: 1px solid #333;
+        padding: 1.5mm 3.5mm;
+        text-align: center;
+        font-size: 11.5px;
+        line-height: 1.35;
+        font-weight: bold;
+        margin: 0 4mm;
+    }
+
     @media print {
         @page {
             size: A4 landscape;
@@ -427,7 +459,7 @@
                         </tr>
                         <tr>
                             <td>Class-Section</td>
-                            <td>: {{ $printData['class_section'] ?? trim((optional($printData['class'])->class_name ?? '') . (optional($printData['class'])->section_name ? ' - ' . optional($printData['class'])->section_name : '')) }}</td>
+                            <td>: {{ \App\Academic\AcademicHelper::formatClassSection($printData['class_section'] ?? trim((optional($printData['class'])->class_name ?? '') . (optional($printData['class'])->section_name ? ' - ' . optional($printData['class'])->section_name : ''))) }}</td>
                         </tr>
                         <tr>
                             <td>Attendance</td>
@@ -647,6 +679,15 @@
                         <div>Percentage : {{ ($printData['percentage'] !== null && $printData['percentage'] !== '' && empty($printData['is_blank'])) ? $formatPercentage($printData['percentage']) : '' }}</div>
                         <div>Result : {{ $printData['result'] ?? '' }}</div>
                     </div>
+                </section>
+
+                <section class="footer-area">
+                    <div class="signature">Signature of Class Teacher</div>
+                    <div class="abbr-box">
+                        <div>PT-Periodic Test, MAS-Multiple Assessment Strategy,</div>
+                        <div>PF-Portfolio , SEA- Subject Enrichment Activity ,HY- Half Yearly</div>
+                    </div>
+                    <div class="signature">Signature of Principal</div>
                 </section>
             </main>
             @endforeach

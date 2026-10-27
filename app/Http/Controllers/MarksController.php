@@ -1088,7 +1088,7 @@ class MarksController extends Controller
 
     private function sectionsByClassMap()
     {
-        return DB::connection('dynamic')->table('classes')
+        $base = DB::connection('dynamic')->table('classes')
             ->whereNotNull('section_name')
             ->where('section_name', '!=', '')
             ->get()
@@ -1097,7 +1097,21 @@ class MarksController extends Controller
                 return $items->pluck('section_name')->unique()->values()->all();
             })
             ->toArray();
+
+        $augmented = [];
+        foreach ($base as $cName => $secs) {
+            $augmented[$cName] = $secs;
+            $stripped = ltrim((string) $cName, '0');
+            $augmented[$stripped] = $secs;
+            $roman = \App\Academic\AcademicHelper::toRoman((string) $cName);
+            if ($roman !== '') {
+                $augmented[$roman] = $secs;
+            }
+        }
+
+        return $augmented;
     }
+
 
     private function accessibleClassIds()
     {

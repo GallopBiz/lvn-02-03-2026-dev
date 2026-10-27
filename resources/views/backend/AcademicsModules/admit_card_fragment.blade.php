@@ -210,7 +210,7 @@
 
                     <div class="details">
                         <p>Name of the Student :- {{ $student->student_name }}</p>
-                        <p>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</p>
+                        <p>Class / Section :- {{ \App\Academic\AcademicHelper::formatClassSection($student->class_name, $student->section_name) }}</p>
                         <p class="row-line">
                             <span class="roll-no-wrapper">Roll No. : <span class="roll-no-value">{{ $student->roll_no }}</span></span>
                             <span>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></span>
@@ -251,7 +251,7 @@
 
                                             <div class="details">
                                                 <p>Name of the Student :- {{ $student->student_name }}</p>
-                                                <p>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</p>
+                                                <p>Class / Section :- {{ \App\Academic\AcademicHelper::formatClassSection($student->class_name, $student->section_name) }}</p>
                                                 <p class="row-line">
                                                     <span class="roll-no-wrapper">Roll No. : <span class="roll-no-value">{{ $student->roll_no }}</span></span>
                                                     <span>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></span>

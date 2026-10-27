@@ -221,7 +221,7 @@
                     <div class="details">
                         <p>Name of the Student :- {{ $student->student_name }}</p>
                         <p class="row-line">
-                            <span>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</span>
+                            <span>Class / Section :- {{ \App\Academic\AcademicHelper::formatClassSection($student->class_name, $student->section_name) }}</span>
                             <span>Roll No. : {{ $student->roll_no }}</span>
                         </p>
                         <p>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></p>
@@ -262,7 +262,7 @@
                                             <div class="details">
                                                 <p>Name of the Student :- {{ $student->student_name }}</p>
                                                 <p class="row-line">
-                                                    <span>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</span>
+                                                    <span>Class / Section :- {{ \App\Academic\AcademicHelper::formatClassSection($student->class_name, $student->section_name) }}</span>
                                                     <span>Roll No. : {{ $student->roll_no }}</span>
                                                 </p>
                                                 <p>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></p>

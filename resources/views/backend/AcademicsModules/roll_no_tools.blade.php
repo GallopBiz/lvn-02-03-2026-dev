@@ -17,7 +17,7 @@
                 <select name="class_name" class="form-control" onchange="this.form.submit()" required>
                     <option value="">Select Class</option>
                     @foreach($classList as $class)
-                        <option value="{{ $class }}" {{ $className === $class ? 'selected' : '' }}>{{ $class }}</option>
+                        <option value="{{ $class }}" {{ $className === $class ? 'selected' : '' }}>{{ \App\Academic\AcademicHelper::toRoman($class) }}</option>
                     @endforeach
                 </select>
             </div>
@@ -49,7 +49,7 @@
 
     @if(!empty($className) && !empty($sectionName) && !empty($sessionName))
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">{{ $className }} - {{ $sectionName }} ({{ $sessionName }})</h5>
+            <h5 class="mb-0">{{ \App\Academic\AcademicHelper::formatClassSection($className, $sectionName) }} ({{ $sessionName }})</h5>
             <div>
                 <a id="bulkGenerateBtn" href="{{ route('academic.generate-rolls', ['class' => $className, 'section' => $sectionName, 'session' => $sessionName, 'exam_id' => $selectedExamId]) }}" class="btn btn-warning d-none">
                     Generate Roll No (Bulk)

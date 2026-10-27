@@ -219,6 +219,7 @@ return [
                     [ 'title' => 'Report Marks', 'route' => 'show_report_marks', 'roles' => ['Admin'] ],
                     [ 'title' => 'Marksheet', 'route' => 'marksheet', 'roles' => ['Admin'] ],
                     [ 'title' => 'Term 1 Report Card', 'route' => 'academic/term1-marksheet', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Class 11-12 Marksheet', 'route' => 'academic/senior-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Consolidated Marksheet', 'route' => 'academic/consolidated-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Overall Grade', 'route' => 'gradingmaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Individual Subject Grades', 'route' => 'grade', 'roles' => ['Admin'] ],

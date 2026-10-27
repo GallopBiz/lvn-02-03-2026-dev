@@ -28,7 +28,7 @@ class ConsolidatedMarksheetController extends Controller
             : collect();
 
         $missingMarksClasses = $reports->filter(fn ($r) => empty($r['has_marks']))->map(function ($r) {
-            return $r['class']->class_name . ($r['class']->section_name ? ' - ' . $r['class']->section_name : '');
+            return \App\Academic\AcademicHelper::formatClassSection($r['class']->class_name, $r['class']->section_name);
         })->unique()->values()->all();
 
         return view('backend.AcademicsModules.consolidated_marksheet', compact('classes', 'sections', 'sectionsByClass', 'exams', 'groupedExams', 'reports', 'missingMarksClasses'));
@@ -257,7 +257,7 @@ class ConsolidatedMarksheetController extends Controller
 
     private function sectionsByClass()
     {
-        return $this->classes()
+        $base = $this->classes()
             ->groupBy('class_name')
             ->map(fn ($items) => $items
                 ->pluck('section_name')
@@ -265,7 +265,21 @@ class ConsolidatedMarksheetController extends Controller
                 ->unique()
                 ->values())
             ->toArray();
+
+        $augmented = [];
+        foreach ($base as $cName => $secs) {
+            $augmented[$cName] = $secs;
+            $stripped = ltrim((string) $cName, '0');
+            $augmented[$stripped] = $secs;
+            $roman = \App\Academic\AcademicHelper::toRoman((string) $cName);
+            if ($roman !== '') {
+                $augmented[$roman] = $secs;
+            }
+        }
+
+        return $augmented;
     }
+
 
     private function studentsForClass(int $classId)
     {

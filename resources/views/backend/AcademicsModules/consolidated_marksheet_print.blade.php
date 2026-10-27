@@ -92,7 +92,7 @@
                 </div>
 
                 <div class="meta">
-                    <div>Class-Section : {{ $report['class']->class_name }}{{ $report['class']->section_name ? ' - '.$report['class']->section_name : '' }}</div>
+                    <div>Class-Section : {{ \App\Academic\AcademicHelper::formatClassSection($report['class']->class_name, $report['class']->section_name) }}</div>
                     <div>Class Teacher : {{ $report['class_teacher'] }}</div>
                 </div>
 

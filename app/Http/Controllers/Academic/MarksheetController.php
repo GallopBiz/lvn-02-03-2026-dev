@@ -48,6 +48,26 @@ class MarksheetController extends Controller
             })
             ->toArray();
 
+        // Augment sectionsByClass with Roman keys, stripped numbers, and class IDs
+        $augmentedSections = [];
+        foreach ($sectionsByClass as $cName => $secs) {
+            $augmentedSections[$cName] = $secs;
+            $stripped = ltrim((string) $cName, '0');
+            $augmentedSections[$stripped] = $secs;
+            $roman = \App\Academic\AcademicHelper::toRoman((string) $cName);
+            if ($roman !== '') {
+                $augmentedSections[$roman] = $secs;
+            }
+        }
+        foreach ($classes as $cls) {
+            $cName = (string) $cls->class_name;
+            $secs = $sectionsByClass[$cName] ?? ($sectionsByClass[ltrim($cName, '0')] ?? []);
+            if (!empty($secs)) {
+                $augmentedSections[(string) $cls->id] = $secs;
+            }
+        }
+        $sectionsByClass = $augmentedSections;
+
         $rawExams = Exam::with('classInfo')->latest('id')->get();
 
         $groupedExams = $rawExams->groupBy(function ($exam) {
@@ -64,10 +84,11 @@ class MarksheetController extends Controller
                         'exam_id' => (int) $examItem->id,
                         'class_id' => (int) $examItem->class_id,
                         'class_name' => (string) ($cName ?: ('Class ' . $cId)),
-                        'display_name' => (string) ($cName ?: ('Class ' . $cId)),
+                        'display_name' => \App\Academic\AcademicHelper::toRoman((string) ($cName ?: ('Class ' . $cId))),
                     ];
                 }
             }
+
 
             $uniqueClasses = collect($classesData)->unique('class_id')->values()->all();
             usort($uniqueClasses, function ($a, $b) {
@@ -117,8 +138,9 @@ class MarksheetController extends Controller
                 'exam_id' => null,
                 'class_id' => (int) $c->id,
                 'class_name' => (string) $c->class_name,
-                'display_name' => (string) $c->class_name,
+                'display_name' => \App\Academic\AcademicHelper::toRoman((string) $c->class_name),
             ])->all();
+
         }
 
         $resolvedExam = $this->resolveExamForClass($selectedExamId, $selectedClassId);
@@ -1125,15 +1147,19 @@ class MarksheetController extends Controller
 
         $siblingClassIds = [];
         if ($className) {
+            $numericClass = \App\Academic\AcademicHelper::fromRoman($className) ?: $className;
             $siblingClassIds = Classes::query()
                 ->where('class_name', $className)
                 ->orWhere('class_name', ltrim($className, '0'))
+                ->orWhere('class_name', $numericClass)
+                ->orWhere('class_name', ltrim($numericClass, '0'))
                 ->pluck('id')
                 ->map(fn ($id) => (string) $id)
                 ->all();
         } elseif ($classId) {
             $siblingClassIds = [(string) $classId];
         }
+
 
         $sectionClassIds = [];
         if ($sectionName) {
@@ -1693,31 +1719,7 @@ class MarksheetController extends Controller
 
     private function romanClassName(string $className): string
     {
-        $value = trim($className);
-        if ($value === '') {
-            return '';
-        }
-
-        $romanMap = [
-            1 => 'I',
-            2 => 'II',
-            3 => 'III',
-            4 => 'IV',
-            5 => 'V',
-            6 => 'VI',
-            7 => 'VII',
-            8 => 'VIII',
-            9 => 'IX',
-            10 => 'X',
-            11 => 'XI',
-            12 => 'XII',
-        ];
-
-        if (preg_match('/(^|\D)(1[0-2]|[1-9])(\D|$)/', $value, $match)) {
-            return trim(str_replace($match[2], $romanMap[(int) $match[2]] ?? $match[2], $value));
-        }
-
-        return $value;
+        return \App\Academic\AcademicHelper::toRoman($className);
     }
 
     private function studentMeta($student): array

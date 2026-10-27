@@ -36,7 +36,7 @@
                         <option value="">All Classes</option>
                         @foreach($classes as $class)
                             <option value="{{ $class }}" {{ (string) request('class_name') === (string) $class ? 'selected' : '' }}>
-                                {{ $class }}
+                                {{ \App\Academic\AcademicHelper::toRoman($class) }}
                             </option>
                         @endforeach
                     </select>
@@ -119,7 +119,7 @@
                     </div>
                     <div class="d-flex justify-content-between align-items-center font-weight-bold text-dark px-1">
                         <div>
-                            <i class="i-Student-Hat mr-1 text-primary"></i> Class-Section : <span class="text-primary">{{ $report['class']->class_name }}{{ $report['class']->section_name ? ' - '.$report['class']->section_name : '' }}</span>
+                            <i class="i-Student-Hat mr-1 text-primary"></i> Class-Section : <span class="text-primary">{{ \App\Academic\AcademicHelper::formatClassSection($report['class']->class_name, $report['class']->section_name) }}</span>
                             <span class="badge badge-pill badge-info px-2 py-1 ml-2 font-weight-normal">{{ count($report['students']) }} Student(s)</span>
                         </div>
                         <div class="text-right">

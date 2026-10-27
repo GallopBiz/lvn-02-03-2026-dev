@@ -78,6 +78,26 @@ class Term1MarksheetController extends Controller
             })
             ->toArray();
 
+        // Augment sectionsByClass with Roman keys, stripped numbers, and class IDs
+        $augmentedSections = [];
+        foreach ($sectionsByClass as $cName => $secs) {
+            $augmentedSections[$cName] = $secs;
+            $stripped = ltrim((string) $cName, '0');
+            $augmentedSections[$stripped] = $secs;
+            $roman = \App\Academic\AcademicHelper::toRoman((string) $cName);
+            if ($roman !== '') {
+                $augmentedSections[$roman] = $secs;
+            }
+        }
+        foreach ($classes as $cls) {
+            $cName = (string) $cls->class_name;
+            $secs = $sectionsByClass[$cName] ?? ($sectionsByClass[ltrim($cName, '0')] ?? []);
+            if (!empty($secs)) {
+                $augmentedSections[(string) $cls->id] = $secs;
+            }
+        }
+        $sectionsByClass = $augmentedSections;
+
         // 3. Exams grouped so each exam appears ONLY ONCE
         $rawExams = Exam::with('classInfo')
             ->where(function ($q) {
@@ -106,10 +126,11 @@ class Term1MarksheetController extends Controller
                         'exam_id' => (int) $examItem->id,
                         'class_id' => (int) $examItem->class_id,
                         'class_name' => (string) $cName,
-                        'display_name' => (string) $cName,
+                        'display_name' => \App\Academic\AcademicHelper::toRoman((string) $cName),
                     ];
                 }
             }
+
 
             $uniqueClasses = collect($classesData)->unique('class_name')->values()->all();
             usort($uniqueClasses, function ($a, $b) {
@@ -1089,12 +1110,17 @@ class Term1MarksheetController extends Controller
                 $q->where('is_archived', 0)->orWhereNull('is_archived');
             })
             ->when($className, function ($q) use ($className) {
-                $q->where(function ($inner) use ($className) {
+                $numericClass = \App\Academic\AcademicHelper::fromRoman($className) ?: $className;
+                $q->where(function ($inner) use ($className, $numericClass) {
                     $inner->where('class_name', $className)
                         ->orWhere('class_name', ltrim($className, '0'))
-                        ->orWhereRaw('LOWER(class_name) = ?', [strtolower($className)]);
+                        ->orWhere('class_name', $numericClass)
+                        ->orWhere('class_name', ltrim($numericClass, '0'))
+                        ->orWhereRaw('LOWER(class_name) = ?', [strtolower($className)])
+                        ->orWhereRaw('LOWER(class_name) = ?', [strtolower($numericClass)]);
                 });
             })
+
             ->when($sectionName, function ($q) use ($sectionName) {
                 $q->where('section_name', $sectionName);
             })
@@ -1659,36 +1685,7 @@ class Term1MarksheetController extends Controller
 
     private function romanClassName(string $className): string
     {
-        $value = trim($className);
-        if ($value === '') {
-            return '';
-        }
-
-        $romanMap = [
-            1 => 'I',
-            2 => 'II',
-            3 => 'III',
-            4 => 'IV',
-            5 => 'V',
-            6 => 'VI',
-            7 => 'VII',
-            8 => 'VIII',
-            9 => 'IX',
-            10 => 'X',
-            11 => 'XI',
-            12 => 'XII',
-        ];
-
-        if (preg_match('/^0*([1-9]|1[0-2])$/', $value, $m)) {
-            return $romanMap[(int) $m[1]] ?? $value;
-        }
-
-        if (preg_match('/(^|\D)0*(1[0-2]|[1-9])(\D|$)/', $value, $match)) {
-            $num = (int) $match[2];
-            return $romanMap[$num] ?? $value;
-        }
-
-        return $value;
+        return \App\Academic\AcademicHelper::toRoman($className);
     }
 
     private function studentMeta($student): array

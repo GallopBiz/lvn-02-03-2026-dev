@@ -72,7 +72,7 @@
                             @foreach($availableClasses as $c)
                                 @php $cName = $c['class_name']; @endphp
                                 <option value="{{ $cName }}" data-exam-id="{{ $c['exam_id'] }}" {{ (string) $selectedClassName === (string) $cName ? 'selected' : '' }}>
-                                    {{ $cName }}
+                                    {{ \App\Academic\AcademicHelper::toRoman($cName) }}
                                 </option>
                             @endforeach
                         </select>
@@ -149,7 +149,7 @@
                         @foreach($classes as $c)
                             @php $cName = $c->class_name; @endphp
                             <option value="{{ $cName }}" {{ (string) $generatedClassName === (string) $cName ? 'selected' : '' }}>
-                                {{ $cName }}
+                                {{ \App\Academic\AcademicHelper::toRoman($cName) }}
                             </option>
                         @endforeach
                     </select>
@@ -218,7 +218,7 @@
                                     <td class="align-middle font-weight-bold text-primary">{{ $studentName }}</td>
                                     <td class="align-middle">{{ $scholarNo }}</td>
                                     <td class="align-middle">
-                                        Class {{ $className }}{{ !empty($sectionName) ? ' - '.$sectionName : '' }}
+                                        {{ \App\Academic\AcademicHelper::formatClassSection($className, $sectionName) }}
                                     </td>
                                     <td class="align-middle">{{ $snapshot['exam_name'] ?? ($marksheet->exam_id ? 'Exam #'.$marksheet->exam_id : 'Term 1 Exam') }}</td>
                                     <td class="align-middle">{{ $marksheet->session_year ?: '-' }}</td>
@@ -314,9 +314,11 @@
             classes.forEach(function (c) {
                 var opt = document.createElement('option');
                 opt.value = c.class_name;
-                opt.textContent = c.class_name;
+                opt.textContent = c.display_name || c.class_name;
                 opt.dataset.examId = c.exam_id;
                 opt.dataset.classId = c.class_id;
+                opt.dataset.className = c.class_name;
+                opt.setAttribute('data-class-name', c.class_name);
                 if (previouslySelectedClass && (
                     String(c.class_name) === String(previouslySelectedClass) ||
                     String(c.class_name).replace(/^0+/, '') === String(previouslySelectedClass).replace(/^0+/, '')
@@ -325,6 +327,7 @@
                 }
                 classSelect.appendChild(opt);
             });
+
 
             // If a class was previously chosen but is not configured for this exam, alert!
             if (previouslySelectedClass && !matchingClassItem && !isInitial) {
@@ -417,7 +420,16 @@
 
         if (!className) return;
 
-        var availableSections = sectionsByClass[className] || sectionsByClass[className.replace(/^0+/, '')] || [];
+        var opt = classSelect && classSelect.selectedIndex >= 0 ? classSelect.options[classSelect.selectedIndex] : null;
+        var optText = opt ? opt.textContent.trim() : '';
+        var rawName = opt ? (opt.getAttribute('data-class-name') || opt.dataset.className || '') : '';
+
+        var availableSections = sectionsByClass[className]
+            || sectionsByClass[className.replace(/^0+/, '')]
+            || (rawName ? (sectionsByClass[rawName] || sectionsByClass[rawName.replace(/^0+/, '')]) : null)
+            || (optText ? (sectionsByClass[optText] || sectionsByClass[optText.replace(/^0+/, '')]) : null)
+            || [];
+
         availableSections.forEach(function (sec) {
             var opt = document.createElement('option');
             opt.value = sec;
@@ -428,6 +440,7 @@
             sectionSelect.appendChild(opt);
         });
     }
+
 
     function loadStudents(className, sectionName) {
         if (!studentSelect) return;

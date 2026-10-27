@@ -52,10 +52,11 @@
                             <select class="form-control" name="class_id" id="print_class_id">
                                 <option value="">{{ !empty($availableClasses) ? 'Select class' : 'Select exam first' }}</option>
                                 @foreach($availableClasses as $class)
-                                    <option value="{{ $class['class_id'] }}" data-exam-id="{{ $class['exam_id'] }}" {{ (string) $selectedClassId === (string) $class['class_id'] ? 'selected' : '' }}>
-                                        {{ $class['class_name'] }}
+                                    <option value="{{ $class['class_id'] }}" data-exam-id="{{ $class['exam_id'] }}" data-class-name="{{ $class['class_name'] }}" {{ (string) $selectedClassId === (string) $class['class_id'] ? 'selected' : '' }}>
+                                        {{ \App\Academic\AcademicHelper::toRoman($class['class_name']) }}
                                     </option>
                                 @endforeach
+
                             </select>
                         </div>
                         <div class="form-group">
@@ -114,7 +115,7 @@
                         <option value="">All Classes</option>
                         @foreach($classes as $class)
                             <option value="{{ $class->id }}" {{ (string) $generatedClassId === (string) $class->id ? 'selected' : '' }}>
-                                {{ $class->class_name }}
+                                {{ \App\Academic\AcademicHelper::toRoman($class->class_name) }}
                             </option>
                         @endforeach
                     </select>
@@ -189,7 +190,7 @@
                                     </td>
                                     <td>{{ $snapshot['student_name'] ?? ('Student #'.$marksheet->student_id) }}</td>
                                     <td>{{ $snapshot['scholar_no'] ?? ($studentMeta['scholar_no'] ?? '-') }}</td>
-                                    <td>{{ $snapshot['class_name'] ?? ('Class #'.$marksheet->class_id) }}</td>
+                                    <td>{{ \App\Academic\AcademicHelper::toRoman($snapshot['class_name'] ?? ('Class #'.$marksheet->class_id)) }}</td>
                                     <td>{{ $snapshot['exam_name'] ?? ($marksheet->exam_id ? 'Exam #'.$marksheet->exam_id : '-') }}</td>
                                     <td>{{ $marksheet->session_year ?: '-' }}</td>
                                     <td>{{ optional($marksheet->created_at)->format('d M Y h:i A') }}</td>
@@ -241,13 +242,23 @@
     function renderSections(preserveSection) {
         if (!sectionSelect) return;
         var selectedOption = classSelect && classSelect.selectedIndex >= 0 ? classSelect.options[classSelect.selectedIndex] : null;
-        var selectedClassName = selectedOption ? selectedOption.textContent.trim() : '';
+        var rawClassName = selectedOption ? (selectedOption.getAttribute('data-class-name') || selectedOption.dataset.className || '') : '';
+        var optionText = selectedOption ? selectedOption.textContent.trim() : '';
+        var classVal = classSelect ? classSelect.value : '';
 
         var currentVal = preserveSection !== undefined ? preserveSection : (sectionSelect.value || '');
 
         var sections = [];
-        if (selectedClassName) {
-            sections = sectionsByClass[selectedClassName] || sectionsByClass[selectedClassName.replace(/^0+/, '')] || [];
+        if (rawClassName && sectionsByClass[rawClassName]) {
+            sections = sectionsByClass[rawClassName];
+        } else if (rawClassName && sectionsByClass[rawClassName.replace(/^0+/, '')]) {
+            sections = sectionsByClass[rawClassName.replace(/^0+/, '')];
+        } else if (optionText && sectionsByClass[optionText]) {
+            sections = sectionsByClass[optionText];
+        } else if (optionText && sectionsByClass[optionText.replace(/^0+/, '')]) {
+            sections = sectionsByClass[optionText.replace(/^0+/, '')];
+        } else if (classVal && sectionsByClass[classVal]) {
+            sections = sectionsByClass[classVal];
         }
 
         sectionSelect.innerHTML = '<option value="">All Sections</option>';
@@ -302,8 +313,10 @@
             classes.forEach(function (c) {
                 var opt = document.createElement('option');
                 opt.value = c.class_id;
-                opt.textContent = c.class_name;
+                opt.textContent = c.display_name || c.class_name;
                 opt.dataset.examId = c.exam_id;
+                opt.dataset.className = c.class_name;
+                opt.setAttribute('data-class-name', c.class_name);
                 if (previouslySelectedClass && String(c.class_id) === String(previouslySelectedClass)) {
                     opt.selected = true;
                     matchingClassItem = c;
@@ -351,7 +364,7 @@
 
         var selectedOption = classSelect.options[classSelect.selectedIndex];
         var specificExamId = selectedOption ? selectedOption.getAttribute('data-exam-id') : null;
-        var selectedClassName = selectedOption ? selectedOption.textContent.trim() : '';
+        var selectedClassName = selectedOption ? (selectedOption.getAttribute('data-class-name') || selectedOption.dataset.className || selectedOption.textContent.trim()) : '';
         if (resolvedExamInput) {
             resolvedExamInput.value = specificExamId || (examSelect ? examSelect.value : '');
         }
@@ -363,11 +376,12 @@
     function onSectionChange() {
         var selectedClassId = classSelect ? classSelect.value : '';
         var selectedOption = classSelect && classSelect.selectedIndex >= 0 ? classSelect.options[classSelect.selectedIndex] : null;
-        var selectedClassName = selectedOption ? selectedOption.textContent.trim() : '';
+        var selectedClassName = selectedOption ? (selectedOption.getAttribute('data-class-name') || selectedOption.dataset.className || selectedOption.textContent.trim()) : '';
         var selectedSection = sectionSelect ? sectionSelect.value : '';
 
         loadStudents(selectedClassId, selectedClassName, selectedSection);
     }
+
 
     function loadStudents(classId, className, sectionName) {
         if (!studentSelect) return;
@@ -444,11 +458,12 @@
     // If a class is already selected on load and student select is empty, fetch students
     if (classSelect && classSelect.value) {
         var initialOption = classSelect.options[classSelect.selectedIndex];
-        var initialClassName = initialOption ? initialOption.textContent.trim() : '';
+        var initialClassName = initialOption ? (initialOption.getAttribute('data-class-name') || initialOption.dataset.className || initialOption.textContent.trim()) : '';
         var initialSection = sectionSelect ? sectionSelect.value : '';
         if (sectionSelect && sectionSelect.options.length <= 1) {
             renderSections(initialSection);
         }
+
         if (studentSelect && studentSelect.options.length <= 1) {
             loadStudents(classSelect.value, initialClassName, initialSection);
         }

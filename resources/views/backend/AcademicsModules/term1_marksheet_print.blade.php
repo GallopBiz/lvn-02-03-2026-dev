@@ -481,7 +481,7 @@
                     $remarks = $pData['remarks'] ?? 'Needs to develop a better sense of responsibility.';
                     $attendance = $pData['attendance'] ?? '/';
                     $rollNo = $pData['roll_no'] ?? '';
-                    $classRoman = $pData['class_roman'] ?? (optional($pData['class'] ?? null)->class_name ?? '');
+                    $classRoman = \App\Academic\AcademicHelper::toRoman($pData['class_roman'] ?? (optional($pData['class'] ?? null)->class_name ?? ''));
                     $sectionName = $pData['section_name'] ?? (optional($pData['class'] ?? null)->section_name ?? '');
 
                     // Ensure discipline, non-academic, and special formatting subjects never appear in main scholastic table

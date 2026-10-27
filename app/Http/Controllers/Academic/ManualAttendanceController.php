@@ -678,7 +678,7 @@ class ManualAttendanceController extends Controller
      */
     private function sectionsByClass(): array
     {
-        return Classes::query()
+        $base = Classes::query()
             ->select('class_name', 'section_name')
             ->whereNotNull('class_name')
             ->whereNotNull('section_name')
@@ -687,7 +687,21 @@ class ManualAttendanceController extends Controller
             ->groupBy('class_name')
             ->map(fn ($rows) => $rows->pluck('section_name')->unique()->values())
             ->toArray();
+
+        $augmented = [];
+        foreach ($base as $cName => $secs) {
+            $augmented[$cName] = $secs;
+            $stripped = ltrim((string) $cName, '0');
+            $augmented[$stripped] = $secs;
+            $roman = \App\Academic\AcademicHelper::toRoman((string) $cName);
+            if ($roman !== '') {
+                $augmented[$roman] = $secs;
+            }
+        }
+
+        return $augmented;
     }
+
 
     /**
      * Build map of class_name to unique clean exams for client-side instant population.

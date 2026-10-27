@@ -206,7 +206,7 @@
             <div class="inline-row">
                 <div class="field-row">
                     <span class="field-label">Class/ Section: -</span>
-                    <span class="field-value">{{ $className }} - {{ $sectionName }}</span>
+                    <span class="field-value">{{ \App\Academic\AcademicHelper::formatClassSection($className, $sectionName) }}</span>
                 </div>
                 <div class="field-row">
                     <span class="field-label">Roll No.:</span>

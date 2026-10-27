@@ -141,6 +141,7 @@ use App\Http\Controllers\Academic\SeatingArrangementController;
 use App\Http\Controllers\Academic\ConsolidatedMarksheetController;
 use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetController;
 use App\Http\Controllers\Academic\Term1MarksheetController;
+use App\Http\Controllers\Academic\SeniorMarksheetController;
 use App\Http\Controllers\Academic\TeacherRemarkEntryController;
 use App\Http\Controllers\Academic\AttendanceController as AcademicAttendanceController;
 use App\Http\Controllers\Academic\ManualAttendanceController as AcademicManualAttendanceController;
@@ -609,6 +610,20 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::delete('academic/term1-marksheet/generated/bulk-delete', [Term1MarksheetController::class, 'bulkDeleteGenerated'])->name('academic.term1-marksheet.generated.bulk-delete');
     Route::delete('academic/term1-marksheet/generated/{marksheet}', [Term1MarksheetController::class, 'deleteGenerated'])->name('academic.term1-marksheet.generated.delete');
     Route::get('academic/term1-marksheet/print/{marksheet}', [Term1MarksheetController::class, 'printGenerated'])->name('academic.term1-marksheet.generated.print');
+
+    // Class 11 & 12 Marksheet - Dedicated Module
+    Route::get('senior-marksheet', [SeniorMarksheetController::class, 'index'])->name('senior-marksheet.index');
+    Route::get('academic/senior-marksheets', [SeniorMarksheetController::class, 'index'])->name('academic.senior-marksheets.index');
+    Route::get('academic/senior-marksheets/students-data', [SeniorMarksheetController::class, 'getStudentsJson'])->name('academic.senior-marksheets.students-data');
+    Route::post('academic/senior-marksheets/generate', [SeniorMarksheetController::class, 'generate'])->name('academic.senior-marksheets.generate');
+    Route::get('academic/senior-marksheets/print', [SeniorMarksheetController::class, 'print'])->name('academic.senior-marksheets.print');
+    Route::get('academic/senior-marksheets/print/bulk/{marksheets}', [SeniorMarksheetController::class, 'bulkPrintGeneratedPage'])
+        ->where('marksheets', '[0-9,]+')
+        ->name('academic.senior-marksheets.generated.bulk-print-page');
+    Route::post('academic/senior-marksheets/generated/bulk-print', [SeniorMarksheetController::class, 'bulkPrintGenerated'])->name('academic.senior-marksheets.generated.bulk-print');
+    Route::match(['post', 'delete'], 'academic/senior-marksheets/generated/bulk-delete', [SeniorMarksheetController::class, 'bulkDeleteGenerated'])->name('academic.senior-marksheets.generated.bulk-delete');
+    Route::delete('academic/senior-marksheets/generated/{marksheet}', [SeniorMarksheetController::class, 'deleteGenerated'])->name('academic.senior-marksheets.generated.delete');
+    Route::get('academic/senior-marksheets/print/{marksheet}', [SeniorMarksheetController::class, 'printGenerated'])->name('academic.senior-marksheets.generated.print');
 
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks']);
