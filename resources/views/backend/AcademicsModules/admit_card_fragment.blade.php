@@ -1,53 +1,126 @@
 <style>
-    @page { size: A4 landscape; margin: 8mm 12mm; }
+    @page { size: A4 landscape; margin: 5mm 8mm; }
     * { box-sizing: border-box; }
-    body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 13px; color: #000; }
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 14px; color: #000; }
 
     .page {
         width: 100%;
-        height: 194mm;
-        max-height: 194mm;
+        height: 196mm;
+        max-height: 196mm;
+        box-sizing: border-box;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
         overflow: hidden;
-        page-break-inside: avoid;
-        page-break-after: always;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .page:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
     }
 
-    /* Dompdf-safe 2x2 landscape layout (tables render reliably) */
+    @media screen {
+        .page {
+            margin: 0 auto 24px auto;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    }
+
+    /* 2x2 landscape layout ensuring exactly 4 cards fit on each A4 page */
     .bulk-table {
         width: 100%;
-        height: 100%;
         border-collapse: separate;
-        border-spacing: 4mm;
+        border-spacing: 8mm 6mm;
         table-layout: fixed;
-        page-break-inside: avoid;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
     .bulk-table tr,
-    .bulk-td { page-break-inside: avoid; }
-    .bulk-table tr { height: 50%; }
-    .bulk-td { width: 50%; height: 50%; vertical-align: top; }
+    .bulk-td {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+    .bulk-td {
+        width: 50%;
+        vertical-align: top;
+        text-align: center;
+        padding: 0;
+    }
+    .bulk-table tr:first-child .bulk-td {
+        padding-bottom: 6mm;
+    }
 
-    .admit-card { border: 2px solid #000; padding: 6px 10px; position: relative; overflow: hidden; page-break-inside: avoid; }
-    .admit-card:before { content: ''; position: absolute; inset: 3px; border: 1px solid #000; pointer-events: none; }
-    .admit-card-inner { position: relative; z-index: 1; }
+    .admit-card {
+        border: 2px solid #000;
+        position: relative;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        background: #fff;
+        text-align: left;
+    }
+    .admit-card:before {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        border: 1px solid #000;
+        pointer-events: none;
+    }
+    .admit-card-inner {
+        position: relative;
+        z-index: 1;
+    }
 
-    .admit-card.bulk-card { height: 100%; padding: 6px 10px; display: flex; flex-direction: column; justify-content: space-between; }
-    .admit-card.single-card { width: 48%; max-width: 130mm; height: 90mm; padding: 8px 12px; margin: 10mm auto; }
+    .admit-card.bulk-card {
+        width: 95%;
+        max-width: 124mm;
+        height: 82mm;
+        max-height: 82mm;
+        box-sizing: border-box;
+        margin: 0 auto;
+        padding: 10px 12px;
+    }
+    .admit-card.single-card {
+        width: 48%;
+        max-width: 124mm;
+        height: 82mm;
+        max-height: 82mm;
+        box-sizing: border-box;
+        padding: 6px 12px;
+        margin: 10mm auto;
+    }
 
-    .school-logo { display: block; width: 78%; max-width: 290px; height: auto; margin: 0 auto 2px auto; }
-    .exam-title { text-align: center; font-weight: 700; margin: 4px 0 2px 0; font-size: 14px; text-transform: uppercase; }
-    .sub-title { text-align: center; font-weight: 700; margin: 2px 0 6px 0; font-size: 15px; letter-spacing: 1px; text-decoration: underline; }
+    .school-logo { display: block; width: 72%; max-width: 250px; height: auto; margin: 0 auto 1px auto; }
+    .exam-title { text-align: center; font-weight: 700; margin: 10px 0 1px 0; font-size: 16px; text-transform: uppercase; line-height: 1.2; }
+    .sub-title { text-align: center; font-weight: 700; margin: 1px 0 4px 0; font-size: 13px; letter-spacing: 1px; text-decoration: underline; line-height: 1.2; }
 
-    .details p { margin: 4px 0; font-size: 13px; font-weight: 700; }
-    .details .row-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .details {
+        margin: 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .details p {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    .details .row-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .details .row-line span { display: inline-block; }
 
-    .room-box { display: inline-block; border: 2px solid #000; padding: 1px 8px; font-size: 15px; font-weight: 700; line-height: 1.1; min-width: 48px; text-align: center; }
+    .roll-no-wrapper { font-size: 14px; font-weight: 700; }
+    .roll-no-value { font-size: 18px; font-weight: 800; padding: 0 4px; letter-spacing: 0.5px; }
+
+    .room-box { display: inline-block; border: 2px solid #000; padding: 0 8px; font-size: 14px; font-weight: 700; line-height: 1.1; min-width: 42px; text-align: center; }
 
     .installment-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
     .installment-grid { border-collapse: collapse; }
-    .installment-grid td { border: 1px solid #000; width: 34px; height: 22px; text-align: center; font-size: 12px; font-weight: 700; }
+    .installment-grid td { border: 1px solid #000; width: 32px; height: 18px; text-align: center; font-size: 11px; font-weight: 700; }
 
-    .sign-row { margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
+    .sign-row { margin-top: 18px; display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
     .sign-row span { width: 33.333%; }
     .sign-row span:nth-child(1) { text-align: left; }
     .sign-row span:nth-child(2) { text-align: center; }
@@ -55,28 +128,55 @@
 
     /* card scaling for bulk and single-student print */
     .bulk-card .school-logo,
-    .single-card .school-logo { width: 78%; max-width: 290px; }
+    .single-card .school-logo { width: 72%; max-width: 250px; }
     .bulk-card .exam-title,
-    .single-card .exam-title { font-size: 14px; }
+    .single-card .exam-title { font-size: 16px; }
     .bulk-card .sub-title,
-    .single-card .sub-title { font-size: 14px; margin-bottom: 5px; }
+    .single-card .sub-title { font-size: 13px; margin-bottom: 12px; margin-top: 6px; }
+    .bulk-card .details,
+    .single-card .details {
+        margin: 8px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
     .bulk-card .details p,
-    .single-card .details p { font-size: 13px; margin: 4px 0; }
+    .single-card .details p {
+        font-size: 14px;
+        margin: 0;
+        line-height: 1.3;
+    }
     .bulk-card .room-box,
-    .single-card .room-box { font-size: 15px; min-width: 48px; padding: 1px 6px; }
+    .single-card .room-box { font-size: 14px; min-width: 42px; padding: 0 6px; }
     .bulk-card .installment-row,
     .single-card .installment-row { font-size: 12px; margin-top: 6px; }
     .bulk-card .installment-grid td,
-    .single-card .installment-grid td { width: 34px; height: 22px; font-size: 11px; }
+    .single-card .installment-grid td { width: 32px; height: 18px; font-size: 11px; }
     .bulk-card .sign-row,
     .single-card .sign-row {
-        margin-top: 60px;
+        margin-top: 50px;
         font-size: 11px;
     }
 
     @media print {
-        .page-break { page-break-after: always; }
-        .page:last-child { page-break-after: avoid; }
+        .page {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 196mm !important;
+            max-height: 196mm !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            overflow: hidden !important;
+        }
+        .page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+        }
+        .page-break {
+            display: none !important;
+        }
     }
 </style>
 
@@ -112,7 +212,7 @@
                         <p>Name of the Student :- {{ $student->student_name }}</p>
                         <p>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</p>
                         <p class="row-line">
-                            <span>Roll No. : {{ $student->roll_no }}</span>
+                            <span class="roll-no-wrapper">Roll No. : <span class="roll-no-value">{{ $student->roll_no }}</span></span>
                             <span>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></span>
                         </p>
                     </div>
@@ -153,7 +253,7 @@
                                                 <p>Name of the Student :- {{ $student->student_name }}</p>
                                                 <p>Class / Section :- {{ $student->class_name }} - {{ $student->section_name }}</p>
                                                 <p class="row-line">
-                                                    <span>Roll No. : {{ $student->roll_no }}</span>
+                                                    <span class="roll-no-wrapper">Roll No. : <span class="roll-no-value">{{ $student->roll_no }}</span></span>
                                                     <span>ROOM NO:- <span class="room-box">{{ $student->room_no ?? '-' }}</span></span>
                                                 </p>
                                             </div>

@@ -196,6 +196,7 @@
                                 <th>Exam</th>
                                 <th>Session</th>
                                 <th>Generated On</th>
+                                <th>Print Date</th>
                                 <th style="width: 140px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
@@ -222,6 +223,7 @@
                                     <td class="align-middle">{{ $snapshot['exam_name'] ?? ($marksheet->exam_id ? 'Exam #'.$marksheet->exam_id : 'Term 1 Exam') }}</td>
                                     <td class="align-middle">{{ $marksheet->session_year ?: '-' }}</td>
                                     <td class="align-middle">{{ optional($marksheet->created_at)->format('d M Y h:i A') }}</td>
+                                    <td class="align-middle">{{ $snapshot['print_date'] ?? ($pData['date'] ?? '-') }}</td>
                                     <td class="text-center align-middle">
                                         <a href="{{ route('academic.term1-marksheet.generated.print', $marksheet) }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Print in Portrait">
                                             <i class="i-Printer"></i> Print
@@ -233,7 +235,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="text-center py-4 text-muted">
+                                    <td colspan="9" class="text-center py-4 text-muted">
                                         <i class="i-Folder-Empty text-28 d-block mb-1"></i>
                                         No Term 1 report cards generated yet. Select a class above to generate report cards.
                                     </td>

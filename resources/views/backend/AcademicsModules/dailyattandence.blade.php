@@ -9,7 +9,7 @@
     .attendance-toolbar, .attendance-panel { background: #fff; border: 1px solid #e7edf5; border-radius: 8px; box-shadow: 0 8px 20px rgba(36, 50, 75, .05); }
     .attendance-toolbar { padding: 18px; }
     .attendance-panel { padding: 20px; }
-    .summary-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 12px; }
     .summary-card { border: 1px solid #e7edf5; border-radius: 8px; padding: 14px; background: #f8fbff; }
     .summary-card span { display: block; color: #69758a; font-size: 12px; text-transform: uppercase; }
     .summary-card strong { font-size: 24px; }
@@ -58,7 +58,6 @@
         <div class="summary-card"><span>Present</span><strong id="presentCount">{{ $summary['present'] }}</strong></div>
         <div class="summary-card"><span>Absent</span><strong id="absentCount">{{ $summary['absent'] }}</strong></div>
         <div class="summary-card"><span>Leave</span><strong id="leaveCount">{{ $summary['leave'] }}</strong></div>
-        <div class="summary-card"><span>Half Day</span><strong id="halfDayCount">{{ $summary['half_day'] }}</strong></div>
         <div class="summary-card"><span>PL</span><strong id="plCount">{{ $summary['pl'] }}</strong></div>
     </div>
 
@@ -137,6 +136,7 @@
                 @foreach($statuses as $key => $label)
                     <button type="button" class="btn btn-sm btn-outline-primary mb-1" onclick="markAll('{{ $key }}')">{{ $label }}</button>
                 @endforeach
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-1" onclick="clearAll()">Clear (Blank)</button>
             </div>
 
             <div class="table-responsive">
@@ -154,7 +154,7 @@
                         @forelse($students as $student)
                             @php
                                 $detail = $detailByStudent->get($student->id);
-                                $selected = old("attendance.$student->id", optional($detail)->status ?: 'present');
+                                $selected = old("attendance.$student->id", optional($detail)->status);
                             @endphp
                             <tr>
                                 <td>{{ $loop->iteration }}</td>
@@ -225,7 +225,7 @@
             <h4 class="mb-3">Recent Attendance</h4>
             <div class="table-responsive">
                 <table class="table">
-                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Present</th><th>Absent</th><th>Leave</th><th>Half Day</th><th>Status</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Present</th><th>Absent</th><th>Leave</th><th>Status</th><th>Action</th></tr></thead>
                     <tbody>
                         @forelse($recentAttendance as $item)
                             <tr>
@@ -235,7 +235,6 @@
                                 <td>{{ $item->present_count }}</td>
                                 <td>{{ $item->absent_count }}</td>
                                 <td>{{ $item->leave_count }}</td>
-                                <td>{{ $item->half_day_count }}</td>
                                 <td>
                                     @if($item->is_locked)
                                         <span class="badge badge-dark">Locked</span>
@@ -271,7 +270,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="text-center text-muted">No attendance recorded yet.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">No attendance recorded yet.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -288,18 +287,29 @@
         updateCounts();
     }
 
+    function clearAll() {
+        document.querySelectorAll('#attendanceTable input[type="radio"]').forEach(function(input) {
+            input.checked = false;
+        });
+        updateCounts();
+    }
+
     function updateCounts() {
-        var counts = {present: 0, absent: 0, leave: 0, half_day: 0, pl: 0};
+        var counts = {present: 0, absent: 0, leave: 0, pl: 0};
+        var total = 0;
         document.querySelectorAll('#attendanceTable tbody tr').forEach(function(row) {
             if (row.style.display === 'none') return;
+            if (row.querySelector('input[type="radio"]')) total++;
             var checked = row.querySelector('input[type="radio"]:checked');
             if (checked && counts.hasOwnProperty(checked.value)) counts[checked.value]++;
         });
-        document.getElementById('totalStudents').textContent = Object.values(counts).reduce(function(a, b) { return a + b; }, 0);
+        document.getElementById('totalStudents').textContent = total;
         document.getElementById('presentCount').textContent = counts.present;
         document.getElementById('absentCount').textContent = counts.absent + counts.leave;
         document.getElementById('leaveCount').textContent = counts.leave;
-        document.getElementById('halfDayCount').textContent = counts.half_day;
+        if (document.getElementById('halfDayCount')) {
+            document.getElementById('halfDayCount').textContent = counts.half_day || 0;
+        }
         document.getElementById('plCount').textContent = counts.pl;
     }
 
@@ -314,6 +324,15 @@
         updateCounts();
     });
     updateCounts();
+
+    document.getElementById('attendanceForm')?.addEventListener('submit', function(e) {
+        var checked = document.querySelectorAll('#attendanceTable input[type="radio"]:checked');
+        if (checked.length === 0) {
+            e.preventDefault();
+            alert('Please select attendance status for students before saving.');
+            return false;
+        }
+    });
 
     (function() {
         try {

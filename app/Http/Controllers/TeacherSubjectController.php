@@ -174,7 +174,8 @@ class TeacherSubjectController extends Controller
         $subjects = TeacherSubject::with('Subject')->where("teacher_id", $teacher)->groupBy('subject_id')->where('is_delete','=',0)->get();
         $sectionValues = TeacherSubject::where("teacher_id", $teacher)->where('is_delete','=',0)->distinct()->pluck('section_name');
         $sections = $this->expandAllSections($sectionValues);
-        return ['classes' => $classes, 'subjects' => $subjects, 'sections' => $sections];
+        $assignments = TeacherSubject::where("teacher_id", $teacher)->where('is_delete', 0)->get(['class_id', 'subject_id', 'section_name']);
+        return ['classes' => $classes, 'subjects' => $subjects, 'sections' => $sections, 'assignments' => $assignments];
     }
 
     public function getteachersandsubject(Request $request){

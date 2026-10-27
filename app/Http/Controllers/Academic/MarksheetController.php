@@ -242,6 +242,8 @@ class MarksheetController extends Controller
             'resolved_exam_id' => 'nullable|integer',
             'student_id' => 'nullable|integer',
             'attendance' => 'nullable|string|max:50',
+            'print_date' => 'nullable|string|max:50',
+            'date' => 'nullable|string|max:50',
         ]);
 
         $classId = (int) $validated['class_id'];
@@ -281,6 +283,7 @@ class MarksheetController extends Controller
                         'scholar_no' => $printData['student_meta']['scholar_no'],
                         'class_name' => optional($printData['class'])->class_name,
                         'exam_name' => optional($printData['exam'])->exam_name,
+                        'print_date' => $printData['date'],
                         'print_data' => $snapshotPrintData,
                     ],
                     'status' => 'generated',
@@ -322,7 +325,8 @@ class MarksheetController extends Controller
         }
 
 
-        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
+        $selectedDateYmd = $this->parseDateToYmd($printData['date'] ?? null);
+        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets', 'selectedDateYmd'));
     }
 
     public function printGenerated($marksheet, Request $request)
@@ -338,8 +342,9 @@ class MarksheetController extends Controller
             ['template' => $template, 'printData' => $printData] = $this->savedPrintSheet($marksheetModel, $request);
             $marksheetModel->forceFill(['printed_at' => now()])->save();
             $sheets = [compact('template', 'printData')];
+            $selectedDateYmd = $this->parseDateToYmd($printData['date'] ?? null);
 
-            return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
+            return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets', 'selectedDateYmd'));
         }
 
         // When marks are not entered or marksheet is not found:
@@ -367,8 +372,8 @@ class MarksheetController extends Controller
         $template = $this->fixedTemplate();
         $printData = $this->buildPrintData($classId, $examId, $student ? (int) $student->id : null, $request);
         $sheets = [compact('template', 'printData')];
-
-        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets'));
+        $selectedDateYmd = $this->parseDateToYmd($printData['date'] ?? null);
+        return view('backend.AcademicsModules.marksheet_print', compact('template', 'printData', 'sheets', 'selectedDateYmd'));
     }
 
     public function bulkPrintGeneratedPage(string $marksheets, Request $request)
@@ -415,7 +420,10 @@ class MarksheetController extends Controller
         Marksheet::query()->whereIn('id', $marksheets->pluck('id'))->update(['printed_at' => now()]);
         $template = $this->fixedTemplate('Bulk Generated Marksheets');
 
-        return view('backend.AcademicsModules.marksheet_print', compact('template', 'sheets'));
+        $firstSheetDate = $sheets->first()['printData']['date'] ?? null;
+        $selectedDateYmd = $this->parseDateToYmd($request->input('print_date', $request->input('date', $firstSheetDate)));
+
+        return view('backend.AcademicsModules.marksheet_print', compact('template', 'sheets', 'selectedDateYmd'));
     }
 
     public function bulkDeleteGenerated(Request $request)
@@ -466,23 +474,58 @@ class MarksheetController extends Controller
         $template = $this->fixedTemplate($marksheet->snapshot['template_name'] ?? 'Generated Marksheet');
         $printData = $marksheet->snapshot['print_data'] ?? [];
 
+        $request = $request ?: request();
+        $snapshotDate = $marksheet->snapshot['print_date'] ?? ($printData['date'] ?? null);
+        $customDate = $request->input('print_date', $request->input('date', $snapshotDate));
+        $formattedDate = $this->formatMarksheetDate($customDate, $snapshotDate ?: now()->format('F d, Y'));
+
         if ($marksheet->student_id && $marksheet->class_id) {
-            $request = $request ?: request();
             $snapshotAttendance = $printData['attendance'] ?? '';
-            $snapshotDate = $printData['date'] ?? null;
             $liveRequest = $request->duplicate(
                 array_merge($request->query(), array_filter([
                     'attendance' => $request->input('attendance', $snapshotAttendance),
-                    'date' => $request->input('date', $snapshotDate),
+                    'date' => $formattedDate,
+                    'print_date' => $formattedDate,
                 ], fn ($value) => $value !== null)),
                 $request->request->all()
             );
-            $printData = $this->buildPrintData(
+            $livePrintData = $this->buildPrintData(
                 (int) $marksheet->class_id,
                 $marksheet->exam_id ? (int) $marksheet->exam_id : null,
                 (int) $marksheet->student_id,
                 $liveRequest
             );
+
+            if (!empty($livePrintData['is_blank']) && !empty($printData['rows']) && empty($printData['is_blank'])) {
+                $printData['date'] = $formattedDate;
+                if (!empty($livePrintData['attendance']) && $livePrintData['attendance'] !== '/') {
+                    $printData['attendance'] = $livePrintData['attendance'];
+                }
+            } else {
+                $printData = $livePrintData;
+                // Preserve snapshot PT marks if live recalculation returned 0 or empty for any subject
+                if (!empty($marksheet->snapshot['print_data']['rows']) && !empty($printData['rows'])) {
+                    $snapshotRows = collect($marksheet->snapshot['print_data']['rows'])->keyBy('subject_id');
+                    foreach ($printData['rows'] as &$row) {
+                        $subId = $row['subject_id'] ?? null;
+                        $snapRow = $subId ? $snapshotRows->get($subId) : null;
+                        if ($snapRow && !empty($snapRow['terms'])) {
+                            foreach ($row['terms'] as $tIdx => &$term) {
+                                $snapTerm = $snapRow['terms'][$tIdx] ?? null;
+                                if ($snapTerm && !empty($snapTerm['cells'])) {
+                                    $snapPt = (string) ($snapTerm['cells'][0] ?? '');
+                                    $livePt = (string) ($term['cells'][0] ?? '');
+                                    if (($livePt === '0' || $livePt === '') && $snapPt !== '' && $snapPt !== '0') {
+                                        $term['cells'][0] = $snapPt;
+                                    }
+                                }
+                            }
+                            unset($term);
+                        }
+                    }
+                    unset($row);
+                }
+            }
         }
 
         foreach (['student', 'class', 'exam'] as $key) {
@@ -490,6 +533,7 @@ class MarksheetController extends Controller
                 $printData[$key] = (object) $printData[$key];
             }
         }
+        $printData['date'] = $formattedDate;
 
         return compact('template', 'printData');
     }
@@ -510,7 +554,8 @@ class MarksheetController extends Controller
         $hasEnteredMarks = $studentId && $marks->isNotEmpty() && $marks->contains(function ($item) {
             return ($item->mark_theory !== null && $item->mark_theory !== '')
                 || ($item->total_marks !== null && $item->total_marks !== '')
-                || (!empty($item->internal_assessment_marks) && $item->internal_assessment_marks !== '[]' && $item->internal_assessment_marks !== '{}');
+                || (!empty($item->internal_assessment_marks) && $item->internal_assessment_marks !== '[]' && $item->internal_assessment_marks !== '{}')
+                || (!empty($item->grade) || !empty($item->overall_grade));
         });
 
         $rows = [];
@@ -518,11 +563,69 @@ class MarksheetController extends Controller
         $maxTotal = 0.0;
         $hasFailingSubject = false;
 
+        $disciplineSubjects = [];
+
         foreach ($subjects as $subject) {
+            $subjectId = (int) $subject->id;
+            $subjectName = $this->marksheetSubjectName($subject->subject_name ?? $subject->name ?? '-');
+
+            // Exclude dummy test subjects like te4st or test
+            if (Str::startsWith(Str::lower($subjectName), 'test') || Str::contains(Str::lower($subjectName), ['te4st', 'dummy'])) {
+                continue;
+            }
+
+            $subType = strtolower(trim((string) ($subject->subject_type ?? '')));
+            $isSkilled = in_array($subType, ['skilled', 'skill', 'skill-based', 'skill based'], true)
+                || str_contains($subType, 'skill');
+            $isNonAcademic = (bool) preg_match('/non[\s-]*academic/i', $subType);
+            $isDisciplineSubject = $isSkilled || $isNonAcademic;
+
+            if ($isDisciplineSubject) {
+                $termGrades = [];
+                foreach ($layout['scholastic_terms'] as $termIndex => $term) {
+                    $termExam = $this->examForTerm($term, $termIndex, $examMap, $exam);
+                    $ptExam = $this->ptExamForTerm($term, $termIndex, $examMap);
+                    $termExamId = $termExam?->id;
+                    $ptExamId = $ptExam?->id;
+
+                    $mark = $marks->first(function ($item) use ($subject, $termExamId) {
+                        return (int) ($item->subject_id ?? 0) === (int) $subject->id
+                            && (!$termExamId || (int) ($item->exam_id ?? 0) === $termExamId);
+                    });
+                    $ptMark = $marks->first(function ($item) use ($subject, $ptExamId) {
+                        return (int) ($item->subject_id ?? 0) === (int) $subject->id
+                            && $ptExamId
+                            && (int) ($item->exam_id ?? 0) === (int) $ptExamId;
+                    });
+
+                    $savedGrade = $mark ? ($mark->grade ?: $mark->overall_grade ?: '') : '';
+                    if ($savedGrade !== '') {
+                        $termGrades[$termIndex] = $this->normalizeToThreePointGrade($savedGrade);
+                    } else {
+                        $termValues = $this->cbseTermValues($mark, $ptMark, $ptExam);
+                        $termObtained = (float) $termValues['final_total'];
+                        if ($termObtained > 0) {
+                            $termGrades[$termIndex] = $this->calculateThreePointGrade($termObtained, 100);
+                        } else {
+                            $termGrades[$termIndex] = 'A';
+                        }
+                    }
+                }
+
+                $disciplineSubjects[] = [
+                    'id' => $subjectId,
+                    'title' => $subjectName,
+                    'term_grades' => $termGrades,
+                ];
+
+                continue; // Exclude from scholastic $rows and totals
+            }
+
             $row = [
-                'subject_id' => (int) $subject->id,
-                'subject' => $this->marksheetSubjectName($subject->subject_name ?? $subject->name ?? '-'),
+                'subject_id' => $subjectId,
+                'subject' => $subjectName,
                 'special_subject_formatting' => !empty($subject->do_not_print_in_main_scholastic_area),
+                'is_non_academic' => false,
                 'terms' => [],
                 'grand_total' => '',
                 'grade' => '',
@@ -546,13 +649,52 @@ class MarksheetController extends Controller
                 $ptExamId = $ptExam?->id;
                 $mark = $marks->first(function ($item) use ($subject, $termExamId) {
                     return (int) ($item->subject_id ?? 0) === (int) $subject->id
-                        && (!$termExamId || (int) ($item->exam_id ?? 0) === $termExamId);
+                        && (!$termExamId || (int) ($item->exam_id ?? 0) === (int) $termExamId);
                 });
-                $ptMark = $marks->first(function ($item) use ($subject, $ptExamId) {
-                    return (int) ($item->subject_id ?? 0) === (int) $subject->id
-                        && $ptExamId
-                        && (int) ($item->exam_id ?? 0) === (int) $ptExamId;
-                });
+
+                if (!$mark) {
+                    $targetCanonical = $termIndex === 0 ? 'term1' : 'term2';
+                    $mark = $marks->first(function ($item) use ($subject, $examMap, $targetCanonical) {
+                        if ((int) ($item->subject_id ?? 0) !== (int) $subject->id) {
+                            return false;
+                        }
+                        $itemExam = $examMap->first(fn ($e) => (int) ($e->id ?? 0) === (int) ($item->exam_id ?? 0));
+                        return $itemExam && $this->canonicalExamType($itemExam->exam_type, $itemExam->exam_name) === $targetCanonical;
+                    });
+                }
+
+                $ptMark = null;
+                if ($ptExamId) {
+                    $ptMark = $marks->first(function ($item) use ($subject, $ptExamId) {
+                        return (int) ($item->subject_id ?? 0) === (int) $subject->id
+                            && (int) ($item->exam_id ?? 0) === (int) $ptExamId;
+                    });
+                }
+
+                if (!$ptMark) {
+                    $targetPtCanonical = $termIndex === 0 ? 'pt1' : 'pt2';
+                    $ptMark = $marks->first(function ($item) use ($subject, $examMap, $targetPtCanonical) {
+                        if ((int) ($item->subject_id ?? 0) !== (int) $subject->id) {
+                            return false;
+                        }
+                        $itemExam = $examMap->first(fn ($e) => (int) ($e->id ?? 0) === (int) ($item->exam_id ?? 0));
+                        if ($itemExam) {
+                            return $this->canonicalExamType($itemExam->exam_type, $itemExam->exam_name) === $targetPtCanonical;
+                        }
+                        return false;
+                    });
+                }
+
+                if ($isNonAcademic) {
+                    $savedGrade = $mark ? ($mark->grade ?: $mark->overall_grade ?: '') : '';
+                    $row['terms'][$termIndex] = [
+                        'cells' => array_fill(0, count($term['columns'] ?? []), ''),
+                        'total' => '',
+                        'grade' => $savedGrade,
+                        'result' => '',
+                    ];
+                    continue;
+                }
 
                 $termTotal = 0.0;
                 $termValues = $this->cbseTermValues($mark, $ptMark, $ptExam);
@@ -584,16 +726,188 @@ class MarksheetController extends Controller
             }
 
             if ($hasEnteredMarks) {
-                $rowMax = max(1, $this->rowMax($layout));
-                $rowFailed = $this->isBelowFailPercent((float) $row['grand_total'], $rowMax, $exam);
-                if (empty($row['special_subject_formatting'])) {
-                    $hasFailingSubject = $hasFailingSubject || $rowFailed;
+                // Determine Term 2 index for Grade calculation
+                $term2Index = null;
+                foreach ($layout['scholastic_terms'] as $tIdx => $tCfg) {
+                    $tKey = strtolower((string) ($tCfg['key'] ?? ''));
+                    $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
+                    $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
+                    if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                        $term2Index = $tIdx;
+                        break;
+                    }
                 }
-                $row['grade'] = $this->gradeFor((float) $row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
-                $row['result'] = $rowFailed ? 'Fail' : 'Pass';
+                if ($term2Index === null && count($layout['scholastic_terms']) > 1) {
+                    $term2Index = count($layout['scholastic_terms']) - 1;
+                }
+
+                if ($isNonAcademic) {
+                    $term2Grade = ($term2Index !== null && isset($row['terms'][$term2Index])) ? $row['terms'][$term2Index]['grade'] : '';
+                    $row['grade'] = $term2Grade ?: (collect($row['terms'])->pluck('grade')->filter()->last() ?: '');
+                    $row['grand_total'] = '';
+                    $row['result'] = '';
+                } else {
+                    $rowMax = max(1, $this->rowMax($layout));
+                    $rowFailed = $this->isBelowFailPercent((float) $row['grand_total'], $rowMax, $exam);
+                    if (empty($row['special_subject_formatting'])) {
+                        $hasFailingSubject = $hasFailingSubject || $rowFailed;
+                    }
+
+                    if ($term2Index !== null && isset($row['terms'][$term2Index])) {
+                        $term2Total = (float) ($row['terms'][$term2Index]['total'] ?? 0);
+                        $term2Max = max(1, (float) $this->termMax($layout['scholastic_terms'][$term2Index]));
+                        $row['grade'] = $row['terms'][$term2Index]['grade'] ?: $this->gradeFor($term2Total, $term2Max, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
+                    } else {
+                        $row['grade'] = $this->gradeFor((float) $row['grand_total'], $rowMax, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
+                    }
+
+                    $row['result'] = $rowFailed ? 'Fail' : 'Pass';
+                }
             }
             $rows[] = $row;
         }
+
+        // Map co-scholastic grades from saved marks if available
+        $allNonAcademicMarks = $marks->filter(function ($item) {
+            return !empty($item->grade) || !empty($item->overall_grade);
+        });
+
+        $subjectsMap = Schema::connection('dynamic')->hasTable('subjectmaster')
+            ? DB::connection('dynamic')->table('subjectmaster')->pluck('subject_name', 'id')
+            : collect();
+
+        $categoryOf = function ($name) {
+            $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
+            if ($n === 'discipline') {
+                return 'discipline';
+            }
+            if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) {
+                return 'work_education';
+            }
+            if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) {
+                return 'art_education';
+            }
+            if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') {
+                return 'health_pe';
+            }
+            return $n;
+        };
+
+        $standardCategories = ['discipline', 'work_education', 'art_education', 'health_pe'];
+
+        $assignedStandard = [];
+        $extraCustom = [];
+
+        foreach ($disciplineSubjects as $ds) {
+            $cat = $categoryOf($ds['title']);
+            if (in_array($cat, $standardCategories, true)) {
+                if (!isset($assignedStandard[$cat])) {
+                    $assignedStandard[$cat] = $ds['title'];
+                }
+            } else {
+                if (!isset($extraCustom[$cat])) {
+                    $extraCustom[$cat] = $ds['title'];
+                }
+            }
+        }
+
+        $coSections = [];
+        foreach (($layout['co_scholastic_sections'] ?? []) as $section) {
+            $secTitle = strtolower((string) ($section['title'] ?? ''));
+            $isTerm2 = (bool) preg_match('/\bterm[\s-]*(?:ii|2)\b/i', $secTitle);
+            $isTerm1 = !$isTerm2 && (bool) preg_match('/\bterm[\s-]*(?:i|1)\b/i', $secTitle);
+
+            $targetTermIndex = $isTerm2 ? 1 : ($isTerm1 ? 0 : 0);
+            $targetExam = null;
+            if ($targetTermIndex !== null && isset($layout['scholastic_terms'][$targetTermIndex])) {
+                $targetExam = $this->examForTerm($layout['scholastic_terms'][$targetTermIndex], $targetTermIndex, $examMap, $exam);
+            }
+
+            $items = [];
+            $seenCategories = [];
+
+            foreach (($section['items'] ?? []) as $it) {
+                $cat = $categoryOf($it);
+                $displayName = $it;
+
+                if (!isset($seenCategories[$cat])) {
+                    $seenCategories[$cat] = true;
+                    $items[] = $displayName;
+                }
+
+                // Insert extra custom discipline subjects (like Food, Block Print) right after Discipline
+                if ($cat === 'discipline') {
+                    foreach ($extraCustom as $eCat => $eTitle) {
+                        if (!isset($seenCategories[$eCat])) {
+                            $seenCategories[$eCat] = true;
+                            $items[] = ucwords(strtolower($eTitle));
+                        }
+                    }
+                }
+            }
+
+            foreach ($extraCustom as $eCat => $eTitle) {
+                if (!isset($seenCategories[$eCat])) {
+                    $seenCategories[$eCat] = true;
+                    $items[] = ucwords(strtolower($eTitle));
+                }
+            }
+
+            $grades = [];
+            foreach ($items as $item) {
+                $itemCat = $categoryOf($item);
+                $itemName = strtolower(trim((string) $item));
+                $foundGrade = null;
+
+                // 1. Check if this item is an assigned discipline subject
+                $matchedDiscipline = collect($disciplineSubjects)->first(function ($ds) use ($itemCat, $itemName, $categoryOf) {
+                    if ($categoryOf($ds['title']) === $itemCat) {
+                        return true;
+                    }
+                    $dName = strtolower(trim($ds['title']));
+                    return $dName === $itemName || str_contains($dName, $itemName) || str_contains($itemName, $dName);
+                });
+
+                if ($matchedDiscipline && isset($matchedDiscipline['term_grades'][$targetTermIndex])) {
+                    $foundGrade = $matchedDiscipline['term_grades'][$targetTermIndex];
+                }
+
+                // 2. Lookup in saved marks
+                if (!$foundGrade) {
+                    foreach ($allNonAcademicMarks as $m) {
+                        $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
+                        $sCat = $categoryOf($sRaw);
+                        $sName = strtolower(trim($sRaw));
+                        if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
+                            if ($targetExam && (int) $m->exam_id === (int) $targetExam->id) {
+                                $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                                break;
+                            } elseif (!$targetExam && empty($foundGrade)) {
+                                $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                            }
+                        }
+                    }
+                }
+
+                if (!$foundGrade) {
+                    foreach ($allNonAcademicMarks as $m) {
+                        $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
+                        $sCat = $categoryOf($sRaw);
+                        $sName = strtolower(trim($sRaw));
+                        if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
+                            $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                            break;
+                        }
+                    }
+                }
+
+                $grades[$item] = $foundGrade ?: ($grading['co_scholastic_default_grade'] ?? 'A');
+            }
+            $section['items'] = $items;
+            $section['grades'] = $grades;
+            $coSections[] = $section;
+        }
+        $layout['co_scholastic_sections'] = $coSections;
 
         if (!$hasEnteredMarks) {
             $grandTotal = null;
@@ -627,7 +941,7 @@ class MarksheetController extends Controller
             'result' => $result,
             'remarks' => $remarks,
             'attendance' => $hasEnteredMarks ? $this->collectiveAttendanceForMarksheet($studentId, $classId, $examId, $this->resolveDynamicSessionYear($request), $request->input('attendance', '')) : '',
-            'date' => $request->input('date', now()->format('F d, Y')),
+            'date' => $this->formatMarksheetDate($request->input('print_date', $request->input('date')), now()->format('F d, Y')),
             'session_year' => $this->resolveDynamicSessionYear($request),
         ];
     }
@@ -887,6 +1201,7 @@ class MarksheetController extends Controller
     {
         $class = $classId ? Classes::query()->find($classId) : null;
         $subjectColumns = $this->marksheetSubjectColumns();
+        $assigned = collect();
 
         if ($studentId && Schema::connection('dynamic')->hasTable('subject_assign_student') && Schema::connection('dynamic')->hasTable('combination_subject')) {
             $assigned = DB::connection('dynamic')
@@ -907,24 +1222,69 @@ class MarksheetController extends Controller
                 ->distinct()
                 ->orderBy('cs.subject_order')
                 ->orderBy('s.subject_name')
+                ->get()
+                ->unique('id')
+                ->values();
+
+            // Continue to merge class-level skilled/non-academic subjects and marked subjects below
+        }
+
+        if ($assigned->isNotEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
+            $classSkilledSubjects = DB::connection('dynamic')
+                ->table('academic_class_subject as acs')
+                ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
+                ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
+                ->where(function ($q) {
+                    $q->whereIn(DB::raw('LOWER(TRIM(s.subject_type))'), ['skilled', 'skill', 'non academic'])
+                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%skill%')
+                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%non%academic%');
+                })
+                ->select($subjectColumns)
                 ->get();
 
-            if ($assigned->count() > 0) {
-                return $assigned;
+            if ($classSkilledSubjects->isNotEmpty()) {
+                $assigned = $assigned->concat($classSkilledSubjects)->unique('id')->values();
             }
         }
 
-        if ($classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
-            $subjects = DB::connection('dynamic')
+        if ($assigned->isEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
+            $assigned = DB::connection('dynamic')
                 ->table('academic_class_subject as acs')
                 ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
                 ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
                 ->select($subjectColumns)
                 ->orderBy('s.subject_name')
-                ->get();
-            if ($subjects->count() > 0) {
-                return $subjects;
+                ->get()
+                ->unique('id')
+                ->values();
+        }
+
+        // Include any subjects where marks have been entered for this student
+        if ($studentId && Schema::connection('dynamic')->hasTable('academic_students_marks') && Schema::connection('dynamic')->hasTable('previosly_saved_marks_entry')) {
+            $markedSubjectIds = DB::connection('dynamic')
+                ->table('academic_students_marks as sm')
+                ->join('previosly_saved_marks_entry as me', 'me.id', '=', 'sm.marks_id')
+                ->where('sm.student_id', (string) $studentId)
+                ->pluck('me.subject_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter()
+                ->unique()
+                ->all();
+
+            $existingIds = $assigned->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $missingIds = array_diff($markedSubjectIds, $existingIds);
+            if (!empty($missingIds)) {
+                $extraSubjects = DB::connection('dynamic')
+                    ->table('subjectmaster as s')
+                    ->whereIn('s.id', $missingIds)
+                    ->select($subjectColumns)
+                    ->get();
+                $assigned = $assigned->concat($extraSubjects)->unique('id')->values();
             }
+        }
+
+        if ($assigned->isNotEmpty()) {
+            return $assigned;
         }
 
         if (Schema::connection('dynamic')->hasTable('subjectmaster')) {
@@ -981,7 +1341,6 @@ class MarksheetController extends Controller
             $examIds = array_merge($examIds, DB::connection('dynamic')
                 ->table('academic_exam')
                 ->whereIn('class_id', $classIds)
-                ->whereIn('exam_type', ['PT 1', 'PT-1', 'PT 2', 'PT-2', 'Term 1', 'Term-1', 'Term 2', 'Term-2'])
                 ->pluck('id')
                 ->map(fn ($id) => (int) $id)
                 ->all());
@@ -991,9 +1350,11 @@ class MarksheetController extends Controller
         $query = DB::connection('dynamic')
             ->table('academic_students_marks as sm')
             ->join('previosly_saved_marks_entry as me', 'me.id', '=', 'sm.marks_id')
-            ->where('sm.student_id', (string) $studentId)
-            ->when(!empty($classIds), fn ($q) => $q->whereIn('me.class_id', array_map('strval', $classIds)))
-            ->when(count($examIds) > 0, fn ($q) => $q->whereIn('me.exam_id', array_map('strval', $examIds)));
+            ->where('sm.student_id', (string) $studentId);
+
+        if (count($examIds) > 0) {
+            $query->whereIn('me.exam_id', array_map('strval', $examIds));
+        }
 
         if (Schema::connection('dynamic')->hasColumn('academic_students_marks', 'is_delete')) {
             $query->where(function ($q) {
@@ -1007,7 +1368,30 @@ class MarksheetController extends Controller
             });
         }
 
-        return $query->select('sm.*', 'me.exam_id', 'me.subject_id', 'me.class_id')->get();
+        $marks = $query->select('sm.*', 'me.exam_id', 'me.subject_id', 'me.class_id')->get();
+
+        // If no marks were found using the examIds filter, fetch all marks for this student
+        if ($marks->isEmpty() && count($examIds) > 0) {
+            $fallbackQuery = DB::connection('dynamic')
+                ->table('academic_students_marks as sm')
+                ->join('previosly_saved_marks_entry as me', 'me.id', '=', 'sm.marks_id')
+                ->where('sm.student_id', (string) $studentId);
+
+            if (Schema::connection('dynamic')->hasColumn('academic_students_marks', 'is_delete')) {
+                $fallbackQuery->where(function ($q) {
+                    $q->where('sm.is_delete', 0)->orWhereNull('sm.is_delete');
+                });
+            }
+            if (Schema::connection('dynamic')->hasColumn('previosly_saved_marks_entry', 'is_delete')) {
+                $fallbackQuery->where(function ($q) {
+                    $q->where('me.is_delete', 0)->orWhereNull('me.is_delete');
+                });
+            }
+
+            $marks = $fallbackQuery->select('sm.*', 'me.exam_id', 'me.subject_id', 'me.class_id')->get();
+        }
+
+        return $marks;
     }
 
     private function marksheetExamMap(?int $classId, array $layout, $selectedExam)
@@ -1022,8 +1406,7 @@ class MarksheetController extends Controller
             $query->whereIn('id', $examIds);
         } else {
             $classIds = $this->marksClassIdsFor($classId);
-            $query->when(!empty($classIds), fn ($q) => $q->whereIn('class_id', $classIds))
-                ->whereIn('exam_type', ['PT 1', 'PT-1', 'PT 2', 'PT-2', 'Term 1', 'Term-1', 'Term 2', 'Term-2']);
+            $query->when(!empty($classIds), fn ($q) => $q->whereIn('class_id', $classIds));
         }
 
         $exams = $query->get();
@@ -1031,7 +1414,26 @@ class MarksheetController extends Controller
             $exams->push($selectedExam);
         }
 
-        return $exams->keyBy(fn ($exam) => $this->normalizeExamType($exam->exam_type));
+        $map = collect();
+        foreach ($exams as $exam) {
+            $canonical = $this->canonicalExamType($exam->exam_type, $exam->exam_name);
+            if ($canonical !== '' && !$map->has($canonical)) {
+                $map->put($canonical, $exam);
+            }
+            $normType = $this->normalizeExamType($exam->exam_type);
+            if ($normType !== '' && !$map->has($normType)) {
+                $map->put($normType, $exam);
+            }
+            if (!empty($exam->exam_name)) {
+                $normName = $this->normalizeExamType($exam->exam_name);
+                if ($normName !== '' && !$map->has($normName)) {
+                    $map->put($normName, $exam);
+                }
+            }
+            $map->put((string) $exam->id, $exam);
+        }
+
+        return $map;
     }
 
     private function examForTerm(array $term, int $termIndex, $examMap, $selectedExam)
@@ -1041,12 +1443,28 @@ class MarksheetController extends Controller
         }
 
         $termType = $term['exam_type'] ?? ($termIndex === 0 ? 'Term 1' : 'Term 2');
-        $normalizedTermType = $this->normalizeExamType($termType);
-        if ($selectedExam && $this->normalizeExamType($selectedExam->exam_type) === $normalizedTermType) {
+        $canonical = $this->canonicalExamType($termType);
+
+        if ($selectedExam && $this->canonicalExamType($selectedExam->exam_type, $selectedExam->exam_name) === $canonical) {
             return $selectedExam;
         }
 
-        return $examMap->get($normalizedTermType);
+        if ($examMap->has($canonical)) {
+            return $examMap->get($canonical);
+        }
+
+        $norm = $this->normalizeExamType($termType);
+        if ($examMap->has($norm)) {
+            return $examMap->get($norm);
+        }
+
+        foreach ($examMap as $exam) {
+            if ($exam instanceof Exam && $this->canonicalExamType($exam->exam_type, $exam->exam_name) === $canonical) {
+                return $exam;
+            }
+        }
+
+        return null;
     }
 
     private function ptExamForTerm(array $term, int $termIndex, $examMap)
@@ -1056,8 +1474,103 @@ class MarksheetController extends Controller
         }
 
         $ptType = $term['pt_exam_type'] ?? ($termIndex === 0 ? 'PT 1' : 'PT 2');
+        $canonical = $this->canonicalExamType($ptType);
 
-        return $examMap->get($this->normalizeExamType($ptType));
+        if ($examMap->has($canonical)) {
+            return $examMap->get($canonical);
+        }
+
+        $norm = $this->normalizeExamType($ptType);
+        if ($examMap->has($norm)) {
+            return $examMap->get($norm);
+        }
+
+        foreach ($examMap as $exam) {
+            if ($exam instanceof Exam && $this->canonicalExamType($exam->exam_type, $exam->exam_name) === $canonical) {
+                return $exam;
+            }
+        }
+
+        return null;
+    }
+
+    private function canonicalExamType(?string $type, ?string $name = null): string
+    {
+        $raw = strtolower(trim((string) ($type ?: $name)));
+        $clean = preg_replace('/[^a-z0-9]/', '', $raw);
+
+        if (is_numeric($raw) && !empty($name)) {
+            return $this->canonicalExamType(null, $name);
+        }
+
+        // 1. PT 2 / Periodic Test 2 / PT II
+        if (
+            preg_match('/\bpt[\s_-]*(2|ii)\b/i', $raw) ||
+            preg_match('/periodic[\s_-]*test[\s_-]*(2|ii)\b/i', $raw) ||
+            preg_match('/periodic[\s_-]*assessment[\s_-]*(2|ii)\b/i', $raw) ||
+            in_array($clean, ['pt2', 'ptii', 'periodictest2', 'periodictestii', 'periodicassessment2', 'pa2'], true) ||
+            str_starts_with($clean, 'pt2') ||
+            str_starts_with($clean, 'ptii') ||
+            str_starts_with($clean, 'periodictest2') ||
+            str_starts_with($clean, 'periodictestii')
+        ) {
+            return 'pt2';
+        }
+
+        // 2. PT 1 / Periodic Test 1 / PT I
+        if (
+            preg_match('/\bpt[\s_-]*(1|i)\b/i', $raw) ||
+            preg_match('/periodic[\s_-]*test[\s_-]*(1|i)\b/i', $raw) ||
+            preg_match('/periodic[\s_-]*assessment[\s_-]*(1|i)\b/i', $raw) ||
+            in_array($clean, ['pt1', 'pti', 'periodictest1', 'periodictesti', 'periodicassessment1', 'pa1'], true) ||
+            str_starts_with($clean, 'pt1') ||
+            str_starts_with($clean, 'pti') ||
+            str_starts_with($clean, 'periodictest1') ||
+            str_starts_with($clean, 'periodictesti')
+        ) {
+            return 'pt1';
+        }
+
+        // 3. Half Yearly / Mid Term (check before general yearly in Term 2)
+        if (
+            preg_match('/half[\s_-]*yearly/i', $raw) ||
+            preg_match('/mid[\s_-]*term/i', $raw) ||
+            in_array($clean, ['halfyearly', 'midterm'], true) ||
+            str_starts_with($clean, 'halfyearly') ||
+            str_starts_with($clean, 'midterm')
+        ) {
+            return 'term1';
+        }
+
+        // 4. Term 2 / Term II / Annual / Final / Yearly
+        if (
+            preg_match('/\bterm[\s_-]*(2|ii)\b/i', $raw) ||
+            preg_match('/annual/i', $raw) ||
+            preg_match('/(?<!half[\s_-])yearly/i', $raw) ||
+            preg_match('/final/i', $raw) ||
+            in_array($clean, ['term2', 'termii', 'annual', 'yearly', 'final'], true) ||
+            str_starts_with($clean, 'term2') ||
+            str_starts_with($clean, 'termii') ||
+            str_starts_with($clean, 'annual')
+        ) {
+            return 'term2';
+        }
+
+        // 5. Term 1 / Term I
+        if (
+            preg_match('/\bterm[\s_-]*(1|i)\b/i', $raw) ||
+            in_array($clean, ['term1', 'termi'], true) ||
+            str_starts_with($clean, 'term1') ||
+            str_starts_with($clean, 'termi')
+        ) {
+            return 'term1';
+        }
+
+        if (!empty($name) && $raw !== strtolower(trim($name))) {
+            return $this->canonicalExamType(null, $name);
+        }
+
+        return $clean;
     }
 
     private function normalizeExamType(?string $type): string
@@ -1391,13 +1904,31 @@ class MarksheetController extends Controller
             }
         }
 
+        $isInternal = false;
+        $internalMax = null;
         if (($raw === '' || $raw === null) && $termMark) {
             $internal = $this->internalAssessmentMarks($termMark);
             foreach ($internal as $key => $value) {
-                $norm = Str::lower(str_replace([' ', '-', '_', '/'], '', (string) $key));
-                if (in_array($norm, ['pt', 'periodictest', 'pt1', 'pt2'], true) && $value !== null && $value !== '') {
-                    $raw = $value;
-                    break;
+                $norm = preg_replace('/[^a-z0-9]/', '', strtolower((string) $key));
+                if (
+                    in_array($norm, ['pt', 'periodictest', 'pt1', 'pt2', 'pt5', 'pt15', 'pt40', 'pt140', 'periodic', 'penpaper', 'penpapertest', 'ppt', 'pa', 'pa1', 'pa2'], true) ||
+                    str_starts_with($norm, 'pt') ||
+                    str_starts_with($norm, 'periodic')
+                ) {
+                    if ($value !== null && $value !== '') {
+                        $raw = $value;
+                        $isInternal = true;
+                        if (str_contains((string)$key, '40') || str_contains($norm, '40')) {
+                            $internalMax = 40.0;
+                        } elseif (str_contains((string)$key, '5') || str_contains($norm, '5')) {
+                            $internalMax = 5.0;
+                        } elseif (str_contains((string)$key, '10') || str_contains($norm, '10')) {
+                            $internalMax = 10.0;
+                        } elseif (str_contains((string)$key, '20') || str_contains($norm, '20')) {
+                            $internalMax = 20.0;
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -1411,8 +1942,25 @@ class MarksheetController extends Controller
             return 0.0;
         }
 
-        // Converted Marks = (Obtained PT Marks ÷ 40) × 5, rounded off to nearest whole number
-        $converted = ($obtained / 40.0) * 5.0;
+        $max = 40.0;
+        if ($ptExam) {
+            $theoryMax = (float) ($ptExam->max_marks_theory ?? 0);
+            $totalMax = (float) ($ptExam->max_marks ?? 0);
+            if ($theoryMax > 0) {
+                $max = $theoryMax;
+            } elseif ($totalMax > 0) {
+                $max = $totalMax;
+            }
+        } elseif ($isInternal) {
+            $max = $internalMax ?: ($obtained <= 5.0 ? 5.0 : 40.0);
+        }
+
+        if ($max <= 5.0 || ($obtained <= 5.0 && $max <= 5.0)) {
+            return (float) round(min(5.0, max(0.0, $obtained)), 1);
+        }
+
+        // Converted Marks = (Obtained PT Marks ÷ Max) × 5, rounded off to nearest whole number
+        $converted = ($obtained / $max) * 5.0;
 
         return (float) round(min(5.0, max(0.0, $converted)), 0, PHP_ROUND_HALF_UP);
     }
@@ -1761,6 +2309,61 @@ class MarksheetController extends Controller
         }
 
         return $latestIds;
+    }
+
+    private function normalizeToThreePointGrade(?string $grade): string
+    {
+        $g = strtoupper(trim((string) $grade));
+        if (in_array($g, ['A', 'B', 'C'], true)) {
+            return $g;
+        }
+        if (in_array($g, ['A1', 'A2', 'A+'], true)) {
+            return 'A';
+        }
+        if (in_array($g, ['B1', 'B2', 'B+'], true)) {
+            return 'B';
+        }
+        if (in_array($g, ['C1', 'C2', 'D', 'E'], true)) {
+            return 'C';
+        }
+        return $g !== '' ? $g : 'A';
+    }
+
+    private function calculateThreePointGrade(float $obtained, float $max = 100): string
+    {
+        if ($max <= 0) return 'A';
+        $percent = ($obtained / $max) * 100;
+        if ($percent >= 70.5) {
+            return 'A';
+        } elseif ($percent >= 50.5) {
+            return 'B';
+        } else {
+            return 'C';
+        }
+    }
+
+    private function formatMarksheetDate($rawDate, string $fallback = ''): string
+    {
+        if (empty($rawDate)) {
+            return $fallback ?: now()->format('F d, Y');
+        }
+        try {
+            return \Carbon\Carbon::parse($rawDate)->format('F d, Y');
+        } catch (\Throwable $e) {
+            return (string) $rawDate;
+        }
+    }
+
+    private function parseDateToYmd($rawDate): string
+    {
+        if (empty($rawDate)) {
+            return now()->format('Y-m-d');
+        }
+        try {
+            return \Carbon\Carbon::parse($rawDate)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return now()->format('Y-m-d');
+        }
     }
 }
 

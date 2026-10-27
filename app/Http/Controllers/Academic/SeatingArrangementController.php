@@ -401,20 +401,28 @@ class SeatingArrangementController extends Controller
             ->where('exam_id', $examId)
             ->pluck('roll_no', 'student_id');
 
+        // sort by roll number (sequence) if present
+        if ($rollMap->isNotEmpty()) {
+            $students = $students->sortBy(function ($student) use ($rollMap) {
+                return $rollMap->get($student->id, 'ZZZZZZ');
+            })->values();
+        }
+
         $filename = 'roll_numbers_' . $className . '_' . $sectionName . '_' . str_replace(['/', '\\', ' '], '-', $sessionName) . '.csv';
 
-        return response()->streamDownload(function () use ($students, $rollMap, $className, $sectionName, $sessionName) {
+        return response()->streamDownload(function () use ($students, $rollMap, $className, $sectionName) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Class', 'Section', 'Session', 'Student ID', 'Student Name', 'Roll No']);
+            fputcsv($handle, ['Sr. No.', 'Student Name', 'Scholar No.', 'Roll No.', 'Class', 'Section']);
 
+            $srNo = 1;
             foreach ($students as $student) {
                 fputcsv($handle, [
+                    $srNo++,
+                    $student->student_name,
+                    $student->scholar_no ?? '',
+                    $rollMap->get($student->id, ''),
                     $className,
                     $sectionName,
-                    $sessionName,
-                    $student->id,
-                    $student->student_name,
-                    $rollMap->get($student->id, ''),
                 ]);
             }
 

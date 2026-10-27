@@ -76,7 +76,7 @@
                             if ($subject_->subject_type == 'Academic') {
                                 $check_1 = 'checked';
                             }elseif ($subject_->subject_type == 'Non Academic'){
-                                $check_3 = 'checked';
+                                $check_2 = 'checked';
                             }elseif ($subject_->subject_type == 'Skilled'){
                                 $check_3 = 'checked';
                             } else {

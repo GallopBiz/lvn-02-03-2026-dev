@@ -183,7 +183,7 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
             <div>
                 <h4 class="mb-1">Student Wise Details</h4>
-                <p class="text-muted mb-0">Working Days = Total selected days - Sundays - HRMS holiday/vacation/closure ranges. Present Days count only Present attendance records.</p>
+                <p class="text-muted mb-0">Working Days = Total days on which attendance was recorded (excluding Sundays and HRMS holidays). Days without recorded attendance are not counted as working days.</p>
             </div>
             <form method="POST" action="{{ route('academic.attendance.collective.store') }}" class="no-print">
                 @csrf

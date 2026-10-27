@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ClassSubject extends Model
 {
     use HasFactory;
+    protected $connection = 'dynamic';
     protected $table="academic_class_subject";
     protected $primaryKey="id";
     protected $fillable = ['subject_id','class_id','stream_id'];

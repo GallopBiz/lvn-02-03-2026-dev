@@ -31,11 +31,13 @@
 
     .sheet {
         width: 281mm;
-        height: 194mm;
+        min-height: 194mm;
+        height: auto;
         margin: 0 auto;
-        padding: 30mm 0 18mm;
+        padding: 24mm 0 6mm;
         position: relative;
-        overflow: hidden;
+        overflow: visible;
+        background: #fff;
         break-after: page;
         page-break-after: always;
         page-break-inside: avoid;
@@ -53,6 +55,24 @@
         font-family: var(--marksheet-font);
     }
 
+    .top-right-logo {
+        position: absolute;
+        top: 2mm;
+        right: 0mm;
+        width: 21mm;
+        text-align: right;
+        line-height: 0;
+        z-index: 10;
+    }
+
+    .top-right-logo img {
+        width: 20mm;
+        height: auto;
+        max-height: 21mm;
+        object-fit: contain;
+        display: inline-block;
+    }
+
     .date {
         text-align: right;
         font-size: 13px;
@@ -61,8 +81,8 @@
     .title {
         text-align: center;
         font-weight: bold;
-        font-size: 17px;
-        line-height: 1.35;
+        font-size: 16px;
+        line-height: 1.3;
         margin: 1mm 0 2mm;
     }
 
@@ -70,9 +90,9 @@
         border: 1px solid #333;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        padding: 2mm 4mm;
-        font-size: 15px;
-        line-height: 1.35;
+        padding: 1.5mm 3.5mm;
+        font-size: 13.5px;
+        line-height: 1.25;
     }
 
     .student-box table {
@@ -90,14 +110,14 @@
         max-width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 13.5px;
+        font-size: 12.5px;
         line-height: 1.1;
     }
 
     .marks th,
     .marks td {
         border: 1px solid #333;
-        padding: 0.8mm 1mm;
+        padding: 0.6mm 1mm;
         text-align: center;
         vertical-align: middle;
         overflow-wrap: anywhere;
@@ -106,10 +126,8 @@
     .marks .scholastic-area,
     .marks .subject {
         width: 35mm;
-    }
-
-    .marks .subject {
         text-align: left;
+        padding-left: 2mm;
     }
 
     .marks .section {
@@ -132,14 +150,23 @@
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 14px;
+        font-size: 12.5px;
+        line-height: 1.15;
     }
 
     .co-table th,
     .co-table td {
         border: 1px solid #333;
-        padding: 1.1mm 2mm;
+        padding: 0.6mm 1mm;
         overflow-wrap: anywhere;
+        vertical-align: middle;
+    }
+
+    .co-table th:first-child,
+    .co-table td:first-child,
+    .co-table .co-title {
+        text-align: left;
+        padding-left: 2mm;
     }
 
     .co-table td:last-child,
@@ -152,8 +179,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 15px;
-        margin-top: 3mm;
+        font-size: 13.5px;
+        margin-top: 2.5mm;
     }
 
     .remarks {
@@ -168,10 +195,15 @@
     }
 
     .summary-stats div {
-        font-size: 15px;
+        font-size: 13.5px;
     }
 
     @media print {
+        @page {
+            size: A4 landscape;
+            margin: 8mm;
+        }
+
         body {
             margin: 0;
             background: #fff;
@@ -193,6 +225,7 @@
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
+            overflow: visible !important;
         }
 
         .breadcrumb,
@@ -201,8 +234,21 @@
             display: none !important;
         }
 
+        .marksheet-print-area {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: #fff !important;
+        }
+
         .sheet {
-            margin: 0;
+            margin: 0 auto !important;
+            width: 281mm !important;
+            height: auto !important;
+            min-height: 194mm !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            page-break-inside: avoid !important;
         }
     }
 </style>
@@ -293,25 +339,61 @@
             $className = (string) optional($printData['class'])->class_name;
             $isPrimaryClass = in_array($classNumber($className), [1, 2, 3, 4, 5], true);
             $allRows = collect($printData['rows']);
-            $primarySubjectRows = $isPrimaryClass ? $allRows->filter(fn ($row) => $isPrimaryAdditionalSubject($row['subject'] ?? ''))->values() : collect();
-            $scholasticRows = $isPrimaryClass ? $allRows->reject(fn ($row) => $isPrimaryAdditionalSubject($row['subject'] ?? ''))->values() : $allRows;
-            $primaryAdditionalSubjects = $isPrimaryClass
-            ? collect(['Computer Science', 'Sanskrit'])->map(function ($subject) use ($primarySubjectRows, $hasSubject, $printData) {
-            $matchedRow = $primarySubjectRows->first(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject));
+            $isSkillOrNonAcademic = function ($row) {
+                if (!empty($row['is_non_academic']) || !empty($row['is_discipline_subject']) || !empty($row['is_skilled'])) {
+                    return true;
+                }
+                $sub = strtolower(trim((string) ($row['subject'] ?? '')));
+                return str_contains($sub, 'work education') 
+                    || str_contains($sub, 'artificial intelligence') 
+                    || str_contains($sub, 'marketing') 
+                    || str_contains($sub, 'tourism') 
+                    || str_contains($sub, 'food')
+                    || str_contains($sub, 'office procedures');
+            };
+            $isSpecialSubject = function ($row) use ($isPrimaryClass, $isPrimaryAdditionalSubject) {
+                if (!empty($row['special_subject_formatting'])) {
+                    return true;
+                }
+                if ($isPrimaryClass && $isPrimaryAdditionalSubject($row['subject'] ?? '')) {
+                    return true;
+                }
+                return false;
+            };
 
-            return $matchedRow ?: [
-            'subject' => $subject,
-            'terms' => collect($printData['layout']['scholastic_terms'] ?? [])->map(fn ($term) => [
-            'cells' => array_fill(0, count($term['columns'] ?? []), ''),
-            'grade' => '',
-            ])->all(),
-            'grade' => !empty($printData['is_blank']) ? '' : ($printData['grading']['co_scholastic_default_grade'] ?? 'A'),
-            'grand_total' => '',
-            ];
-            })
-            : collect();
+            $scholasticRows = $allRows
+                ->reject(fn ($row) => $isSpecialSubject($row))
+                ->reject(fn ($row) => $isSkillOrNonAcademic($row))
+                ->values();
+
+            $specialSubjectRows = $allRows
+                ->filter(fn ($row) => $isSpecialSubject($row) && !$isSkillOrNonAcademic($row))
+                ->values();
+
+            if ($isPrimaryClass) {
+                $primaryAdditionalSubjects = collect(['Computer Science', 'Sanskrit'])->map(function ($subject) use ($specialSubjectRows, $hasSubject, $printData) {
+                    $matchedRow = $specialSubjectRows->first(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject));
+
+                    return $matchedRow ?: [
+                        'subject' => $subject,
+                        'terms' => collect($printData['layout']['scholastic_terms'] ?? [])->map(fn ($term) => [
+                            'cells' => array_fill(0, count($term['columns'] ?? []), ''),
+                            'grade' => '',
+                        ])->all(),
+                        'grade' => !empty($printData['is_blank']) ? '' : ($printData['grading']['co_scholastic_default_grade'] ?? 'A'),
+                        'grand_total' => '',
+                    ];
+                });
+                $otherSpecial = $specialSubjectRows->reject(fn ($row) => $hasSubject([$row['subject'] ?? ''], 'computer') || $hasSubject([$row['subject'] ?? ''], 'sanskrit'));
+                $separateSubjectRows = $primaryAdditionalSubjects->concat($otherSpecial)->values();
+            } else {
+                $separateSubjectRows = $specialSubjectRows;
+            }
             @endphp
             <main class="sheet">
+                <div class="top-right-logo">
+                    <img src="{{ asset('images/cbse-logo.png') }}" alt="CBSE Logo">
+                </div>
                 <div class="date">Date : {{ $printData['date'] }}</div>
 
                 <div class="title">
@@ -390,8 +472,17 @@
                             <td>{{ $cell }}</td>
                             @endforeach
                             @endforeach
-                            <td>{{ $row['grade'] }}</td>
-                            <td>{{ $formatMark($row['grand_total']) }}</td>
+                            @php
+                            $rowGrade = $row['grade'] ?? '';
+                            if (!empty($row['terms']) && is_array($row['terms'])) {
+                                $term2 = $row['terms'][1] ?? null;
+                                if (!empty($term2['grade'])) {
+                                    $rowGrade = $term2['grade'];
+                                }
+                            }
+                            @endphp
+                            <td>{{ $rowGrade }}</td>
+                            <td>{{ !empty($row['is_non_academic']) ? '' : $formatMark($row['grand_total']) }}</td>
                         </tr>
                         @empty
                         <tr>
@@ -404,28 +495,85 @@
                             @foreach($term['columns'] ?? [] as $columnIndex => $column)
                             @php
                             $source = strtolower((string) ($column['source'] ?? ''));
+                            $colLabel = strtolower((string) ($column['label'] ?? ''));
+                            $isTheory = ($source === 'mark_theory' || $source === 'theory' || str_contains($source, 'theory') || str_contains($colLabel, 'theory') || str_contains($colLabel, '(80)'));
+                            $isMarksObtained = (!empty($column['counts_in_total']) || $source === 'final_total' || str_contains($colLabel, 'marks obtained') || str_contains($colLabel, '(100)'));
                             $sum = $sumTermColumn($scholasticRows, $termIndex, $columnIndex);
+                            $shouldDisplay = ($isTheory || $isMarksObtained) && empty($printData['is_blank']) && $sum > 0;
                             @endphp
-                            <td>{{ ($source !== 'mark_theory' && $source !== 'theory' && !empty($column['counts_in_total']) && empty($printData['is_blank']) && $sum > 0) ? $formatMark($sum) : '' }}</td>
+                            <td>{{ $shouldDisplay ? $formatMark($sum) : '' }}</td>
                             @endforeach
                             @endforeach
                             <td></td>
                             <td></td>
                         </tr>
-                        @foreach($primaryAdditionalSubjects as $subject)
+                        @if($separateSubjectRows->isNotEmpty())
+                        <tr>
+                            <td></td>
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $termIndex => $term)
+                            @php
+                            $columnCount = count($term['columns'] ?? []);
+                            $isLastTerm = $termIndex === count($printData['layout']['scholastic_terms'] ?? []) - 1;
+                            @endphp
+                            @if($isLastTerm)
+                            <td colspan="{{ $columnCount }}"></td>
+                            @else
+                            @if($columnCount > 1)
+                            <td colspan="{{ $columnCount - 1 }}"></td>
+                            @endif
+                            <td class="total-label">Grade</td>
+                            @endif
+                            @endforeach
+                            <td></td>
+                            <td class="total-label">Grade</td>
+                        </tr>
+                        @endif
+                        @foreach($separateSubjectRows as $subject)
                         @php
                         $subjectName = $subject['subject'] ?? '';
                         $normalizedSubject = strtolower(preg_replace('/\s+/', ' ', trim($subjectName)));
+                        $displaySubjectName = in_array($normalizedSubject, ['environmental studies', 'environmental study', 'environment studies', 'environment study'], true) 
+                            ? 'EVS' 
+                            : (str_contains($normalizedSubject, 'computer') ? 'Computer Science' : $subjectName);
+
+                        $t1Grade = $subject['terms'][0]['grade'] ?? '';
+                        $t2Grade = $subject['terms'][1]['grade'] ?? '';
+                        if (empty($t2Grade) && !empty($subject['grade'])) {
+                            $t2Grade = $subject['grade'];
+                        }
+                        if (empty($t1Grade) && !empty($subject['grade'])) {
+                            $t1Grade = $subject['grade'];
+                        }
+                        if (!empty($printData['is_blank'])) {
+                            $t1Grade = '';
+                            $t2Grade = '';
+                        }
                         @endphp
                         <tr>
-                            <td class="subject">{{ str_contains($normalizedSubject, 'computer') ? 'Computer Science' : $subjectName }}</td>
-                            @foreach($subject['terms'] ?? [] as $term)
-                            @foreach($term['cells'] ?? [] as $cell)
-                            <td>{{ $cell }}</td>
+                            <td class="subject">{{ $displaySubjectName }}</td>
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $termIndex => $term)
+                            @php
+                            $columnCount = count($term['columns'] ?? []);
+                            $isLastTerm = $termIndex === count($printData['layout']['scholastic_terms'] ?? []) - 1;
+                            @endphp
+                            @if($isLastTerm)
+                            @php
+                            $termSubjColspan = min(2, $columnCount);
+                            $termRestColspan = $columnCount - $termSubjColspan;
+                            @endphp
+                            <td class="subject" colspan="{{ $termSubjColspan }}">{{ $displaySubjectName }}</td>
+                            @if($termRestColspan > 0)
+                            <td colspan="{{ $termRestColspan }}"></td>
+                            @endif
+                            @else
+                            @if($columnCount > 1)
+                            <td colspan="{{ $columnCount - 1 }}"></td>
+                            @endif
+                            <td>{{ $termIndex === 0 ? $t1Grade : ($subject['terms'][$termIndex]['grade'] ?? '') }}</td>
+                            @endif
                             @endforeach
-                            @endforeach
-                            <td>{{ !empty($printData['is_blank']) ? '' : ($subject['grade'] ?? '') }}</td>
-                            <td>{{ (is_numeric($subject['grand_total'] ?? null) && empty($printData['is_blank'])) ? $formatMark($subject['grand_total']) : '' }}</td>
+                            <td></td>
+                            <td>{{ $t2Grade }}</td>
                         </tr>
                         @endforeach
                         </tbody>
@@ -435,13 +583,58 @@
                     @foreach($printData['layout']['co_scholastic_sections'] ?? [] as $section)
                     <table class="co-table">
                         <tr>
-                            <th>{{ $section['title'] ?? 'Co-Scholastic Area' }}</th>
+                            <th class="co-title">{{ $section['title'] ?? 'Co-Scholastic Area' }}</th>
                             <th>Grade</th>
                         </tr>
+                        @php
+                        $seenSectionCats = [];
+                        @endphp
                         @foreach($section['items'] ?? [] as $item)
+                        @php
+                        $rawCat = preg_replace('/[^a-z0-9]/', '', strtolower((string) $item));
+                        if ($rawCat === 'discipline') {
+                            $canonicalCat = 'discipline';
+                            $displayItemName = 'Discipline';
+                        } elseif (str_contains($rawCat, 'workedu') || str_contains($rawCat, 'workexp')) {
+                            $canonicalCat = 'work_education';
+                            $displayItemName = 'Work Education';
+                        } elseif (str_contains($rawCat, 'artedu') || $rawCat === 'art' || $rawCat === 'arts' || str_contains($rawCat, 'fineart') || str_contains($rawCat, 'drawing')) {
+                            $canonicalCat = 'art_education';
+                            $displayItemName = 'Art Education';
+                        } elseif (str_contains($rawCat, 'health') || str_contains($rawCat, 'physicaledu') || str_contains($rawCat, 'pewellbeing') || str_contains($rawCat, 'wellbeing') || $rawCat === 'pe') {
+                            $canonicalCat = 'health_pe';
+                            $displayItemName = 'Health And Physical Education';
+                        } else {
+                            $canonicalCat = $rawCat;
+                            $displayItemName = ucwords(strtolower((string) $item));
+                        }
+
+                        if (isset($seenSectionCats[$canonicalCat])) {
+                            continue;
+                        }
+                        $seenSectionCats[$canonicalCat] = true;
+
+                        $itemGrade = $section['grades'][$item] ?? null;
+                        if (($itemGrade === null || $itemGrade === '') && !empty($section['grades'])) {
+                            foreach ($section['grades'] as $gKey => $gVal) {
+                                $gRaw = preg_replace('/[^a-z0-9]/', '', strtolower((string) $gKey));
+                                if ($gRaw === 'discipline') $gCat = 'discipline';
+                                elseif (str_contains($gRaw, 'workedu') || str_contains($gRaw, 'workexp')) $gCat = 'work_education';
+                                elseif (str_contains($gRaw, 'artedu') || $gRaw === 'art' || $gRaw === 'arts' || str_contains($gRaw, 'fineart') || str_contains($gRaw, 'drawing')) $gCat = 'art_education';
+                                elseif (str_contains($gRaw, 'health') || str_contains($gRaw, 'physicaledu') || str_contains($gRaw, 'pewellbeing') || str_contains($gRaw, 'wellbeing') || $gRaw === 'pe') $gCat = 'health_pe';
+                                else $gCat = $gRaw;
+
+                                if ($gCat === $canonicalCat && !empty($gVal)) {
+                                    $itemGrade = $gVal;
+                                    break;
+                                }
+                            }
+                        }
+                        $finalGrade = !empty($printData['is_blank']) ? '' : ($itemGrade ?: ($printData['grading']['co_scholastic_default_grade'] ?? 'A'));
+                        @endphp
                         <tr>
-                            <td><strong>{{ $item }}</strong></td>
-                            <td>{{ !empty($printData['is_blank']) ? '' : ($printData['grading']['co_scholastic_default_grade'] ?? 'A') }}</td>
+                            <td><strong>{{ $displayItemName }}</strong></td>
+                            <td>{{ $finalGrade }}</td>
                         </tr>
                         @endforeach
                     </table>
@@ -493,6 +686,7 @@
         printWindow.document.write(`
         <html>
         <head>
+            <base href="{{ url('/') }}/">
             <title>Print Marksheet</title>
             <style>${styles}</style>
         </head>

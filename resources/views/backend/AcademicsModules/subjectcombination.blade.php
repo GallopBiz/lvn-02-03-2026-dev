@@ -166,6 +166,12 @@ $i = 0;
                                                 <select id="selected_non_academic_subjects"
                                                     class="form-control uperletter" name="subject_name"
                                                     autocomplete="shipping address-level1">
+                                                    <option value="">--Please Select--</option>
+                                                    @if(!empty($nonAcademicSubjects))
+                                                        @foreach ($nonAcademicSubjects as $nonAcademic)
+                                                            <option value="{{ $nonAcademic->id }}">{{ $nonAcademic->subject_name }}</option>
+                                                        @endforeach
+                                                    @endif
                                                 </select>
                                                 <div class="ms-2">
                                                     <button type="button" id="loadNonAcademicSubjectsButton"
@@ -220,6 +226,12 @@ $i = 0;
                                             <div class="d-flex align-items-center">
                                                 <select id="selected_skilled_subjects" class="form-control uperletter"
                                                     name="subject_name" autocomplete="shipping address-level1">
+                                                    <option value="">--Please Select--</option>
+                                                    @if(!empty($skilledSubjects))
+                                                        @foreach ($skilledSubjects as $skilled)
+                                                            <option value="{{ $skilled->id }}">{{ $skilled->subject_name }}</option>
+                                                        @endforeach
+                                                    @endif
                                                 </select>
                                                 <div class="ms-2">
                                                     <button type="button" id="loadSkilledSubjectsButton" class="btn btn-primary">
@@ -266,7 +278,7 @@ $i = 0;
                                     <button type="button" id="submitForm" class="btn btn-primary">Submit</button>
                                     <button type="button" id="reset" class="btn btn-primary" name="btn"
                                         value="Reset Form">Reset</button>
-                                    @if(request()->route()->getName() !== 'subjectcombinatiomaster')
+                                    @if(request()->route()?->getName() !== 'subjectcombinatiomaster')
                                     <a href="{{ url('subjectcombinatiomaster') }}" class="btn btn-primary">Add New</a>
                                     @endif
                                 </div>
@@ -484,79 +496,94 @@ $i = 0;
     });
 </script>
 <script>
-    document.getElementById("loadOptionalSubjectsButton").addEventListener("click", function () {
-        var subjectSelect = document.getElementById("selected_optional_subjects");
+    function addSubjectToList(selectId, tableListId) {
+        var subjectSelect = document.getElementById(selectId);
+        if (!subjectSelect) return;
         var selectedSubjectId = subjectSelect.value;
-        var selectedSubject = subjectSelect.options[subjectSelect.selectedIndex].text;
+        if (!selectedSubjectId) return;
 
-        if (selectedSubject) {
-            var newRow = document.createElement("tr");
-            let indexNo = document.getElementById("selected_optional_subjects_list").children.length + 1;
+        var selectedOption = subjectSelect.options[subjectSelect.selectedIndex];
+        var selectedSubject = selectedOption ? selectedOption.text.trim() : '';
+        if (!selectedSubject || selectedSubject === '--Please Select--') return;
 
-            newRow.innerHTML = `
-                <td>${indexNo}</td>
-                <td data-id="${selectedSubjectId}">${selectedSubject}</td>
-                <td><input name="order" class="form-control" type="number" /></td>
-                <td class='d-flex'>
-                    <a class="btn btn-raised ripple btn-danger m-1" href="#" onclick="deleteSelectedSubject(event)">Delete</a>
-                </td>
-            `;
+        var listContainer = document.getElementById(tableListId);
+        if (!listContainer) return;
 
-            document.getElementById("selected_optional_subjects_list").appendChild(newRow);
+        var alreadyExists = false;
+        listContainer.querySelectorAll("td[data-id]").forEach(function(td) {
+            if (td.getAttribute("data-id") == selectedSubjectId) {
+                alreadyExists = true;
+            }
+        });
+
+        if (alreadyExists) {
+            if (typeof toastr !== 'undefined') {
+                toastr.warning("Subject is already added.");
+            } else {
+                alert("Subject is already added.");
+            }
             subjectSelect.value = "";
+            return;
         }
-    });
-    document.getElementById("loadSkilledSubjectsButton").addEventListener("click", function () {
-        var subjectSelect = document.getElementById("selected_skilled_subjects");
-        var selectedSubjectId = subjectSelect.value;
-        var selectedSubject = subjectSelect.options[subjectSelect.selectedIndex].text;
 
-        if (selectedSubject) {
-            var newRow = document.createElement("tr");
-            let indexNo = document.getElementById("selected_skilled_subjects_list").children.length + 1;
+        // Determine next order number across all assigned subject rows
+        var maxOrder = 0;
+        document.querySelectorAll("input[name='order']").forEach(function(input) {
+            var val = parseInt(input.value, 10);
+            if (!isNaN(val) && val > maxOrder) {
+                maxOrder = val;
+            }
+        });
+        var nextOrder = maxOrder + 1;
 
-            newRow.innerHTML = `
-                <td>${indexNo}</td>
-                <td data-id="${selectedSubjectId}">${selectedSubject}</td>
-                <td><input name="order" class="form-control" type="number" /></td>
-                <td class='d-flex'>
-                    <a class="btn btn-raised ripple btn-danger m-1" href="#" onclick="deleteSelectedSubject(event)">Delete</a>
-                </td>
-            `;
+        var newRow = document.createElement("tr");
+        let indexNo = listContainer.children.length + 1;
 
-            document.getElementById("selected_skilled_subjects_list").appendChild(newRow);
-            subjectSelect.value = "";
-        }
-    });
-    document.getElementById("loadNonAcademicSubjectsButton").addEventListener("click", function () {
-        var subjectSelect = document.getElementById("selected_non_academic_subjects");
-        var selectedSubjectId = subjectSelect.value;
-        var selectedSubject = subjectSelect.options[subjectSelect.selectedIndex].text;
+        newRow.innerHTML = `
+            <td>${indexNo}</td>
+            <td data-id="${selectedSubjectId}">${selectedSubject}</td>
+            <td><input name="order" class="form-control" type="number" value="${nextOrder}" /></td>
+            <td class='d-flex'>
+                <a class="btn btn-raised ripple btn-danger m-1" href="#" onclick="deleteSelectedSubject(event)">Delete</a>
+            </td>
+        `;
 
-        if (selectedSubject) {
-            var newRow = document.createElement("tr");
-            let indexNo = document.getElementById("selected_non_academic_subjects_list").children.length + 1;
+        listContainer.appendChild(newRow);
+        subjectSelect.value = "";
+    }
 
-            newRow.innerHTML = `
-                <td>${indexNo}</td>
-                <td data-id="${selectedSubjectId}">${selectedSubject}</td>
-                <td><input name="order" class="form-control" type="number" /></td>
-                <td class='d-flex'>
-                    <a class="btn btn-raised ripple btn-danger m-1" href="#" onclick="deleteSelectedSubject(event)">Delete</a>
-                </td>
-            `;
+    $(document).ready(function() {
+        // Non Academic: add on change or on button click
+        $(document).on('change', '#selected_non_academic_subjects', function () {
+            addSubjectToList('selected_non_academic_subjects', 'selected_non_academic_subjects_list');
+        });
+        $(document).on('click', '#loadNonAcademicSubjectsButton', function () {
+            addSubjectToList('selected_non_academic_subjects', 'selected_non_academic_subjects_list');
+        });
 
-            document.getElementById("selected_non_academic_subjects_list").appendChild(newRow);
-            subjectSelect.value = "";
-        }
+        // Skilled Subjects: add on change or on button click
+        $(document).on('change', '#selected_skilled_subjects', function () {
+            addSubjectToList('selected_skilled_subjects', 'selected_skilled_subjects_list');
+        });
+        $(document).on('click', '#loadSkilledSubjectsButton', function () {
+            addSubjectToList('selected_skilled_subjects', 'selected_skilled_subjects_list');
+        });
+
+        // Optional Subjects: add on change or on button click
+        $(document).on('change', '#selected_optional_subjects', function () {
+            addSubjectToList('selected_optional_subjects', 'selected_optional_subjects_list');
+        });
+        $(document).on('click', '#loadOptionalSubjectsButton', function () {
+            addSubjectToList('selected_optional_subjects', 'selected_optional_subjects_list');
+        });
     });
 </script>
 @if(!empty($single_combinations))
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const preSelectedClassId = "{{ $single_combinations->class_id }}".split(',');
-        const preSelectedstreams = {{ $single_combinations->streams }};
-        $.get('{{ route("fetch-subjects") }}', { class_id: preSelectedClassId,stream_id: preSelectedstreams, _token: '{{ csrf_token() }}' }, function (data) {
+        const preSelectedstreams = {!! json_encode($single_combinations->streams) !!};
+        $.get('{{ route("fetch-subjects") }}', { class_id: preSelectedClassId, stream_id: preSelectedstreams, _token: '{{ csrf_token() }}' }, function (data) {
             @if(empty($single_combinations))
                 resetFieldsData();
             @endif
@@ -718,7 +745,19 @@ $i = 0;
     // Function to delete a selected subject row
     function deleteSelectedSubject(event) {
         event.preventDefault();
-        event.target.parentElement.parentElement.remove();
+        var btn = event.target.closest('a');
+        var tr = btn ? btn.closest('tr') : event.target.closest('tr');
+        if (tr) {
+            var tbody = tr.parentElement;
+            tr.remove();
+            if (tbody) {
+                Array.from(tbody.children).forEach(function(row, idx) {
+                    if (row.children[0]) {
+                        row.children[0].textContent = idx + 1;
+                    }
+                });
+            }
+        }
     }
 </script>
 <script>
@@ -737,6 +776,8 @@ $i = 0;
     function resetFieldsData(){
         $("#selected_subjects").html("");
         $("#selected_academic_subjects").html("");
+        $("#selected_optional_subjects").html("");
+        $("#selected_optional_subjects_list").html("");
         $("#selected_non_academic_subjects").html("");
         $("#selected_skilled_subjects").html("");
         $("#selected_non_academic_subjects_list").html("");

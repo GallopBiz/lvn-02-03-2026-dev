@@ -82,6 +82,11 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="form-group">
+                            <label>Marksheet Print Date</label>
+                            <input type="date" class="form-control" name="print_date" id="print_date" value="{{ date('Y-m-d') }}">
+                            <small class="form-text text-muted">Select date to display on marksheet printout (defaults to today).</small>
+                        </div>
                         <button class="btn btn-success" type="submit">Generate & Save</button>
                         <button class="btn btn-outline-primary" type="button" onclick="openMarksheetPreview()">Print Preview</button>
                     </form>
@@ -169,6 +174,7 @@
                                 <th>Exam</th>
                                 <th>Session</th>
                                 <th>Generated On</th>
+                                <th>Print Date</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -187,13 +193,14 @@
                                     <td>{{ $snapshot['exam_name'] ?? ($marksheet->exam_id ? 'Exam #'.$marksheet->exam_id : '-') }}</td>
                                     <td>{{ $marksheet->session_year ?: '-' }}</td>
                                     <td>{{ optional($marksheet->created_at)->format('d M Y h:i A') }}</td>
+                                    <td>{{ $snapshot['print_date'] ?? ($printData['date'] ?? '-') }}</td>
                                     <td>
                                         <a class="btn btn-sm btn-primary" target="_blank" href="{{ route('marksheet.generated.print', $marksheet) }}">Print</a>
                                         <button class="btn btn-sm btn-danger" type="button" onclick="deleteGeneratedSingle('{{ route('academic.marksheets.generated.delete', $marksheet) }}')">Delete</button>
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="8" class="text-center">No marksheets generated yet.</td></tr>
+                                <tr><td colspan="9" class="text-center">No marksheets generated yet.</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -478,6 +485,12 @@
         var studentVal = studentSelect ? studentSelect.value : '';
         if (studentVal) {
             params.set('student_id', studentVal);
+        }
+
+        var printDateEl = document.getElementById('print_date');
+        var printDateVal = printDateEl ? printDateEl.value : '';
+        if (printDateVal) {
+            params.set('print_date', printDateVal);
         }
 
         window.open('{{ route('academic.marksheets.print') }}?' + params.toString(), '_blank');

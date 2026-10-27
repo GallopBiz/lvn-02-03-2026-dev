@@ -31,7 +31,10 @@ class MarksController extends Controller
     public function index(){
         $staffEmployeeId = $this->staffEmployeeId();
 
-        $stream = $this->accessibleMarksQuery()->get();//Marks::where('is_delete',0)->get();
+        $stream = $this->accessibleMarksQuery()
+            ->with(['Class', 'Subject', 'Teacher.biometricDetails', 'Exammaster'])
+            ->latest('id')
+            ->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         $examslist = $this->accessibleAcademicExams();
         if ($this->isStaffMarksUser()) {
@@ -62,6 +65,12 @@ class MarksController extends Controller
 
 
     public function create(Request $request){
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
         $validator = $this->validateMarksRequest($request);
         if ($validator->fails()) {
             return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
@@ -74,12 +83,15 @@ class MarksController extends Controller
         if ($this->isStaffExamLocked($request->exam_name)) {
             return response()->json(['status' => 'error', 'message' => $this->lockedExamMessage()], 403);
         }
-        if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
-            return response()->json(['status' => 'error', 'message' => $message], 422);
+        $isNonAcademic = $this->isNonAcademicSubject($request->subject_name);
+        if (!$isNonAcademic) {
+            if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
+                return response()->json(['status' => 'error', 'message' => $message], 422);
+            }
+            // $this->applyPtMarksConversionToRequest($request);
+            $this->applyTotalMarksRoundingToRequest($request);
+            $this->applyGradesToRequest($request);
         }
-        // $this->applyPtMarksConversionToRequest($request);
-        $this->applyTotalMarksRoundingToRequest($request);
-        $this->applyGradesToRequest($request);
 
         $data = [
             "teacher_id" => $teacherId,
@@ -212,7 +224,10 @@ class MarksController extends Controller
     public function view($id){
         $stream_master = $this->accessibleMarksQuery()->where('id', $id)->firstOrFail();//Marks::where('is_delete',0)->get();
         $staffEmployeeId = $this->staffEmployeeId();
-        $stream = $this->accessibleMarksQuery()->get();
+        $stream = $this->accessibleMarksQuery()
+            ->with(['Class', 'Subject', 'Teacher.biometricDetails', 'Exammaster'])
+            ->latest('id')
+            ->get();
         $teacherlist = $this->accessibleTeacherSubjects()->with('Teacher.biometricDetails')->groupBy('teacher_id')->get();
         $examslist = $this->accessibleAcademicExams();
         //$classlist = DB::table('classes')->select('class_name')->distinct()->get();
@@ -224,21 +239,52 @@ class MarksController extends Controller
             ->pluck('Subject')
             ->filter()
             ->values();
+        $className = $classlist->class_name ?? '';
+        $sectionName = $stream_master->section_name ?? '';
+        $classId = $stream_master->class_id;
         $studentMarksTable = $this->studentMarksTable();
-        $marksData = DB::connection('dynamic')->table($studentMarksTable)
-            ->join('student_registration', $studentMarksTable . '.student_id', '=', 'student_registration.id')
-            ->where($studentMarksTable . '.marks_id', $stream_master->id)
+
+        $classLevel = $this->classLevel($className);
+        $eligibleStudentIds = collect();
+        $shouldApplyCombinationFilter = false;
+
+        if ($classLevel >= 9) {
+            $eligibleStudentIds = $this->studentIdsForSubjectCombination($className, $sectionName, $stream_master->subject_id);
+            $hasSubjectAssignments = $eligibleStudentIds->isNotEmpty();
+            $shouldApplyCombinationFilter = $hasSubjectAssignments;
+        }
+
+        $studentsQuery = DB::connection('dynamic')->table('student_registration')
             ->where(function ($query) {
                 $query->where('student_registration.is_archived', 0)
                     ->orWhereNull('student_registration.is_archived');
             })
-            ->select($studentMarksTable . '.*', 'student_registration.*') // Add fields as needed
-            ->get();
-        $rollMap = $this->studentRollMap($classlist->class_name ?? '', $stream_master->section_name ?? '', $stream_master->exam_id ?? null);
+            ->where(function ($query) use ($classId, $className) {
+                $query->where('student_registration.class_id', $classId)
+                    ->orWhere('student_registration.class_name', $className);
+            })
+            ->where(function ($query) use ($sectionName) {
+                $query->where('student_registration.section_name', $sectionName)
+                    ->orWhereJsonContains('student_registration.json_str->section_name', $sectionName);
+            });
+
+        if ($shouldApplyCombinationFilter) {
+            $studentsQuery->whereIn('student_registration.id', $eligibleStudentIds);
+        }
+
+        $students = $studentsQuery->orderBy('student_name')->get();
+
+        $savedMarks = DB::connection('dynamic')->table($studentMarksTable)
+            ->where('marks_id', $stream_master->id)
+            ->whereIn('student_id', $students->pluck('id'))
+            ->get()
+            ->keyBy('student_id');
+
+        $rollMap = $this->studentRollMap($className, $sectionName, $stream_master->exam_id ?? null);
         $exam = DB::connection('dynamic')->table('academic_exam')->where('id', $stream_master->exam_id)->first();
         $examTheory = (float) ($exam->max_marks_theory ?? 0);
         $examPractical = (float) ($exam->max_marks_practical ?? 0);
-        $hasIa = $marksData->contains(function ($row) {
+        $hasIa = $savedMarks->contains(function ($row) {
             if (!empty($row->internal_assessment_marks)) {
                 $decoded = is_string($row->internal_assessment_marks) ? json_decode($row->internal_assessment_marks, true) : $row->internal_assessment_marks;
                 return !empty($decoded);
@@ -255,19 +301,39 @@ class MarksController extends Controller
             $examMaxMarks = 100.0;
         }
 
-        $marksData = $marksData->map(function ($marks) use ($rollMap, $examMaxMarks) {
-            $marks->roll_no = $rollMap->get($marks->student_id, '');
-            $totalMarks = is_numeric($marks->total_marks ?? null)
-                ? (float) $marks->total_marks
-                : (float) (($marks->mark_theory ?? 0) + ($marks->mark_practical ?? 0));
+        $isNonAcademic = $this->isNonAcademicSubject($stream_master->subject_id);
+
+        $marksData = $students->map(function ($student) use ($savedMarks, $rollMap, $examMaxMarks, $isNonAcademic) {
+            $saved = $savedMarks->get($student->id);
+            $markObj = new \stdClass();
+            $markObj->student_id = $student->id;
+            $markObj->student_name = $student->student_name;
+            $markObj->scholar_no = $saved->scholar_no ?? ($student->scholar_no ?? '');
+            $markObj->roll_no = $saved->roll_no ?? $rollMap->get($student->id, '');
+            $markObj->is_absent = $saved->is_absent ?? 0;
+            $markObj->is_absent_pr = $saved->is_absent_pr ?? 0;
+            $markObj->mark_theory = $saved->mark_theory ?? ($saved->subject_marks ?? 0);
+            $markObj->mark_practical = $saved->mark_practical ?? 0;
+            $markObj->internal_assessment_marks = $saved->internal_assessment_marks ?? null;
+            $totalMarks = is_numeric($saved->total_marks ?? null)
+                ? (float) $saved->total_marks
+                : (float) (($markObj->mark_theory ?? 0) + ($markObj->mark_practical ?? 0));
             $totalMarks = $this->roundHalfUp($totalMarks);
-            $marks->total_marks = $totalMarks;
-            $calculatedGrade = $this->gradeFromMaster($totalMarks, $examMaxMarks);
-            if (empty($marks->grade) || $marks->grade === '' || $marks->grade !== $calculatedGrade) {
-                $marks->grade = $calculatedGrade;
-                $marks->overall_grade = $calculatedGrade;
+            $markObj->total_marks = $totalMarks;
+            if ($isNonAcademic) {
+                $markObj->grade = $saved->grade ?? $saved->overall_grade ?? '';
+                $markObj->overall_grade = $markObj->grade;
+            } else {
+                $calculatedGrade = $this->gradeFromMaster($totalMarks, $examMaxMarks);
+                if (empty($saved->grade) || $saved->grade === '' || $saved->grade !== $calculatedGrade) {
+                    $markObj->grade = $calculatedGrade;
+                    $markObj->overall_grade = $calculatedGrade;
+                } else {
+                    $markObj->grade = $saved->grade;
+                    $markObj->overall_grade = $saved->overall_grade ?? $saved->grade;
+                }
             }
-            return $marks;
+            return $markObj;
         });
             //dd($marksData);
         // return $stream_master;
@@ -275,10 +341,16 @@ class MarksController extends Controller
         $isStaffMarksUser = $this->isStaffMarksUser();
         $internalAssessments = $this->activeInternalAssessments();
         $gradeRanges = $this->activeGradeRanges();
-        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments', 'gradeRanges'));
+        return view('backend.AcademicsModules.marks', compact('marksData', 'classlist','stream_master','stream','teacherlist','examslist','subjectlist', 'isStaffMarksUser', 'staffEmployeeId', 'internalAssessments', 'gradeRanges', 'isNonAcademic'));
     }
 
     public function store(Request $request){
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
         $validator = $this->validateMarksRequest($request, true);
         if ($validator->fails()) {
             return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
@@ -300,12 +372,15 @@ class MarksController extends Controller
         if ($this->isStaffExamLocked($request->exam_name)) {
             return response()->json(['status' => 'error', 'message' => $this->lockedExamMessage()], 403);
         }
-        if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
-            return response()->json(['status' => 'error', 'message' => $message], 422);
+        $isNonAcademic = $this->isNonAcademicSubject($request->subject_name);
+        if (!$isNonAcademic) {
+            if ($message = $this->validateStudentMarksAgainstExamConfig($request)) {
+                return response()->json(['status' => 'error', 'message' => $message], 422);
+            }
+            // $this->applyPtMarksConversionToRequest($request);
+            $this->applyTotalMarksRoundingToRequest($request);
+            $this->applyGradesToRequest($request);
         }
-        // $this->applyPtMarksConversionToRequest($request);
-        $this->applyTotalMarksRoundingToRequest($request);
-        $this->applyGradesToRequest($request);
 
         $mainData = [
             "teacher_id" => $teacherId,
@@ -721,6 +796,13 @@ class MarksController extends Controller
 
     private function validateMarksRequest(Request $request, bool $isUpdate = false)
     {
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
+
         $rules = [
             'teacher_name' => $this->isStaffMarksUser() ? 'nullable' : 'required|integer',
             'class_name' => 'required|integer',
@@ -743,6 +825,8 @@ class MarksController extends Controller
             'students.*.internal_assessments' => 'nullable|array',
             'students.*.internal_assessments.*' => 'nullable|numeric|min:0|max:5',
             'students.*.internal_assessment_marks' => 'nullable|string',
+            'students.*.is_absent' => 'nullable',
+            'students.*.is_absent_pr' => 'nullable',
         ];
 
         if ($isUpdate) {
@@ -1160,6 +1244,15 @@ class MarksController extends Controller
             if (!empty($insertRows)) {
                 DB::connection('dynamic')->table($studentMarksTable)->insert($insertRows);
             }
+
+            // Remove any orphan student marks for this marks_id that do not belong to the submitted students
+            $submittedStudentIds = collect($marksdata)->pluck('student_id')->filter()->values()->all();
+            if (!empty($submittedStudentIds)) {
+                DB::connection('dynamic')->table($studentMarksTable)
+                    ->where('marks_id', $marksId)
+                    ->whereNotIn('student_id', $submittedStudentIds)
+                    ->delete();
+            }
         });
     }
 
@@ -1239,5 +1332,22 @@ class MarksController extends Controller
         }
 
         return collect();
+    }
+
+    private function isNonAcademicSubject($subjectId): bool
+    {
+        if (empty($subjectId)) {
+            return false;
+        }
+
+        $subjectType = DB::connection('dynamic')->table('subjectmaster')
+            ->where('id', $subjectId)
+            ->value('subject_type');
+
+        if (!$subjectType) {
+            return false;
+        }
+
+        return (bool) preg_match('/non[\s-]*academic/i', (string) $subjectType);
     }
 }

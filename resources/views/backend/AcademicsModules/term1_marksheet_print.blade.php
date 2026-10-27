@@ -481,8 +481,18 @@
                     $remarks = $pData['remarks'] ?? 'Needs to develop a better sense of responsibility.';
                     $attendance = $pData['attendance'] ?? '/';
                     $rollNo = $pData['roll_no'] ?? '';
-                    $classRoman = $pData['class_roman'] ?? (optional($pData['class'])->class_name ?? '');
-                    $sectionName = $pData['section_name'] ?? (optional($pData['class'])->section_name ?? '');
+                    $classRoman = $pData['class_roman'] ?? (optional($pData['class'] ?? null)->class_name ?? '');
+                    $sectionName = $pData['section_name'] ?? (optional($pData['class'] ?? null)->section_name ?? '');
+
+                    // Ensure discipline, non-academic, and special formatting subjects never appear in main scholastic table
+                    $disciplineTitles = collect($discipline)->pluck('title')->map(fn($t) => strtolower(trim($t)))->all();
+                    $scholasticRows = collect($scholasticRows)->reject(function($r) use ($disciplineTitles) {
+                        $name = strtolower(trim($r['subject'] ?? ''));
+                        return !empty($r['is_non_academic']) 
+                            || !empty($r['is_discipline_subject']) 
+                            || !empty($r['special_subject_formatting'])
+                            || in_array($name, $disciplineTitles, true);
+                    })->values()->all();
                 @endphp
 
                 <main class="sheet-term-1">

@@ -289,7 +289,8 @@
         }
 
         $.ajax({
-            data: data,
+            data: JSON.stringify(data),
+            contentType: 'application/json; charset=utf-8',
             url: url,
             headers: { 'X-CSRF-TOKEN': document.getElementsByName('_token')[0].value },
             method: 'POST',

@@ -131,24 +131,22 @@ class SubjectController extends Controller
                 "practical" => $request->input('practical'),
                 "do_not_print_in_main_scholastic_area" => $request->boolean('special_subject_formatting'),
             ]);
-            $classes = $request->input('classes');
-            foreach ($classes as $classId) {
-                $getClass = Classname::where('id', $classId)->where('is_delete', 0)->first();
+            $classes = $request->input('classes', []);
+            if (!empty($classes)) {
+                foreach ($classes as $classId) {
+                    $getClass = Classname::where('id', $classId)->where('is_delete', 0)->first();
+                    if (!$getClass) continue;
 
-                if ($getClass && str_contains($getClass->class_name, '11') || str_contains($getClass->class_name, '12')) {
-                    foreach ($request->stream as $streamId) {
+                    $isSeniorClass = str_contains($getClass->class_name, '11') || str_contains($getClass->class_name, '12');
+                    $streamIds = ($isSeniorClass && !empty($request->stream)) ? $request->stream : [null];
+
+                    foreach ($streamIds as $streamId) {
                         ClassSubject::create([
                             'subject_id' => $subject->id,
                             'class_id' => $classId,
                             'stream_id' => $streamId,
                         ]);
                     }
-                } else {
-                    ClassSubject::create([
-                        'subject_id' => $subject->id,
-                        'class_id' => $classId,
-                        'stream_id' => null,
-                    ]);
                 }
             }
             return redirect()->route('subjectmaster')->with('success', 'Subject has been created successfully.');
@@ -180,16 +178,17 @@ class SubjectController extends Controller
         // Track IDs for cleanup (optional)
         $updatedIds = [];
 
-        foreach ($request->classes as $classId) {
-            $class = Classname::where('id', $classId)->where('is_delete', 0)->first();
-            if (!$class) continue;
+        if (!empty($request->classes)) {
+            foreach ($request->classes as $classId) {
+                $class = Classname::where('id', $classId)->where('is_delete', 0)->first();
+                if (!$class) continue;
 
-            $isSeniorClass = str_contains($class->class_name, '11') || str_contains($class->class_name, '12');
+                $isSeniorClass = str_contains($class->class_name, '11') || str_contains($class->class_name, '12');
 
-            // Get applicable stream IDs or [null]
-            $streamIds = $isSeniorClass ? $request->stream : [null];
+                // Get applicable stream IDs or [null]
+                $streamIds = ($isSeniorClass && !empty($request->stream)) ? $request->stream : [null];
 
-            foreach ($streamIds as $streamId) {
+                foreach ($streamIds as $streamId) {
                 $classSubject = ClassSubject::firstOrNew([
                     'subject_id' => $subject->id,
                     'class_id'   => $classId,
@@ -202,6 +201,7 @@ class SubjectController extends Controller
                 }
 
                 $updatedIds[] = $classSubject->id;
+                }
             }
         }
 

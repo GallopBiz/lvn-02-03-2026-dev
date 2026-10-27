@@ -50,6 +50,12 @@ class TeacherRemarkEntryController extends Controller
 
     public function create(Request $request)
     {
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
         $validator = $this->validateRemarkRequest($request);
         if ($validator->fails()) {
             return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
@@ -120,6 +126,12 @@ class TeacherRemarkEntryController extends Controller
 
     public function store(Request $request)
     {
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
         $validator = $this->validateRemarkRequest($request, true);
         if ($validator->fails()) {
             return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
@@ -299,6 +311,13 @@ class TeacherRemarkEntryController extends Controller
 
     private function validateRemarkRequest(Request $request, bool $isUpdate = false)
     {
+        if (is_string($request->students)) {
+            $decoded = json_decode($request->students, true);
+            if (is_array($decoded)) {
+                $request->merge(['students' => $decoded]);
+            }
+        }
+
         $rules = [
             'teacher_name' => $this->isStaffRemarkUser() ? 'nullable' : 'required|integer',
             'class_name' => 'required|integer',

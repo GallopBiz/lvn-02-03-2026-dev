@@ -236,6 +236,14 @@
         font-weight: 700;
         background-color: #fff5f5;
     }
+    .attendance-matrix-table td.cell-leave,
+    .attendance-matrix-table td.cell-pl,
+    .attendance-matrix-table td.day-leave,
+    .attendance-matrix-table td.day-pl {
+        color: #92400e;
+        font-weight: 700;
+        background-color: #fef3c7;
+    }
     .attendance-matrix-table td.cell-holiday {
         background-color: #feebc8;
         color: #7b341e;
@@ -333,20 +341,26 @@
             border: 1px solid #718096 !important;
         }
         .attendance-matrix-table {
-            font-size: 8px !important;
+            font-size: 11px !important;
             width: 100% !important;
         }
         .attendance-matrix-table th, .attendance-matrix-table td {
             border: 1px solid #718096 !important;
-            padding: 2px 1px !important;
+            padding: 2.5px 1.5px !important;
+            line-height: 1.15 !important;
         }
         .attendance-matrix-table thead th {
             background: #e2e8f0 !important;
             color: #000 !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
             position: static !important;
             text-shadow: none !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }
+        .attendance-matrix-table thead tr:nth-child(2) th {
+            font-size: 9.5px !important;
         }
         .attendance-matrix-table td.cell-sunday, .attendance-matrix-table th.th-sunday {
             background-color: #137736 !important;
@@ -472,10 +486,10 @@
                 <div class="print-only-header mb-2" id="printReportHeader">
                     <div style="border-bottom:2px solid #2d3748; padding-bottom:6px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:flex-end;">
                         <div>
-                            <div style="font-size:18px; font-weight:800; color:#1a202c;">Lokmanya Vidya Niketan</div>
-                            <div style="font-size:12px; font-weight:700; color:#4b5563; text-transform:uppercase; margin-top:2px;">Monthly Student Attendance Sheet & Matrix</div>
+                            <div style="font-size:20px; font-weight:800; color:#1a202c;">Lokmanya Vidya Niketan</div>
+                            <div style="font-size:13px; font-weight:700; color:#4b5563; text-transform:uppercase; margin-top:2px;">Monthly Student Attendance Sheet & Matrix</div>
                         </div>
-                        <div style="font-size:10px; color:#4a5568; line-height:1.4; text-align:right;">
+                        <div style="font-size:11px; color:#4a5568; line-height:1.4; text-align:right;">
                             <div><strong>Printed:</strong> {{ now()->format('d M Y, h:i A') }}</div>
                             <div><strong>Session:</strong> {{ $filters['academic_session'] }}</div>
                         </div>
@@ -493,7 +507,9 @@
                     <span class="badge badge-success px-2 py-1 mr-1" style="background:#137736;">S</span> Sunday &nbsp;
                     <span class="badge badge-warning px-2 py-1 mr-1">H</span> Holiday &nbsp;
                     <strong>P:</strong> Present &nbsp;
-                    <strong>A:</strong> Absent
+                    <strong>A:</strong> Absent &nbsp;
+                    <strong>L:</strong> Leave &nbsp;
+                    <strong>PL:</strong> Present Leave
                 </div>
             </div>
 
@@ -540,7 +556,7 @@
 
                                 @for($d = 1; $d <= 31; $d++)
                                     @if($d <= $report['days_in_month'])
-                                        @php $cell = $row['cells'][$d] ?? ['label' => '-', 'class' => 'cell-empty', 'type' => 'empty']; @endphp
+                                        @php $cell = $row['cells'][$d] ?? ['label' => '', 'class' => 'cell-empty', 'type' => 'empty']; @endphp
                                         <td class="col-day {{ $cell['class'] }}" title="{{ $cell['title'] ?? '' }}">
                                             {{ $cell['label'] }}
                                         </td>
@@ -571,7 +587,7 @@
                 </table>
             </div>
             <div class="print-only-header" style="margin-top:24px;">
-                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; font-size:10px; font-weight:600; text-align:center;">
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; font-size:11px; font-weight:600; text-align:center;">
                     <div style="border-top:1px solid #333; padding-top:4px;">Class Teacher Signature</div>
                     <div style="border-top:1px solid #333; padding-top:4px;">Academic Coordinator Signature</div>
                     <div style="border-top:1px solid #333; padding-top:4px;">Principal Signature & Seal</div>
@@ -637,18 +653,20 @@
                     .print-actions button { border: 1px solid #1f6feb; background: #1f6feb; color: #fff; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-weight: 600; font-size: 12px; }
                     .print-actions .btn-close { background: #6c757d; border-color: #6c757d; }
                     .school-header { border-bottom: 2px solid #2d3748; padding-bottom: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-end; }
-                    .school-name { font-size: 18px; font-weight: 800; color: #1a202c; }
-                    .report-title { font-size: 12px; font-weight: 700; color: #4b5563; text-transform: uppercase; margin-top: 2px; }
-                    .meta-info { font-size: 10px; color: #4a5568; line-height: 1.4; text-align: right; }
-                    .report-criteria-bar { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; font-weight: 600; margin-bottom: 6px; padding: 4px 6px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
-                    .attendance-matrix-table { border-collapse: collapse; width: 100%; font-size: 8px; text-align: center; }
-                    .attendance-matrix-table th, .attendance-matrix-table td { border: 1px solid #718096; padding: 2px 1px; line-height: 1.1; }
-                    .attendance-matrix-table thead th { background: #e2e8f0 !important; color: #000 !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .school-name { font-size: 20px; font-weight: 800; color: #1a202c; }
+                    .report-title { font-size: 13px; font-weight: 700; color: #4b5563; text-transform: uppercase; margin-top: 2px; }
+                    .meta-info { font-size: 11px; color: #4a5568; line-height: 1.4; text-align: right; }
+                    .report-criteria-bar { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; padding: 4px 6px; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
+                    .attendance-matrix-table { border-collapse: collapse; width: 100%; font-size: 10px; text-align: center; }
+                    .attendance-matrix-table th, .attendance-matrix-table td { border: 1px solid #718096; padding: 2.5px 1.5px; line-height: 1.15; }
+                    .attendance-matrix-table thead th { background: #e2e8f0 !important; color: #000 !important; font-size: 10px; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .attendance-matrix-table thead tr:nth-child(2) th { font-size: 9.5px; }
                     .attendance-matrix-table th.th-sunday, .attendance-matrix-table td.cell-sunday { background-color: #137736 !important; color: #ffffff !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .attendance-matrix-table td.cell-absent { color: #c53030; font-weight: 700; background-color: #fff5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .attendance-matrix-table td.cell-leave, .attendance-matrix-table td.cell-pl { background-color: #fef3c7 !important; color: #92400e !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                     .attendance-matrix-table td.cell-holiday { background-color: #feebc8 !important; color: #7b341e; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    .col-name { text-align: left !important; padding-left: 3px !important; }
-                    .footer-signs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; font-size: 9.5px; font-weight: 600; text-align: center; }
+                    .col-name { text-align: left !important; padding-left: 4px !important; }
+                    .footer-signs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; font-size: 11px; font-weight: 600; text-align: center; }
                     .sign-line { border-top: 1px solid #333; padding-top: 4px; }
                     @media print {
                         .print-actions { display: none !important; }
@@ -683,7 +701,9 @@
                         <span style="display:inline-block; background:#137736; color:#fff; padding:1px 4px; border-radius:2px; font-weight:bold;">S</span> Sunday &nbsp;
                         <span style="display:inline-block; background:#feebc8; color:#7b341e; padding:1px 4px; border-radius:2px; font-weight:bold;">H</span> Holiday &nbsp;
                         <strong>P:</strong> Present &nbsp;
-                        <strong>A:</strong> Absent
+                        <strong>A:</strong> Absent &nbsp;
+                        <strong>L:</strong> Leave &nbsp;
+                        <strong>PL:</strong> Present Leave
                     </div>
                 </div>
                 ${tableHtml}

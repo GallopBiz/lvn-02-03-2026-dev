@@ -142,31 +142,38 @@
                                 </select>
                             </div>
 
-                            <div class="row">
-                                <div class="col-md-4 form-group mb-3">
-                                    <label for="max_marks_theory">Max Marks (Theory)</label>
-                                    <input type="number" class="form-control" id="max_marks_theory" name="max_marks_theory" min="0">
-                                </div>
-                                <div class="col-md-4 form-group mb-3">
-                                    <label for="max_marks_practical">Max Marks (Practical)</label>
-                                    <input type="number" class="form-control" id="max_marks_practical" name="max_marks_practical" min="0">
-                                </div>
-                                <div class="col-md-4 form-group mb-3">
-                                    <label for="max_marks">Max Marks</label>
-                                    <input type="number" class="form-control" id="max_marks" name="max_marks" min="0">
-                                </div>
+                            <div id="non_academic_notice" class="alert alert-success py-2 px-3 mb-3 d-none">
+                                <i class="fa fa-info-circle mr-1"></i>
+                                <strong>Non-Academic Subject:</strong> Grade-based entry (options: A, B, C, D). Numerical marks ranges are not required.
                             </div>
-                            <div class="form-group mb-3">
-                                <label>
-                                    <input type="checkbox" id="internal_assessment_toggle" {{ $iaEnabled ? 'checked' : '' }}>
-                                    Internal Assessment
-                                </label>
-                            </div>
-                            <div class="form-group mb-3">
-                                <label>
-                                    <input type="checkbox" id="practical_marks_toggle" {{ $practicalEnabled ? 'checked' : '' }}>
-                                    Practical Marks
-                                </label>
+
+                            <div id="academic_marks_config">
+                                <div class="row">
+                                    <div class="col-md-4 form-group mb-3">
+                                        <label for="max_marks_theory">Max Marks (Theory)</label>
+                                        <input type="number" class="form-control" id="max_marks_theory" name="max_marks_theory" min="0">
+                                    </div>
+                                    <div class="col-md-4 form-group mb-3">
+                                        <label for="max_marks_practical">Max Marks (Practical)</label>
+                                        <input type="number" class="form-control" id="max_marks_practical" name="max_marks_practical" min="0">
+                                    </div>
+                                    <div class="col-md-4 form-group mb-3">
+                                        <label for="max_marks">Max Marks</label>
+                                        <input type="number" class="form-control" id="max_marks" name="max_marks" min="0">
+                                    </div>
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label>
+                                        <input type="checkbox" id="internal_assessment_toggle" {{ $iaEnabled ? 'checked' : '' }}>
+                                        Internal Assessment
+                                    </label>
+                                </div>
+                                <div class="form-group mb-3">
+                                    <label>
+                                        <input type="checkbox" id="practical_marks_toggle" {{ $practicalEnabled ? 'checked' : '' }}>
+                                        Practical Marks
+                                    </label>
+                                </div>
                             </div>
                             <button type="button" class="btn btn-info" id="show_students_btn">Show Students</button>
                             <div id="marks_entry_status" class="alert alert-info mt-3 d-none"></div>
@@ -177,12 +184,34 @@
                 <div class="col-lg-6 mb-3">
                     <div class="card h-100">
                         <div class="card-body">
-                            <h4 class="mb-3">Previously Saved Marks Entry :-</h4>
+                            <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                                <h4 class="mb-0">Previously Saved Marks Entry :-</h4>
+                                <span id="saved_marks_count_badge" class="badge badge-info p-2 font-weight-bold">Showing {{ count($stream ?? []) }} entries</span>
+                            </div>
+
+                            <div class="saved-marks-toolbar mb-3">
+                                <div class="input-group">
+                                    <input type="text" id="saved_marks_search" class="form-control" placeholder="Search by teacher name or exam name..." autocomplete="off">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button" id="clear_saved_marks_search" title="Clear search">
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="active_teacher_filter_banner" class="alert alert-info py-1 px-2 mt-2 mb-0 d-none justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                    <div>
+                                        <strong>Filtered by Teacher:</strong> <span id="filter_teacher_name_text"></span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-dark py-0 px-2" id="toggle_teacher_filter_btn">Show All Entries</button>
+                                </div>
+                            </div>
+
                             <div class="table-responsive saved-marks-scroll">
                                 <table class="display table table-striped table-bordered" id="another_div">
                                     <thead>
                                         <tr>
                                             <th scope="col">S.no.</th>
+                                            <th scope="col">Teacher</th>
                                             <th scope="col">Exam Name</th>
                                             <th scope="col">Class</th>
                                             <th scope="col">Section</th>
@@ -190,16 +219,45 @@
                                             <th scope="col">Action</th>
                                         </tr>
                                     </thead>
-                                    @php $i = 0; @endphp
                                     <tbody>
                                         @if(!empty($stream) && count($stream))
+                                            @php $i = 0; @endphp
                                             @foreach($stream as $streams)
-                                                <tr>
-                                                    <td>{{++$i}}</td>
-                                                    <td class="uperletter">{{ $streams->Exammaster->exam_name ?? '-' }}</td>
-                                                    <td>{{$streams->Class->class_name}}</td>
-                                                    <td>{{$streams->section_name}}</td>
-                                                    <td class="uperletter">{{$streams->Subject->subject_name}}</td>
+                                                @php
+                                                    $tFirstName = $streams->Teacher->first_name ?? '';
+                                                    $tLastName = $streams->Teacher->last_name ?? '';
+                                                    $tFullName = trim($tFirstName . ' ' . $tLastName);
+                                                    $tEmpCode = $streams->Teacher->biometricDetails->ess_emp_code ?? '';
+                                                    $examName = $streams->Exammaster->exam_name ?? '-';
+                                                    $className = $streams->Class->class_name ?? '-';
+                                                    $sectionName = $streams->section_name ?? '-';
+                                                    $subjectName = $streams->Subject->subject_name ?? '-';
+                                                @endphp
+                                                <tr class="saved-marks-row"
+                                                    data-teacher-id="{{ $streams->teacher_id }}"
+                                                    data-teacher-name="{{ strtolower($tFullName) }}"
+                                                    data-teacher-code="{{ strtolower($tEmpCode) }}"
+                                                    data-exam-name="{{ strtolower($examName) }}"
+                                                    data-class-id="{{ $streams->class_id }}"
+                                                    data-class-name="{{ strtolower($className) }}"
+                                                    data-section-name="{{ strtolower($sectionName) }}"
+                                                    data-subject-id="{{ $streams->subject_id }}"
+                                                    data-subject-name="{{ strtolower($subjectName) }}">
+                                                    <td class="saved-marks-sno">{{++$i}}</td>
+                                                    <td>
+                                                        @if(!empty($tFullName))
+                                                            <strong>{{ $tFullName }}</strong>
+                                                            @if(!empty($tEmpCode))
+                                                                <br><small class="text-muted">Code: {{ $tEmpCode }}</small>
+                                                            @endif
+                                                        @else
+                                                            <span class="text-muted">-</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="uperletter">{{ $examName }}</td>
+                                                    <td>{{ $className }}</td>
+                                                    <td>{{ $sectionName }}</td>
+                                                    <td class="uperletter">{{ $subjectName }}</td>
                                                     <td class="d-flex">
                                                         <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') .'/'.$streams->id}}">Edit</a>
                                                         <?php $a = "previosly_saved_marks_entry"."-".$streams->id ; ?>
@@ -222,9 +280,12 @@
                                                     </td>
                                                 </tr>
                                             @endforeach
+                                            <tr id="no_saved_marks_found_row" style="display: none;">
+                                                <td colspan="7" class="text-center text-muted py-3">No matching marks entries found.</td>
+                                            </tr>
                                         @else
                                             <tr>
-                                                <td colspan="6" class="text-center">No Data Found</td>
+                                                <td colspan="7" class="text-center">No Data Found</td>
                                             </tr>
                                         @endif
                                     </tbody>
@@ -254,7 +315,7 @@
                                             <input type="checkbox" id="isAbsentToggle" class="toggle-checkbox" data-column-index="1"> Is Absent Th
                                         </label>
                                     </th>
-                                    <th scope="col" class="practical-column">
+                                    <th scope="col" class="practical-column academic-column">
                                         <label>
                                             <input type="checkbox" id="isAbsentPrToggle" class="toggle-checkbox" data-column-index="2"> Is Absent Pr
                                         </label>
@@ -262,13 +323,13 @@
                                     <th scope="col">Scholar no.</th>
                                     <th scope="col">Student Name</th>
                                     <th scope="col">Roll No.</th>
-                                    <th scope="col">Marks (Theory)</th>
-                                    <th scope="col" class="practical-column">Marks (Practical)</th>
+                                    <th scope="col" class="academic-column">Marks (Theory)</th>
+                                    <th scope="col" class="practical-column academic-column">Marks (Practical)</th>
                                     @foreach($internalAssessments ?? [] as $assessment)
-                                        <th scope="col" class="ia-column d-none" data-ia-code="{{ $assessment->assessment_code }}">{{ $assessment->assessment_code }}</th>
+                                        <th scope="col" class="ia-column academic-column d-none" data-ia-code="{{ $assessment->assessment_code }}">{{ $assessment->assessment_code }}</th>
                                     @endforeach
-                                    <th scope="col">Total Marks</th>
-                                    <th scope="col">Over All Grade</th>
+                                    <th scope="col" class="academic-column">Total Marks</th>
+                                    <th scope="col" id="grade_column_header">Over All Grade</th>
                                     {{-- <th scope="col">Result</th> --}}
                                     <th scope="col">Action</th>
                                 </tr>
@@ -287,11 +348,14 @@
                                         </tr>
                                     @endforeach
                                 @elseif(!empty($stream_master))
+                                    @php
+                                        $isNonAcademicEntry = !empty($isNonAcademic) || (!empty($stream_master) && preg_match('/non[\s-]*academic/i', $stream_master->Subject->subject_type ?? ''));
+                                    @endphp
                                     @foreach ($marksData as $marks )
                                         <tr class="student-row">
                                             <th scope="row">{{++$i}}</th>
                                             <td><input type="checkbox" class="is_absent" @if($marks->is_absent == '1') @checked(true) @endif></td>
-                                            <td class="practical-column"><input type="checkbox" class="is_absent_pr" @if($marks->is_absent_pr == '1') @checked(true) @endif /></td>
+                                            <td class="practical-column academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="checkbox" class="is_absent_pr" @if($marks->is_absent_pr == '1') @checked(true) @endif /></td>
                                             <td>
                                                 {{ $marks->scholar_no }}
                                                 <input type="hidden" class="scholar_no" value="{{ $marks->scholar_no ?? '' }}" />
@@ -302,8 +366,8 @@
                                                 <input type="hidden" class="student_id" value="{{ $marks->student_id }}" />
                                                 <input type="hidden" class="roll_no" value="{{ $marks->roll_no ?? '' }}" />
                                             </td>
-                                            <td><input type="text" class="form-control mark_theory" value="{{ $marks->mark_theory ?? $marks->subject_marks ?? 0 }}" /></td>
-                                            <td class="practical-column"><input type="text" class="form-control mark_practical" value="{{ $marks->mark_practical ?? 0 }}" /></td>
+                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_theory" value="{{ $marks->mark_theory ?? $marks->subject_marks ?? 0 }}" /></td>
+                                            <td class="practical-column academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_practical" value="{{ $marks->mark_practical ?? 0 }}" /></td>
                                             @php
                                                 $rawIaMarks = $marks->internal_assessment_marks ?? null;
                                                 $decodedIaMarks = is_string($rawIaMarks) ? json_decode($rawIaMarks, true) : $rawIaMarks;
@@ -317,12 +381,27 @@
                                                 }
                                             @endphp
                                             @foreach($internalAssessments ?? [] as $assessment)
-                                                <td class="ia-column d-none">
+                                                <td class="ia-column academic-column d-none">
                                                     <input type="number" step="any" min="0" max="5" class="form-control internal_assessment_mark" data-ia-code="{{ $assessment->assessment_code }}" value="{{ $iaMarks[$assessment->assessment_code] ?? ($loop->first ? $singleIaMark : '') }}" />
                                                 </td>
                                             @endforeach
-                                            <td><input type="text" class="form-control total_marks" value="{{ $marks->total_marks ?? $marks->subject_marks ?? 0 }}" readonly /></td>
-                                            <td><input type="text" class="form-control grade" value="{{ $marks->grade ?? $marks->overall_grade ?? '' }}" readonly /></td>
+                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control total_marks" value="{{ $marks->total_marks ?? $marks->subject_marks ?? 0 }}" readonly /></td>
+                                            <td class="grade-cell">
+                                                @if($isNonAcademicEntry)
+                                                    @php
+                                                        $currentGrade = strtoupper(trim((string) ($marks->grade ?? $marks->overall_grade ?? '')));
+                                                    @endphp
+                                                    <select class="form-control grade grade-dropdown">
+                                                        <option value="">-- Select Grade --</option>
+                                                        <option value="A" {{ $currentGrade === 'A' ? 'selected' : '' }}>A</option>
+                                                        <option value="B" {{ $currentGrade === 'B' ? 'selected' : '' }}>B</option>
+                                                        <option value="C" {{ $currentGrade === 'C' ? 'selected' : '' }}>C</option>
+                                                        <option value="D" {{ $currentGrade === 'D' ? 'selected' : '' }}>D</option>
+                                                    </select>
+                                                @else
+                                                    <input type="text" class="form-control grade" value="{{ $marks->grade ?? $marks->overall_grade ?? '' }}" readonly />
+                                                @endif
+                                            </td>
                                             {{-- <td>
                                                 <select class="form-control result">
                                                     <option value="">--</option>
@@ -548,7 +627,71 @@
     }
 
     function selectedSubjectType() {
-        return $('#subject_name option:selected').data('subject-type') || '';
+        const opt = $('#subject_name option:selected');
+        return opt.attr('data-subject-type') || opt.data('subject-type') || '';
+    }
+
+    function isNonAcademicSelected() {
+        @if(!empty($stream_master))
+            return @json(!empty($isNonAcademic));
+        @endif
+        const type = selectedSubjectType();
+        return /non[\s-]*academic/i.test(type);
+    }
+
+    function renderGradeSelectHtml(selectedGrade = '') {
+        const s = String(selectedGrade || '').toUpperCase().trim();
+        return `
+            <select class="form-control grade grade-dropdown">
+                <option value="">-- Select Grade --</option>
+                <option value="A" ${s === 'A' ? 'selected' : ''}>A</option>
+                <option value="B" ${s === 'B' ? 'selected' : ''}>B</option>
+                <option value="C" ${s === 'C' ? 'selected' : ''}>C</option>
+                <option value="D" ${s === 'D' ? 'selected' : ''}>D</option>
+            </select>
+        `;
+    }
+
+    function renderGradeInputHtml(gradeVal = '') {
+        return `<input type="text" class="form-control grade" value="${escapeHtml(gradeVal)}" readonly />`;
+    }
+
+    function updateNonAcademicUiState() {
+        const isNonAcad = isNonAcademicSelected();
+
+        $('#non_academic_notice').toggleClass('d-none', !isNonAcad);
+        $('#academic_marks_config').toggleClass('d-none', isNonAcad);
+
+        $('.academic-column').toggleClass('d-none', isNonAcad);
+        if (!isNonAcad) {
+            toggleInternalAssessmentColumns();
+            togglePracticalColumns();
+            $('#grade_column_header').text('Over All Grade');
+        } else {
+            $('#grade_column_header').text('Grade (A, B, C, D)');
+        }
+
+        $('#studentdatatable .student-row').each(function () {
+            const row = $(this);
+            let gradeCell = row.find('.grade-cell');
+            if (!gradeCell.length) {
+                gradeCell = row.find('.grade').parent();
+                gradeCell.addClass('grade-cell');
+            }
+
+            const currentGradeVal = row.find('.grade').val() || '';
+
+            if (isNonAcad) {
+                if (!row.find('.grade').is('select')) {
+                    gradeCell.html(renderGradeSelectHtml(currentGradeVal));
+                }
+            } else {
+                if (row.find('.grade').is('select')) {
+                    gradeCell.html(renderGradeInputHtml(''));
+                    recalculateStudentTotal(row);
+                }
+            }
+        });
     }
 
     function normalizeSubjectType(subjectType) {
@@ -632,6 +775,9 @@
     }
 
     function recalculateStudentTotal(row) {
+        if (isNonAcademicSelected()) {
+            return;
+        }
         const theory = numericValue(row.find('.mark_theory').val());
         const practical = isPracticalEnabled() ? numericValue(row.find('.mark_practical').val()) : 0;
         let internalAssessmentTotal = 0;
@@ -742,6 +888,9 @@
     }
 
     function validateObtainedMarks() {
+        if (isNonAcademicSelected()) {
+            return true;
+        }
         const maxTheory = numericValue($('#max_marks_theory').val());
         const maxPractical = numericValue($('#max_marks_practical').val());
         const maxTotal = numericValue($('#max_marks').val());
@@ -785,13 +934,150 @@
     }
 </script>
 <script>
+    let currentTeacherFilter = {
+        active: false,
+        teacherId: '',
+        teacherName: '',
+        assignedClassIds: [],
+        assignedSubjectIds: [],
+        assignments: []
+    };
+    let isTeacherFilterBypassed = false;
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return $('<div>').text(text).html();
+    }
+
+    function filterSavedMarksEntries() {
+        const rawSearchQuery = ($('#saved_marks_search').val() || '').trim().toLowerCase();
+        const rows = $('#another_div tbody tr.saved-marks-row');
+        const totalRowsCount = rows.length;
+
+        if (totalRowsCount === 0) {
+            return;
+        }
+
+        const hasTeacherFilter = currentTeacherFilter.active && !isTeacherFilterBypassed && !!currentTeacherFilter.teacherId;
+
+        if (hasTeacherFilter) {
+            $('#active_teacher_filter_banner').removeClass('d-none').addClass('d-flex');
+            $('#filter_teacher_name_text').text(currentTeacherFilter.teacherName);
+            $('#toggle_teacher_filter_btn').text('Show All Entries');
+        } else if (currentTeacherFilter.active && isTeacherFilterBypassed) {
+            $('#active_teacher_filter_banner').removeClass('d-none').addClass('d-flex');
+            $('#filter_teacher_name_text').html(`<span class="text-muted">${escapeHtml(currentTeacherFilter.teacherName)} (Filter paused)</span>`);
+            $('#toggle_teacher_filter_btn').text('Apply Teacher Filter');
+        } else {
+            $('#active_teacher_filter_banner').addClass('d-none').removeClass('d-flex');
+        }
+
+        let visibleCount = 0;
+
+        rows.each(function () {
+            const row = $(this);
+            const rowTeacherId = String(row.data('teacher-id') || '');
+            const rowTeacherName = String(row.data('teacher-name') || '');
+            const rowTeacherCode = String(row.data('teacher-code') || '');
+            const rowExamName = String(row.data('exam-name') || '');
+            const rowClassId = String(row.data('class-id') || '');
+            const rowClassName = String(row.data('class-name') || '');
+            const rowSectionName = String(row.data('section-name') || '');
+            const rowSubjectId = String(row.data('subject-id') || '');
+            const rowSubjectName = String(row.data('subject-name') || '');
+
+            let matchesTeacher = true;
+            if (hasTeacherFilter) {
+                const matchesId = (rowTeacherId !== '' && rowTeacherId === String(currentTeacherFilter.teacherId));
+                let matchesAssignment = false;
+                if (currentTeacherFilter.assignments && currentTeacherFilter.assignments.length > 0) {
+                    matchesAssignment = currentTeacherFilter.assignments.some(function (asgn) {
+                        return String(asgn.class_id) === rowClassId && String(asgn.subject_id) === rowSubjectId;
+                    });
+                } else if (currentTeacherFilter.assignedClassIds.length > 0 && currentTeacherFilter.assignedSubjectIds.length > 0) {
+                    matchesAssignment = currentTeacherFilter.assignedClassIds.includes(rowClassId) &&
+                                        currentTeacherFilter.assignedSubjectIds.includes(rowSubjectId);
+                }
+                matchesTeacher = matchesId || matchesAssignment;
+            }
+
+            let matchesSearch = true;
+            if (rawSearchQuery !== '') {
+                const searchHaystack = `${rowTeacherName} ${rowTeacherCode} ${rowExamName} ${rowClassName} ${rowSectionName} ${rowSubjectName}`.toLowerCase();
+                matchesSearch = searchHaystack.includes(rawSearchQuery);
+            }
+
+            if (matchesTeacher && matchesSearch) {
+                visibleCount++;
+                row.show();
+                row.find('.saved-marks-sno').text(visibleCount);
+            } else {
+                row.hide();
+            }
+        });
+
+        if (visibleCount === 0) {
+            $('#no_saved_marks_found_row').show();
+        } else {
+            $('#no_saved_marks_found_row').hide();
+        }
+
+        if (hasTeacherFilter || rawSearchQuery !== '') {
+            $('#saved_marks_count_badge').text(`Showing ${visibleCount} of ${totalRowsCount} entries`);
+        } else {
+            $('#saved_marks_count_badge').text(`Showing ${totalRowsCount} entries`);
+        }
+    }
+
+    $(document).on('input keyup', '#saved_marks_search', function () {
+        filterSavedMarksEntries();
+    });
+
+    $(document).on('click', '#clear_saved_marks_search', function () {
+        $('#saved_marks_search').val('');
+        filterSavedMarksEntries();
+    });
+
+    $(document).on('click', '#toggle_teacher_filter_btn', function () {
+        isTeacherFilterBypassed = !isTeacherFilterBypassed;
+        filterSavedMarksEntries();
+    });
+
     function deleteRowData(e) {
         const elm = e.target.parentElement.parentElement;
         elm.remove();
     }
         document.getElementById("teacher_name").addEventListener("change", (e) => {
             let teacher = e.target.value;
-            let token = document.getElementsByName("_token")[0].value
+            let teacherText = $("#teacher_name option:selected").text().trim();
+            let token = document.getElementsByName("_token")[0].value;
+
+            if (!teacher) {
+                currentTeacherFilter = {
+                    active: false,
+                    teacherId: '',
+                    teacherName: '',
+                    assignedClassIds: [],
+                    assignedSubjectIds: [],
+                    assignments: []
+                };
+                isTeacherFilterBypassed = false;
+                filterSavedMarksEntries();
+
+                $('#class_name').html('<option value=""> -- Select All -- </option>');
+                $('#subject_name').html('<option value=""> -- Select All -- </option>');
+                $('#section_name').html('<option value=""> -- Select All -- </option>');
+                return;
+            }
+
+            currentTeacherFilter.active = true;
+            currentTeacherFilter.teacherId = String(teacher);
+            currentTeacherFilter.teacherName = teacherText;
+            currentTeacherFilter.assignedClassIds = [];
+            currentTeacherFilter.assignedSubjectIds = [];
+            currentTeacherFilter.assignments = [];
+            isTeacherFilterBypassed = false;
+            filterSavedMarksEntries();
 
             $.ajax({
                 data: {
@@ -804,6 +1090,11 @@
                 method: "POST",
                 dataType: 'json',
                 success: function(data) {
+                    currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.class_id); });
+                    currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.subject_id); });
+                    currentTeacherFilter.assignments = data['assignments'] || [];
+                    filterSavedMarksEntries();
+
                     // Handle classes dropdown
                     $('#class_name').html('<option value=""> -- Select All -- </option>');
                     for (var i = 0; i < data['classes'].length; i++) {
@@ -879,9 +1170,47 @@
                 }
             });
         }
-        @if(!empty($isStaffMarksUser) && !empty($staffEmployeeId) && empty($stream_master))
-            document.getElementById("teacher_name").dispatchEvent(new Event("change"));
-        @endif
+        $(document).ready(function() {
+            @if(!empty($stream_master) && !empty($stream_master->teacher_id))
+                const editTeacherId = "{{ $stream_master->teacher_id }}";
+                const editTeacherText = "{{ !empty($stream_master->Teacher) ? trim($stream_master->Teacher->first_name . ' ' . $stream_master->Teacher->last_name) : '' }}";
+                currentTeacherFilter.active = true;
+                currentTeacherFilter.teacherId = String(editTeacherId);
+                currentTeacherFilter.teacherName = editTeacherText;
+                currentTeacherFilter.assignedClassIds = ["{{ $stream_master->class_id }}"];
+                currentTeacherFilter.assignedSubjectIds = ["{{ $stream_master->subject_id }}"];
+                currentTeacherFilter.assignments = [{
+                    class_id: "{{ $stream_master->class_id }}",
+                    subject_id: "{{ $stream_master->subject_id }}",
+                    section_name: "{{ $stream_master->section_name }}"
+                }];
+                filterSavedMarksEntries();
+
+                let token = document.getElementsByName("_token")[0].value;
+                $.ajax({
+                    data: { teacher: editTeacherId },
+                    url: "{{ url($marksUrlPrefix . 'getteachersdata') }}",
+                    headers: { 'X-CSRF-TOKEN': token },
+                    method: "POST",
+                    dataType: 'json',
+                    success: function(data) {
+                        currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.class_id); });
+                        currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.subject_id); });
+                        currentTeacherFilter.assignments = data['assignments'] || [];
+                        filterSavedMarksEntries();
+                    }
+                });
+            @elseif(!empty($isStaffMarksUser) && !empty($staffEmployeeId))
+                document.getElementById("teacher_name").dispatchEvent(new Event("change"));
+            @else
+                const preselectedTeacher = $("#teacher_name").val();
+                if (preselectedTeacher) {
+                    document.getElementById("teacher_name").dispatchEvent(new Event("change"));
+                } else {
+                    filterSavedMarksEntries();
+                }
+            @endif
+        });
         function checkMarksEntryStatus() {
             @if(!empty($stream_master))
                 return;
@@ -995,12 +1324,13 @@
                         return;
                     }
                     let rows = '';
+                    const isNonAcad = isNonAcademicSelected();
                     data.students.forEach((item, index) => {
                         rows += `
                         <tr class="student-row">
                             <td>${index + 1}</td>
                             <td><input type="checkbox" class="is_absent" /></td>
-                            <td class="practical-column"><input type="checkbox" class="is_absent_pr" /></td>
+                            <td class="practical-column academic-column ${isNonAcad ? 'd-none' : ''}"><input type="checkbox" class="is_absent_pr" /></td>
                             <td>
                                 ${item.scholar_no || ''}
                                 <input type="hidden" class="scholar_no" value="${item.scholar_no || ''}" />
@@ -1011,22 +1341,26 @@
                                 <input type="hidden" class="student_id" value="${item.id}" />
                                 <input type="hidden" class="roll_no" value="${item.roll_no || ''}" />
                             </td>
-                            <td><input type="text" class="form-control mark_theory" value="0" /></td>
-                            <td class="practical-column"><input type="text" class="form-control mark_practical" value="0" /></td>
+                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_theory" value="0" /></td>
+                            <td class="practical-column academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_practical" value="0" /></td>
                             ${internalAssessmentCells()}
-                            <td><input type="text" class="form-control total_marks" value="0" readonly /></td>
-                            <td><input type="text" class="form-control grade" value="" readonly /></td>
+                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control total_marks" value="0" readonly /></td>
+                            <td class="grade-cell">${isNonAcad ? renderGradeSelectHtml('') : renderGradeInputHtml('')}</td>
                             <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
                         </tr>`;
                     });
 
                     $("#studentdatatable").html(rows);
-                    setExamMaxMarks($("#exam_name").val());
-                    toggleInternalAssessmentColumns();
-                    togglePracticalColumns();
-                    $('.student-row').each(function () {
-                        recalculateStudentTotal($(this));
-                    });
+                    if (!isNonAcad) {
+                        setExamMaxMarks($("#exam_name").val());
+                        toggleInternalAssessmentColumns();
+                        togglePracticalColumns();
+                        $('.student-row').each(function () {
+                            recalculateStudentTotal($(this));
+                        });
+                    } else {
+                        updateNonAcademicUiState();
+                    }
                     toastr.success(`Loaded ${data.students.length} student(s).`, "Success");
                 },
                 error: function(xhr, status, error) {
@@ -1118,9 +1452,20 @@
         togglePracticalColumns();
         applyMarksEntryLockState();
         filterSubjectDropdownByType();
+        updateNonAcademicUiState();
         @if(!empty($stream_master))
             $('#subject_name').val('{{ $stream_master->subject_id }}');
         @endif
+        $('#subject_name').on('change', function () {
+            updateNonAcademicUiState();
+            if (!isNonAcademicSelected()) {
+                setExamMaxMarks($("#exam_name").val());
+            }
+        });
+        $('#subject_type').on('change', function () {
+            filterSubjectDropdownByType();
+            updateNonAcademicUiState();
+        });
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })
@@ -1131,6 +1476,7 @@
             recalculateStudentTotal($(this).closest('tr'));
         });
         $(document).on('input change', '.total_marks', function() {
+            if (isNonAcademicSelected()) return;
             const row = $(this).closest('tr');
             const rounded = roundHalfUp($(this).val());
             $(this).val(rounded);
@@ -1165,19 +1511,20 @@
         let data = [];
         let bodydata = document.getElementById("studentdatatable").children;
         let studentData = [];
+        const isNonAcad = isNonAcademicSelected();
         $('#studentdatatable').find('.student-row').each(function () {
             const row = $(this);
             const studentId = row.find('.student_id').val();
             const rollNo = row.find('.roll_no').val();
             const scholarNo = row.find('.scholar_no').val();
-            const markTheory = row.find('.mark_theory').val();
-            const markPractical = isPracticalEnabled() ? row.find('.mark_practical').val() : 0;
-            const totalMarks = row.find('.total_marks').val();
-            const grade = row.find('.grade').val();
+            const markTheory = isNonAcad ? 0 : row.find('.mark_theory').val();
+            const markPractical = (!isNonAcad && isPracticalEnabled()) ? row.find('.mark_practical').val() : 0;
+            const totalMarks = isNonAcad ? 0 : row.find('.total_marks').val();
+            const grade = row.find('.grade').val() || '';
             const result = '';
-            const internalAssessments = collectInternalAssessmentMarks(row);
+            const internalAssessments = isNonAcad ? {} : collectInternalAssessmentMarks(row);
             const isAbsent = row.find('.is_absent').is(':checked') ? 1 : 0;
-            const isAbsentPr = isPracticalEnabled() && row.find('.is_absent_pr').is(':checked') ? 1 : 0;
+            const isAbsentPr = (!isNonAcad && isPracticalEnabled() && row.find('.is_absent_pr').is(':checked')) ? 1 : 0;
 
             studentData.push({
                 student_id: studentId,
@@ -1200,18 +1547,19 @@
             section_name: $("#section_name").val(),
             exam_name: $("#exam_name").val(),
             subject_name: $("#subject_name").val(),
-            max_marks_theory: $("#max_marks_theory").val(),
-            max_marks_practical: $("#max_marks_practical").val(),
-            max_marks: $("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0)),
+            max_marks_theory: isNonAcad ? 0 : $("#max_marks_theory").val(),
+            max_marks_practical: isNonAcad ? 0 : $("#max_marks_practical").val(),
+            max_marks: isNonAcad ? 0 : ($("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0))),
             students: studentData
         };
         $.ajax({
-            data: postData
+            data: JSON.stringify(postData)
             , url: "{{url($marksUrlPrefix . 'save-marks')}}"
             , headers: {
                 'X-CSRF-TOKEN': token
             }
             , method: "POST"
+            , contentType: "application/json; charset=utf-8"
             , dataType: 'json'
             , beforeSend: function() {
                 setMarksSaving(true);
@@ -1246,19 +1594,20 @@
         let data = [];
         let bodydata = document.getElementById("studentdatatable").children;
         let studentData = [];
+        const isNonAcad = isNonAcademicSelected();
         $('#studentdatatable').find('.student-row').each(function () {
             const row = $(this);
             const studentId = row.find('.student_id').val();
             const rollNo = row.find('.roll_no').val();
             const scholarNo = row.find('.scholar_no').val();
-            const markTheory = row.find('.mark_theory').val();
-            const markPractical = isPracticalEnabled() ? row.find('.mark_practical').val() : 0;
-            const totalMarks = row.find('.total_marks').val();
-            const grade = row.find('.grade').val();
+            const markTheory = isNonAcad ? 0 : row.find('.mark_theory').val();
+            const markPractical = (!isNonAcad && isPracticalEnabled()) ? row.find('.mark_practical').val() : 0;
+            const totalMarks = isNonAcad ? 0 : row.find('.total_marks').val();
+            const grade = row.find('.grade').val() || '';
             const result = '';
-            const internalAssessments = collectInternalAssessmentMarks(row);
+            const internalAssessments = isNonAcad ? {} : collectInternalAssessmentMarks(row);
             const isAbsent = row.find('.is_absent').is(':checked') ? 1 : 0;
-            const isAbsentPr = isPracticalEnabled() && row.find('.is_absent_pr').is(':checked') ? 1 : 0;
+            const isAbsentPr = (!isNonAcad && isPracticalEnabled() && row.find('.is_absent_pr').is(':checked')) ? 1 : 0;
 
             studentData.push({
                 student_id: studentId,
@@ -1282,18 +1631,19 @@
             section_name: $("#section_name").val() || "{{ !empty($stream_master) ? $stream_master->section_name : '' }}",
             exam_name: $("#exam_name").val() || "{{ !empty($stream_master) ? $stream_master->exam_id : '' }}",
             subject_name: $("#subject_name").val() || "{{ !empty($stream_master) ? $stream_master->subject_id : '' }}",
-            max_marks_theory: $("#max_marks_theory").val(),
-            max_marks_practical: $("#max_marks_practical").val(),
-            max_marks: $("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0)),
+            max_marks_theory: isNonAcad ? 0 : $("#max_marks_theory").val(),
+            max_marks_practical: isNonAcad ? 0 : $("#max_marks_practical").val(),
+            max_marks: isNonAcad ? 0 : ($("#max_marks").val() || (Number($("#max_marks_theory").val() || 0) + Number($("#max_marks_practical").val() || 0))),
             students: studentData
         };
         $.ajax({
-            data: postData
+            data: JSON.stringify(postData)
             , url: "{{url($marksUrlPrefix . 'store-marks')}}"
             , headers: {
                 'X-CSRF-TOKEN': token
             }
             , method: "POST"
+            , contentType: "application/json; charset=utf-8"
             , dataType: 'json'
             , beforeSend: function() {
                 setMarksSaving(true);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
+use App\Models\Academic\Attendance;
 use App\Models\Academic\AttendanceCollective;
 use App\Models\Academic\AttendanceCollectiveDetail;
 use App\Models\Academic\AttendanceDetail;
@@ -122,11 +123,32 @@ class ManualAttendanceController extends Controller
         // Determine effective school working days
         if ($filters['school_working_days'] !== null && $filters['school_working_days'] !== '') {
             $schoolWorkingDays = (int) $filters['school_working_days'];
-        } elseif ($existingCollective) {
+        } elseif ($existingCollective && (int) $existingCollective->working_days > 0) {
             $schoolWorkingDays = (int) $existingCollective->working_days;
             $filters['school_working_days'] = $schoolWorkingDays;
         } else {
-            $schoolWorkingDays = $autoWorkingDays > 0 ? $autoWorkingDays : 200;
+            $classObj = Classes::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first();
+            $classIds = array_values(array_unique(array_filter([
+                $filters['class_id'],
+                $selectedClassName,
+                optional($classObj)->id,
+                optional($classObj)->class_name
+            ])));
+
+            $recordedDays = (int) Attendance::query()
+                ->where('is_delete', 0)
+                ->whereIn('class_id', $classIds)
+                ->where('section_name', $selectedSectionName)
+                ->where('academic_session', $filters['academic_session'])
+                ->whereBetween('attendance_date', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->where('total_students', '>', 0)
+                        ->orWhereHas('details');
+                })
+                ->distinct('attendance_date')
+                ->count('attendance_date');
+
+            $schoolWorkingDays = $recordedDays > 0 ? $recordedDays : '';
             $filters['school_working_days'] = $schoolWorkingDays;
         }
 

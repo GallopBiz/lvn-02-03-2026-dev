@@ -20,9 +20,11 @@ class SubjectCombinationController extends Controller
         $stream = SubjectCombination::where('is_delete', 0)->get();
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $subjects = Subject::all();
+        $nonAcademicSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Non Academic')->get();
+        $skilledSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Skilled')->get();
         $streamlist = Stream::where('is_delete', 0)->distinct()->get();
         $combinations = SubjectCombination::with(['class', 'subjects'])->where('is_delete', 0)->get();
-        return view('backend.AcademicsModules.subjectcombination', compact('combinations','stream', 'streamlist', 'studentclasses', 'subjects'));
+        return view('backend.AcademicsModules.subjectcombination', compact('combinations','stream', 'streamlist', 'studentclasses', 'subjects', 'nonAcademicSubjects', 'skilledSubjects'));
     }
 
     public function create(Request $request)
@@ -41,15 +43,17 @@ class SubjectCombinationController extends Controller
     {
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $subjects = Subject::all();
+        $nonAcademicSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Non Academic')->get();
+        $skilledSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Skilled')->get();
         $streamlist = Stream::select(['id','streams'])->distinct()->get();
         $single_combinations = SubjectCombination::with(['class', 'subjects'])->whereId($id)->first();
         //dd($single_combinations);
-        return view('backend.AcademicsModules.subjectcombination', compact('single_combinations','studentclasses','streamlist'));
+        return view('backend.AcademicsModules.subjectcombination', compact('single_combinations','studentclasses','streamlist', 'subjects', 'nonAcademicSubjects', 'skilledSubjects'));
     }
 
     public function fetchSubjects(Request $request)
     {
-        $classId = $request->input('class_id');
+        $classId = (array)$request->input('class_id', []);
         $streamId = $request->input('stream_id');
         $query = ClassSubject::whereIn('class_id', $classId);
         if (!empty($streamId)) {
@@ -65,10 +69,24 @@ class SubjectCombinationController extends Controller
             ->where('is_delete', 0)
             ->get()
             ->groupBy('subject_type');
+
+        $nonAcademicSubjects = Subject::where('is_delete', 0)
+            ->where('subject_type', 'Non Academic')
+            ->get();
+
+        $allSkilledSubjects = Subject::where('is_delete', 0)
+            ->where('subject_type', 'Skilled')
+            ->get();
+
+        $skilled = $subjects->get('Skilled', collect());
+        if ($skilled->isEmpty()) {
+            $skilled = $allSkilledSubjects;
+        }
+
         return response()->json([
             'academic' => $subjects->get('Academic', []),
-            'non_academic' => $subjects->get('Non Academic', []),
-            'skilled' => $subjects->get('Skilled', []),
+            'non_academic' => $nonAcademicSubjects,
+            'skilled' => $skilled,
             'optional' => $subjects->get('Optional', []),
         ]);
     }
