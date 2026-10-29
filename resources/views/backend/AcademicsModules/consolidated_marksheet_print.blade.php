@@ -2,23 +2,23 @@
 
 @section('main-container')
     <style id="consolidated-marksheet-print-styles">
-        @page { size: A4 landscape; margin: 6mm; }
+        @page { size: A4 landscape; margin: 4mm 6mm; }
         * { box-sizing: border-box; }
         body { margin: 0; background: #fff; }
         .consolidated-preview { overflow: auto; background: #f5f6f8; padding: 16px; }
         .consolidated-print-area { width: max-content; margin: 0 auto; color: #111; font-family: "Times New Roman", Times, serif; background: #fff; }
         .print-actions { padding: 10px; text-align: center; font-family: Arial, sans-serif; }
         .print-actions button { border: 0; background: #1b5fbf; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .sheet { width: 285mm; min-height: 198mm; margin: 0 auto; padding: 4mm 4mm; page-break-after: always; break-after: page; overflow: hidden; }
+        .sheet { width: 285mm; min-height: 0; height: auto; margin: 0 auto; padding: 0; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; overflow: visible; }
         .sheet:last-child { page-break-after: auto; break-after: auto; }
-        .title { text-align: center; line-height: 1.12; margin-bottom: 1mm; }
-        .title h2 { margin: 0; font-size: 15px; font-weight: bold; }
-        .title h3 { margin: 0.5mm 0 0; font-size: 14px; font-weight: bold; }
-        .title .exam-line { margin-top: 0.5mm; font-size: 13px; font-weight: bold; }
-        .meta { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: bold; margin: 1mm 0; }
+        .title { text-align: center; line-height: 1.1; margin-bottom: 0.5mm; }
+        .title h2 { margin: 0; font-size: 14px; font-weight: bold; }
+        .title h3 { margin: 0.2mm 0 0; font-size: 13px; font-weight: bold; }
+        .title .exam-line { margin-top: 0.2mm; font-size: 11.5px; font-weight: bold; }
+        .meta { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: bold; margin: 0.5mm 0; }
         .consolidated-print-area table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .consolidated-print-area th,
-        .consolidated-print-area td { border: 1px solid #222; padding: 0.35mm 0.55mm; font-size: 12px; line-height: 1.02; vertical-align: top; overflow-wrap: anywhere; }
+        .consolidated-print-area td { border: 1px solid #222; padding: 0.25mm 0.4mm; font-size: 13px; line-height: 1.02; vertical-align: middle; overflow-wrap: anywhere; }
         .consolidated-print-area th { text-align: center; font-weight: bold; }
         .consolidated-print-area td.center { text-align: center; }
         .consolidated-print-area td.right { text-align: right; }
@@ -47,11 +47,12 @@
         .rollup td { font-weight: bold; background: #f6f6f6; }
         .nowrap { white-space: nowrap; }
         @media print {
+            @page { size: A4 landscape; margin: 4mm 6mm; }
             body { margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .main-content, .consolidated-preview { margin: 0 !important; padding: 0 !important; background: #fff !important; }
             .breadcrumb, .separator-breadcrumb, .print-actions { display: none !important; }
-            .sheet { margin: 0; break-after: page; page-break-after: always; }
-            .sheet:last-child { break-after: auto; page-break-after: auto; }
+            .sheet { margin: 0 auto !important; padding: 0 !important; min-height: 0 !important; height: auto !important; break-after: page !important; page-break-after: always !important; break-inside: avoid !important; page-break-inside: avoid !important; overflow: visible !important; }
+            .sheet:last-child { break-after: auto !important; page-break-after: auto !important; }
         }
     </style>
 
@@ -80,9 +81,57 @@
                 @php
                     $className = (string) ($report['class']->class_name ?? '');
                     $isClassOne = preg_match('/(^|\D)(1|i|one|first)(\D|$)/i', $className);
-                    $studentPages = collect($report['students'])->values()->chunk(4);
+                    $specialNames = $report['special_subject_names'] ?? [];
+
+                    $studentPages = [];
+                    $currentPage = [];
+                    $currentRowCount = 0;
+                    $maxRowsPerPage = 35; // Safe vertical row limit for A4 landscape at 13px font
+                    $maxStudentsPerPage = 6; // Display 6 records per page for fewer subjects when space allows
+
+                    foreach ($report['students'] as $studentRow) {
+                        $subjectRows = collect($studentRow['subjects']);
+                        $existingSubjects = $subjectRows->pluck('subject')->map(fn ($subject) => strtolower(preg_replace('/\s+/', ' ', trim((string) $subject))))->all();
+                        $classOneSubjects = $isClassOne
+                            ? collect(['Computer', 'Sanskrit'])
+                                ->reject(fn ($subject) => in_array(strtolower(trim((string) $subject)), $specialNames, true) || $hasSubject($existingSubjects, $subject))
+                                ->map(fn ($subject) => [
+                                    'subject' => $subject,
+                                    'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                    'term_2' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                    'percentage' => null,
+                                    'division' => '',
+                                    'result' => '',
+                                    'result_short' => '',
+                                ])
+                                ->values()
+                            : collect();
+                        $displaySubjects = $subjectRows
+                            ->reject(fn ($s) => in_array(strtolower(trim((string) ($s['subject'] ?? ''))), $specialNames, true))
+                            ->merge($classOneSubjects)
+                            ->values();
+                        $studentRows = max(1, $displaySubjects->count()) + ($subjectRows->count() > 0 ? 1 : 0);
+
+                        $wouldExceedStudents = count($currentPage) >= $maxStudentsPerPage;
+                        $wouldExceedRows = ($currentRowCount + $studentRows) > $maxRowsPerPage;
+
+                        if (!empty($currentPage) && ($wouldExceedStudents || $wouldExceedRows)) {
+                            $studentPages[] = $currentPage;
+                            $currentPage = [];
+                            $currentRowCount = 0;
+                        }
+
+                        $currentPage[] = $studentRow;
+                        $currentRowCount += $studentRows;
+                    }
+
+                    if (!empty($currentPage)) {
+                        $studentPages[] = $currentPage;
+                    }
+
+                    $globalSerialCounter = 1;
                 @endphp
-                @foreach($studentPages as $pageIndex => $studentsPage)
+                @foreach($studentPages as $studentsPage)
                     <main class="sheet {{ empty($report['show_term_2']) ? 'term1-mode' : '' }}">
                 <div class="title">
                     <h2>Lokmanya Vidya Niketan</h2>
@@ -130,14 +179,15 @@
                             @endif
                         </tr>
                     </thead>
-                    @foreach($studentsPage->values() as $studentIndex => $studentRow)
+                    @foreach($studentsPage as $studentRow)
                         @php
-                            $serialNo = ($pageIndex * 4) + $studentIndex + 1;
+                            $serialNo = $globalSerialCounter++;
                             $subjectRows = collect($studentRow['subjects']);
                             $existingSubjects = $subjectRows->pluck('subject')->map(fn ($subject) => strtolower(preg_replace('/\s+/', ' ', trim((string) $subject))))->all();
+                            $specialNames = $report['special_subject_names'] ?? [];
                             $classOneSubjects = $isClassOne
                                 ? collect(['Computer', 'Sanskrit'])
-                                    ->reject(fn ($subject) => $hasSubject($existingSubjects, $subject))
+                                    ->reject(fn ($subject) => in_array(strtolower(trim((string) $subject)), $specialNames, true) || $hasSubject($existingSubjects, $subject))
                                     ->map(fn ($subject) => [
                                         'subject' => $subject,
                                         'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
@@ -149,7 +199,10 @@
                                     ])
                                     ->values()
                                 : collect();
-                            $displaySubjects = $subjectRows->merge($classOneSubjects)->values();
+                            $displaySubjects = $subjectRows
+                                ->reject(fn ($s) => in_array(strtolower(trim((string) ($s['subject'] ?? ''))), $specialNames, true))
+                                ->merge($classOneSubjects)
+                                ->values();
                             $rowspanCount = $displaySubjects->count() + ($subjectRows->count() > 0 ? 1 : 0);
                         @endphp
                         <tbody class="student-group">
@@ -160,7 +213,7 @@
                                         <td rowspan="{{ $rowspanCount }}">{{ $studentRow['student']->student_name }}</td>
                                         <td class="center" rowspan="{{ $rowspanCount }}">
                                             {{ $studentRow['student']->scholar_no }}<br>
-                                            {{ $studentRow['attendance'] ?: '/' }}
+                                            {{ $studentRow['attendance'] ?: '-' }}
                                         </td>
                                     @endif
                                     <td>{{ $subject['subject'] }}</td>
@@ -180,9 +233,9 @@
                                         <td class="center">{{ is_numeric($subject['term_2']['total']) ? $formatMark($subject['term_2']['total']) : '-' }}</td>
                                         <td class="center">{{ $subject['term_2']['grade'] ?: '-' }}</td>
                                     @endif
-                                    <td class="center">{{ isset($subject['percentage']) && $subject['percentage'] !== null && $subject['percentage'] !== '' ? $formatPercentage($subject['percentage']) : '-' }}</td>
-                                    <td class="center">{{ $subject['division'] ?? '-' }}</td>
-                                    <td class="center">{{ $subject['result_short'] ?? ($subject['result'] === 'Pass' ? 'P' : ($subject['result'] === 'Fail' ? 'F' : '-')) }}</td>
+                                    <td class="center"></td>
+                                    <td class="center"></td>
+                                    <td class="center"></td>
                                 </tr>
                             @empty
                                 <tr class="student-start">
@@ -190,7 +243,7 @@
                                     <td>{{ $studentRow['student']->student_name }}</td>
                                     <td class="center">
                                         {{ $studentRow['student']->scholar_no }}<br>
-                                        {{ $studentRow['attendance'] ?: '/' }}
+                                        {{ $studentRow['attendance'] ?: '-' }}
                                     </td>
                                     <td colspan="{{ !empty($report['show_term_2']) ? 15 : 8 }}" class="center">No assigned subjects found</td>
                                     <td class="center">{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '' }}</td>

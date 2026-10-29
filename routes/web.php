@@ -142,6 +142,7 @@ use App\Http\Controllers\Academic\ConsolidatedMarksheetController;
 use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetController;
 use App\Http\Controllers\Academic\Term1MarksheetController;
 use App\Http\Controllers\Academic\SeniorMarksheetController;
+use App\Http\Controllers\Academic\SeniorConsolidatedMarksheetController;
 use App\Http\Controllers\Academic\TeacherRemarkEntryController;
 use App\Http\Controllers\Academic\AttendanceController as AcademicAttendanceController;
 use App\Http\Controllers\Academic\ManualAttendanceController as AcademicManualAttendanceController;
@@ -624,6 +625,11 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::match(['post', 'delete'], 'academic/senior-marksheets/generated/bulk-delete', [SeniorMarksheetController::class, 'bulkDeleteGenerated'])->name('academic.senior-marksheets.generated.bulk-delete');
     Route::delete('academic/senior-marksheets/generated/{marksheet}', [SeniorMarksheetController::class, 'deleteGenerated'])->name('academic.senior-marksheets.generated.delete');
     Route::get('academic/senior-marksheets/print/{marksheet}', [SeniorMarksheetController::class, 'printGenerated'])->name('academic.senior-marksheets.generated.print');
+
+    // Class 11 & 12 Consolidated Marksheet - Dedicated Module
+    Route::get('senior-consolidated-marksheet', [SeniorConsolidatedMarksheetController::class, 'index'])->name('senior-consolidated-marksheet.index');
+    Route::get('academic/senior-consolidated-marksheets', [SeniorConsolidatedMarksheetController::class, 'index'])->name('academic.senior-consolidated-marksheets.index');
+    Route::get('academic/senior-consolidated-marksheets/print', [SeniorConsolidatedMarksheetController::class, 'print'])->name('academic.senior-consolidated-marksheets.print');
 
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks']);

@@ -21,7 +21,7 @@
     @media print {
         @page {
             size: A4 landscape;
-            margin: 5mm 8mm !important;
+            margin: 16.5mm !important;
         }
 
         *, *:before, *:after {
@@ -47,7 +47,15 @@
         .alert,
         .text-center,
         .breadcrumb,
-        .separator-breadcrumb {
+        .separator-breadcrumb,
+        .btn,
+        nav,
+        header,
+        footer {
+            display: none !important;
+        }
+
+        .main-content > *:not(#printme) {
             display: none !important;
         }
 
@@ -79,17 +87,29 @@
         }
 
         .page {
-            width: 100% !important;
-            height: 196mm !important;
-            max-height: 196mm !important;
+            width: 264mm !important;
+            height: 177mm !important;
+            max-height: 177mm !important;
             box-sizing: border-box !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 0 !important;
             overflow: hidden !important;
+            display: grid !important;
+            grid-template-columns: 105.5mm 105.5mm !important;
+            grid-template-rows: 80mm 80mm !important;
+            gap: 17mm 53mm !important;
+            justify-content: center !important;
+            align-content: center !important;
+        }
+
+        .page.single-page {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
         .page:last-child {
@@ -135,10 +155,11 @@ function printAdmitCardPages() {
     doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Admit Cards</title>' +
         stylesHtml +
         '<style>' +
-        '@page { size: A4 landscape; margin: 5mm 8mm; }' +
+        '@page { size: A4 landscape; margin: 16.5mm; }' +
         '*, *:before, *:after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }' +
         'html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 100% !important; }' +
-        '.page { width: 100% !important; height: 196mm !important; max-height: 196mm !important; margin: 0 !important; padding: 0 !important; page-break-after: always !important; break-after: page !important; page-break-inside: avoid !important; break-inside: avoid !important; box-shadow: none !important; overflow: hidden !important; }' +
+        '.page { width: 264mm !important; height: 177mm !important; max-height: 177mm !important; margin: 0 auto !important; padding: 0 !important; page-break-after: always !important; break-after: page !important; page-break-inside: avoid !important; break-inside: avoid !important; box-shadow: none !important; overflow: hidden !important; display: grid !important; grid-template-columns: 105.5mm 105.5mm !important; grid-template-rows: 80mm 80mm !important; gap: 17mm 53mm !important; justify-content: center !important; align-content: center !important; }' +
+        '.page.single-page { display: flex !important; align-items: center !important; justify-content: center !important; }' +
         '.page:last-child { page-break-after: auto !important; break-after: auto !important; }' +
         '.page-break { display: none !important; }' +
         '</style>' +

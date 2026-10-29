@@ -4,7 +4,7 @@
 <style id="marksheet-print-styles">
     @page {
         size: A4 landscape;
-        margin: 8mm;
+        margin: 8mm 8mm 4mm 8mm;
     }
 
     :root {
@@ -34,7 +34,7 @@
         min-height: 194mm;
         height: auto;
         margin: 0 auto;
-        padding: 24mm 0 6mm;
+        padding: 42mm 0 2mm;
         position: relative;
         overflow: visible;
         background: #fff;
@@ -81,18 +81,18 @@
     .title {
         text-align: center;
         font-weight: bold;
-        font-size: 16px;
-        line-height: 1.3;
-        margin: 1mm 0 2mm;
+        font-size: 15px;
+        line-height: 1.25;
+        margin: 0.5mm 0 1.5mm;
     }
 
     .student-box {
         border: 1px solid #333;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        padding: 1.5mm 3.5mm;
-        font-size: 13.5px;
-        line-height: 1.25;
+        padding: 1mm 3.5mm;
+        font-size: 13px;
+        line-height: 1.2;
     }
 
     .student-box table {
@@ -110,14 +110,14 @@
         max-width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 12.5px;
+        font-size: 12px;
         line-height: 1.1;
     }
 
     .marks th,
     .marks td {
         border: 1px solid #333;
-        padding: 0.6mm 1mm;
+        padding: 0.5mm 1mm;
         text-align: center;
         vertical-align: middle;
         overflow-wrap: anywhere;
@@ -144,20 +144,21 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0;
+        margin-top: 1mm;
     }
 
     .co-table {
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: 12.5px;
-        line-height: 1.15;
+        font-size: 12px;
+        line-height: 1.1;
     }
 
     .co-table th,
     .co-table td {
         border: 1px solid #333;
-        padding: 0.6mm 1mm;
+        padding: 0.5mm 1mm;
         overflow-wrap: anywhere;
         vertical-align: middle;
     }
@@ -179,8 +180,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 13.5px;
-        margin-top: 2.5mm;
+        font-size: 13px;
+        margin-top: 1.5mm;
     }
 
     .remarks {
@@ -195,11 +196,11 @@
     }
 
     .summary-stats div {
-        font-size: 13.5px;
+        font-size: 13px;
     }
 
     .footer-area {
-        margin-top: 4mm;
+        margin-top: 2.5mm;
         display: grid;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
@@ -207,7 +208,7 @@
     }
 
     .signature {
-        font-size: 13px;
+        font-size: 12.5px;
         font-weight: bold;
         line-height: 1.25;
     }
@@ -222,10 +223,10 @@
 
     .abbr-box {
         border: 1px solid #333;
-        padding: 1.5mm 3.5mm;
+        padding: 1mm 3.5mm;
         text-align: center;
-        font-size: 11.5px;
-        line-height: 1.35;
+        font-size: 11px;
+        line-height: 1.25;
         font-weight: bold;
         margin: 0 4mm;
     }
@@ -233,7 +234,7 @@
     @media print {
         @page {
             size: A4 landscape;
-            margin: 8mm;
+            margin: 8mm 8mm 4mm 8mm;
         }
 
         body {
@@ -278,6 +279,7 @@
             width: 281mm !important;
             height: auto !important;
             min-height: 194mm !important;
+            padding: 42mm 0 2mm !important;
             overflow: visible !important;
             box-shadow: none !important;
             page-break-inside: avoid !important;
@@ -461,9 +463,15 @@
                             <td>Class-Section</td>
                             <td>: {{ \App\Academic\AcademicHelper::formatClassSection($printData['class_section'] ?? trim((optional($printData['class'])->class_name ?? '') . (optional($printData['class'])->section_name ? ' - ' . optional($printData['class'])->section_name : ''))) }}</td>
                         </tr>
+                        @php
+                        $attendanceDisplay = $printData['attendance'] ?? '';
+                        if (str_contains($attendanceDisplay, '%')) {
+                            $attendanceDisplay = '';
+                        }
+                        @endphp
                         <tr>
                             <td>Attendance</td>
-                            <td>: {{ $printData['attendance'] ?? '' }}</td>
+                            <td>: {{ $attendanceDisplay }}</td>
                         </tr>
                         <tr>
                             <td>Date Of Birth</td>
@@ -676,8 +684,52 @@
                 <section class="summary">
                     <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] ?? '' }}</div>
                     <div class="summary-stats">
-                        <div>Percentage : {{ ($printData['percentage'] !== null && $printData['percentage'] !== '' && empty($printData['is_blank'])) ? $formatPercentage($printData['percentage']) : '' }}</div>
-                        <div>Result : {{ $printData['result'] ?? '' }}</div>
+                        @php
+                        $displayPercentage = $printData['percentage'] ?? null;
+                        if (empty($printData['is_blank']) && $scholasticRows->isNotEmpty()) {
+                            $terms = $printData['layout']['scholastic_terms'] ?? [];
+                            $term2Index = null;
+                            foreach ($terms as $tIdx => $tCfg) {
+                                $tKey = strtolower((string) ($tCfg['key'] ?? ''));
+                                $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
+                                $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
+                                if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                                    $term2Index = $tIdx;
+                                    break;
+                                }
+                            }
+                            if ($term2Index === null && count($terms) > 1) {
+                                $term2Index = count($terms) - 1;
+                            }
+                            if ($term2Index === null && count($terms) > 0) {
+                                $term2Index = 0;
+                            }
+
+                            if ($term2Index !== null && isset($terms[$term2Index])) {
+                                $term2Cfg = $terms[$term2Index];
+                                $totalCols = collect($term2Cfg['columns'] ?? [])->filter(fn ($col) => !empty($col['counts_in_total']));
+                                $term2MaxPerSub = $totalCols->isNotEmpty()
+                                    ? (float) $totalCols->sum(fn ($col) => (float) ($col['max'] ?? 0))
+                                    : (float) collect($term2Cfg['columns'] ?? [])->sum(fn ($col) => (float) ($col['max'] ?? 0));
+                                if ($term2MaxPerSub <= 0) {
+                                    $term2MaxPerSub = 100.0;
+                                }
+
+                                $t2Obtained = 0.0;
+                                $t2Max = 0.0;
+                                foreach ($scholasticRows as $sRow) {
+                                    $t2Obtained += (float) ($sRow['terms'][$term2Index]['total'] ?? 0);
+                                    $t2Max += $term2MaxPerSub;
+                                }
+
+                                if ($t2Max > 0) {
+                                    $displayPercentage = round(($t2Obtained / $t2Max) * 100, 2);
+                                }
+                            }
+                        }
+                        @endphp
+                        <div>Percentage : {{ ($displayPercentage !== null && $displayPercentage !== '' && empty($printData['is_blank'])) ? $formatPercentage($displayPercentage) : '' }}</div>
+                        {{-- <div>Result : {{ $printData['result'] ?? '' }}</div> --}}
                     </div>
                 </section>
 

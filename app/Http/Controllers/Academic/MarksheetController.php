@@ -503,9 +503,10 @@ class MarksheetController extends Controller
 
         if ($marksheet->student_id && $marksheet->class_id) {
             $snapshotAttendance = $printData['attendance'] ?? '';
+            $cleanedSnapshotAttendance = str_contains($snapshotAttendance, '%') ? '' : $snapshotAttendance;
             $liveRequest = $request->duplicate(
                 array_merge($request->query(), array_filter([
-                    'attendance' => $request->input('attendance', $snapshotAttendance),
+                    'attendance' => $request->input('attendance', $cleanedSnapshotAttendance),
                     'date' => $formattedDate,
                     'print_date' => $formattedDate,
                 ], fn ($value) => $value !== null)),
@@ -557,7 +558,75 @@ class MarksheetController extends Controller
         }
         $printData['date'] = $formattedDate;
 
+        if (empty($printData['is_blank'])) {
+            $term2Pct = $this->calculateTerm2Percentage($printData);
+            if ($term2Pct !== null) {
+                $printData['percentage'] = $term2Pct;
+            }
+        }
+
+        if (!empty($printData['attendance']) && str_contains($printData['attendance'], '%')) {
+            $liveAtt = $this->collectiveAttendanceForMarksheet(
+                $marksheet->student_id ? (int) $marksheet->student_id : null,
+                $marksheet->class_id ? (int) $marksheet->class_id : null,
+                $marksheet->exam_id ? (int) $marksheet->exam_id : null,
+                $this->resolveDynamicSessionYear($request)
+            );
+            $printData['attendance'] = ($liveAtt !== '' && $liveAtt !== '/') ? $liveAtt : '';
+        }
+
         return compact('template', 'printData');
+    }
+
+    private function calculateTerm2Percentage(array $printData): ?float
+    {
+        $terms = $printData['layout']['scholastic_terms'] ?? [];
+        if (empty($terms) || empty($printData['rows'])) {
+            return null;
+        }
+
+        $term2Index = null;
+        foreach ($terms as $tIdx => $tCfg) {
+            $tKey = strtolower((string) ($tCfg['key'] ?? ''));
+            $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
+            $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
+            if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                $term2Index = $tIdx;
+                break;
+            }
+        }
+        if ($term2Index === null && count($terms) > 1) {
+            $term2Index = count($terms) - 1;
+        }
+        if ($term2Index === null && count($terms) > 0) {
+            $term2Index = 0;
+        }
+
+        if ($term2Index === null || !isset($terms[$term2Index])) {
+            return null;
+        }
+
+        $term2Cfg = $terms[$term2Index];
+        $term2MaxPerSubject = $this->termMax($term2Cfg);
+        if ($term2MaxPerSubject <= 0) {
+            $term2MaxPerSubject = 100.0;
+        }
+
+        $term2Obtained = 0.0;
+        $term2Max = 0.0;
+        foreach ($printData['rows'] as $row) {
+            if (!empty($row['special_subject_formatting']) || !empty($row['is_non_academic'])) {
+                continue;
+            }
+            $term2Obtained += (float) ($row['terms'][$term2Index]['total'] ?? 0);
+            $term2Max += $term2MaxPerSubject;
+        }
+
+        if ($term2Max <= 0) {
+            return null;
+        }
+
+        return $this->roundPercentage(($term2Obtained / $term2Max) * 100);
     }
 
     private function buildPrintData(?int $classId, ?int $examId, ?int $studentId, Request $request): array
@@ -584,6 +653,23 @@ class MarksheetController extends Controller
         $grandTotal = 0.0;
         $maxTotal = 0.0;
         $hasFailingSubject = false;
+
+        $term2Index = null;
+        foreach ($layout['scholastic_terms'] as $tIdx => $tCfg) {
+            $tKey = strtolower((string) ($tCfg['key'] ?? ''));
+            $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
+            $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
+            if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                $term2Index = $tIdx;
+                break;
+            }
+        }
+        if ($term2Index === null && count($layout['scholastic_terms']) > 1) {
+            $term2Index = count($layout['scholastic_terms']) - 1;
+        }
+
+        $term2GrandTotal = 0.0;
+        $term2MaxTotal = 0.0;
 
         $disciplineSubjects = [];
 
@@ -737,6 +823,10 @@ class MarksheetController extends Controller
                     $hasFailingSubject = $hasFailingSubject || $termFailed;
                     $maxTotal += $termMax;
                     $grandTotal += $termTotal;
+                    if ($term2Index !== null && $termIndex === $term2Index) {
+                        $term2GrandTotal += $termTotal;
+                        $term2MaxTotal += $termMax;
+                    }
                 }
                 $row['terms'][$termIndex] = [
                     'cells' => $cells,
@@ -937,7 +1027,9 @@ class MarksheetController extends Controller
             $result = '';
             $remarks = '';
         } else {
-            $percentageRaw = $maxTotal > 0 ? ($grandTotal / $maxTotal) * 100 : null;
+            // Percentage calculated based exclusively on Term 2 marks
+            $term2PercentageRaw = $term2MaxTotal > 0 ? ($term2GrandTotal / $term2MaxTotal) * 100 : null;
+            $percentageRaw = $term2PercentageRaw ?? ($maxTotal > 0 ? ($grandTotal / $maxTotal) * 100 : null);
             $percentage = $percentageRaw !== null ? $this->roundPercentage($percentageRaw) : null;
             $result = $percentageRaw === null
                 ? ''
@@ -987,11 +1079,26 @@ class MarksheetController extends Controller
             ->select('acd.attendance_percentage', 'acd.present_days', 'acd.working_days')
             ->first();
 
-        if ($record) {
-            return number_format((float) $record->attendance_percentage, 2) . '%';
+        if (!$record) {
+            $record = DB::connection('dynamic')
+                ->table('academic_attendance_collective_details as acd')
+                ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
+                ->where('ac.is_delete', 0)
+                ->where('acd.student_id', $studentId)
+                ->where('ac.class_id', $classId)
+                ->when(!empty($sessionVariants), fn ($query) => $query->whereIn('ac.academic_session', $sessionVariants))
+                ->orderByDesc('ac.id')
+                ->select('acd.attendance_percentage', 'acd.present_days', 'acd.working_days')
+                ->first();
         }
 
-        if ($fallback !== '') {
+        if ($record && (float) $record->working_days > 0) {
+            $pres = ((int) $record->present_days == $record->present_days) ? (int) $record->present_days : (float) $record->present_days;
+            $work = (int) $record->working_days;
+            return "{$pres} / {$work}";
+        }
+
+        if ($fallback !== '' && !str_contains($fallback, '%')) {
             return $fallback;
         }
 
@@ -1016,12 +1123,17 @@ class MarksheetController extends Controller
 
             $totalDays = $dailyQuery->count();
             if ($totalDays > 0) {
-                $presentDays = (clone $dailyQuery)->whereIn(DB::raw('LOWER(aad.status)'), ['present', 'p', 'half_day', 'pl'])->count();
-                return number_format(($presentDays / $totalDays) * 100, 2) . '%';
+                $presentCount = (clone $dailyQuery)
+                    ->whereIn(DB::raw('LOWER(aad.status)'), ['present', 'p', 'half_day', 'pl'])
+                    ->selectRaw("SUM(CASE WHEN LOWER(aad.status) IN ('present', 'p', 'pl') THEN 1 WHEN LOWER(aad.status) = 'half_day' THEN 0.5 ELSE 0 END) as total")
+                    ->value('total');
+                $presentDays = $presentCount !== null ? (float) $presentCount : 0.0;
+                $formattedPresent = ((int) $presentDays == $presentDays) ? (int) $presentDays : number_format($presentDays, 1);
+                return "{$formattedPresent} / {$totalDays}";
             }
         }
 
-        return '';
+        return (!str_contains($fallback, '%')) ? $fallback : '';
     }
 
     private function sessionYearVariants(?string $sessionYear): array

@@ -99,19 +99,7 @@ class Term1MarksheetController extends Controller
         $sectionsByClass = $augmentedSections;
 
         // 3. Exams grouped so each exam appears ONLY ONCE
-        $rawExams = Exam::with('classInfo')
-            ->where(function ($q) {
-                $q->whereIn('exam_type', ['PT 1', 'PT-1', 'Term 1', 'Term-1', 'Half Yearly', 'Half-Yearly'])
-                    ->orWhere('exam_name', 'like', '%PT 1%')
-                    ->orWhere('exam_name', 'like', '%Term 1%')
-                    ->orWhere('exam_name', 'like', '%Half%');
-            })
-            ->latest('id')
-            ->get();
-
-        if ($rawExams->isEmpty()) {
-            $rawExams = Exam::with('classInfo')->latest('id')->get();
-        }
+        $rawExams = Exam::with('classInfo')->latest('id')->get();
 
         $groupedExams = $rawExams->groupBy(function ($exam) {
             return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
@@ -121,12 +109,13 @@ class Term1MarksheetController extends Controller
             $classesData = [];
             foreach ($group as $examItem) {
                 $cName = optional($examItem->classInfo)->class_name;
-                if ($cName) {
+                $cId = (int) $examItem->class_id;
+                if ($cName || $cId) {
                     $classesData[] = [
                         'exam_id' => (int) $examItem->id,
-                        'class_id' => (int) $examItem->class_id,
-                        'class_name' => (string) $cName,
-                        'display_name' => \App\Academic\AcademicHelper::toRoman((string) $cName),
+                        'class_id' => $cId,
+                        'class_name' => (string) ($cName ?: ('Class ' . $cId)),
+                        'display_name' => \App\Academic\AcademicHelper::toRoman((string) ($cName ?: ('Class ' . $cId))),
                     ];
                 }
             }
@@ -137,13 +126,19 @@ class Term1MarksheetController extends Controller
                 return strnatcasecmp($a['class_name'], $b['class_name']);
             });
 
+            $displayName = trim((string) $first->exam_name);
+            $examType = trim((string) $first->exam_type);
+            if ($examType !== '' && strcasecmp($displayName, $examType) !== 0 && !str_ends_with(strtolower($displayName), strtolower($examType))) {
+                $displayName .= ' - ' . $examType;
+            }
+
             return [
                 'id' => (int) $first->id,
                 'group_key' => (string) ($first->exam_group_id ?: $first->id),
                 'exam_name' => (string) $first->exam_name,
                 'exam_title' => (string) ($first->exam_title ?: $first->exam_name),
                 'exam_type' => (string) ($first->exam_type ?: ''),
-                'display_name' => (string) ($first->exam_name . ($first->exam_type ? ' - ' . $first->exam_type : '')),
+                'display_name' => $displayName,
                 'classes' => $uniqueClasses,
                 'all_exam_ids' => $group->pluck('id')->map(fn ($id) => (int) $id)->all(),
             ];
@@ -851,11 +846,14 @@ class Term1MarksheetController extends Controller
 
     private function termExamForTerm1($examMap, $selectedExam)
     {
-        if ($selectedExam && Str::contains($this->normalizeExamType($selectedExam->exam_type), ['term1', 'halfyearly'])) {
-            return $selectedExam;
+        if ($selectedExam) {
+            $canonical = $this->canonicalExamType($selectedExam->exam_type, $selectedExam->exam_name);
+            if (in_array($canonical, ['term1', 'halfyearly'], true) || Str::contains($this->normalizeExamType($selectedExam->exam_type), ['term1', 'termi', 'halfyearly'])) {
+                return $selectedExam;
+            }
         }
 
-        foreach (['term1', 'halfyearly'] as $type) {
+        foreach (['term1', 'termi', 'halfyearly'] as $type) {
             if ($examMap->has($type)) {
                 return $examMap->get($type);
             }
@@ -866,7 +864,7 @@ class Term1MarksheetController extends Controller
 
     private function ptExamForTerm1($examMap)
     {
-        foreach (['pt1', 'pt', 'periodictest1', 'periodictest', 'periodic1', 'pttest1'] as $key) {
+        foreach (['pt1', 'pti', 'pt', 'periodictest1', 'periodictesti', 'periodictest', 'periodic1', 'pttest1'] as $key) {
             if ($examMap->has($key)) {
                 return $examMap->get($key);
             }
@@ -875,7 +873,7 @@ class Term1MarksheetController extends Controller
         foreach ($examMap as $exam) {
             $normType = $this->normalizeExamType($exam->exam_type ?? '');
             $normName = $this->normalizeExamType($exam->exam_name ?? '');
-            if (Str::contains($normType, ['pt1', 'pt', 'periodictest']) || Str::contains($normName, ['pt1', 'pt 1', 'periodic test 1', 'periodic test'])) {
+            if (Str::contains($normType, ['pt1', 'pti', 'pt', 'periodictest']) || Str::contains($normName, ['pt1', 'pti', 'pt 1', 'pt i', 'periodic test 1', 'periodic test i', 'periodic test'])) {
                 return $exam;
             }
         }

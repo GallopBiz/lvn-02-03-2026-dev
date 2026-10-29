@@ -75,8 +75,10 @@ class ConsolidatedMarksheetController extends Controller
 
         $isTerm1 = $this->isTerm1Report($activeExam, $examMap, $marks);
         $showTerm2 = !$isTerm1;
+        $sessionYear = $this->resolveDynamicSessionYear($request);
+        $activeExamId = $activeExam?->id ? (int) $activeExam->id : null;
 
-        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $classResolvedExam, $showTerm2) {
+        $studentRows = $students->map(function ($student) use ($marks, $subjectsByStudent, $examMap, $class, $classResolvedExam, $showTerm2, $sessionYear, $activeExamId) {
             $subjects = $subjectsByStudent->get((int) $student->id, collect());
             $subjectRows = [];
             $term1Sum = 0.0;
@@ -138,19 +140,15 @@ class ConsolidatedMarksheetController extends Controller
                 $subjectFailed = ($showTerm2 && $hasTerm2Marks) ? ($t1Failed || $t2Failed) : $t1Failed;
                 $hasFailingSubject = $hasFailingSubject || $subjectFailed;
 
-                // Subject percentage, division and short result for display (Annual / active term)
-                $subPercentage = ($showTerm2 && $t2Total > 0) ? $t2Total : ($t1Total > 0 ? $t1Total : null);
-                $subDivision = $subPercentage !== null ? $this->divisionFor($subPercentage) : '';
-                $subResultShort = $subjectFailed ? 'F' : (($t1Total > 0 || ($showTerm2 && $t2Total > 0)) ? 'P' : '');
-
+                // Subject percentage, division and result are NOT displayed beside individual subjects
                 $subjectRows[] = [
                     'subject' => $subject->subject_name,
                     'term_1' => $term1,
                     'term_2' => $term2,
-                    'percentage' => $subPercentage,
-                    'division' => $subDivision,
-                    'result' => $subjectFailed ? 'Fail' : ($subPercentage !== null ? 'Pass' : ''),
-                    'result_short' => $subResultShort,
+                    'percentage' => null,
+                    'division' => '',
+                    'result' => '',
+                    'result_short' => '',
                 ];
             }
 
@@ -164,7 +162,7 @@ class ConsolidatedMarksheetController extends Controller
 
             return [
                 'student' => $student,
-                'attendance' => '',
+                'attendance' => $this->collectiveAttendanceForMarksheet((int) $student->id, (int) $class->id, $activeExamId, $sessionYear),
                 'subjects' => $subjectRows,
                 'grand_total' => $activeTotal,
                 'term_1_total' => $term1Sum,
@@ -192,6 +190,7 @@ class ConsolidatedMarksheetController extends Controller
             'marks_count' => $marks->count(),
             'is_term_1' => $isTerm1,
             'show_term_2' => $showTerm2,
+            'special_subject_names' => $this->specialSubjectNames(),
         ];
     }
 
@@ -312,8 +311,18 @@ class ConsolidatedMarksheetController extends Controller
 
     private function assignedSubjectsForStudents($students, $class, $marks)
     {
+        $specialIds = $this->specialSubjectIds();
+        $specialNames = $this->specialSubjectNames();
+
+        $isSpecial = function ($subjectId, $subjectName) use ($specialIds, $specialNames) {
+            return in_array((int) $subjectId, $specialIds, true)
+                || in_array(strtolower(trim((string) $subjectName)), $specialNames, true);
+        };
+
         $markedSubjectsByStudent = $marks
-            ->filter(fn ($mark) => strtolower(trim($mark->subject_type ?? '')) === 'academic' && !in_array(strtolower(trim($mark->subject_name ?? '')), ['test', 'te4st', 'dummy']))
+            ->filter(fn ($mark) => strtolower(trim($mark->subject_type ?? '')) === 'academic'
+                && !in_array(strtolower(trim($mark->subject_name ?? '')), ['test', 'te4st', 'dummy'])
+                && !$isSpecial($mark->subject_id, $mark->subject_name))
             ->groupBy(fn ($mark) => (int) $mark->student_id)
             ->map(fn ($items) => $items
                 ->map(fn ($mark) => (object) [
@@ -325,7 +334,9 @@ class ConsolidatedMarksheetController extends Controller
                 ->values());
 
         $classMarkedSubjectIds = $marks
-            ->filter(fn ($mark) => strtolower(trim($mark->subject_type ?? '')) === 'academic' && !in_array(strtolower(trim($mark->subject_name ?? '')), ['test', 'te4st', 'dummy']))
+            ->filter(fn ($mark) => strtolower(trim($mark->subject_type ?? '')) === 'academic'
+                && !in_array(strtolower(trim($mark->subject_name ?? '')), ['test', 'te4st', 'dummy'])
+                && !$isSpecial($mark->subject_id, $mark->subject_name))
             ->pluck('subject_id')
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -335,14 +346,17 @@ class ConsolidatedMarksheetController extends Controller
         $subjectsByCombination = $this->subjectsByCombination($assignments->pluck('assign_this_combtoall')->filter()->unique()->all());
 
         $classAcademicSubjects = $this->classSubjects($class)
-            ->filter(fn ($s) => strtolower(trim($s->subject_type ?? '')) === 'academic' && !in_array(strtolower(trim($s->subject_name ?? '')), ['test', 'te4st', 'dummy']));
+            ->filter(fn ($s) => strtolower(trim($s->subject_type ?? '')) === 'academic'
+                && !in_array(strtolower(trim($s->subject_name ?? '')), ['test', 'te4st', 'dummy'])
+                && !$isSpecial($s->id, $s->subject_name));
 
         return $students->mapWithKeys(function ($student) use (
             $assignments,
             $subjectsByCombination,
             $markedSubjectsByStudent,
             $classMarkedSubjectIds,
-            $classAcademicSubjects
+            $classAcademicSubjects,
+            $isSpecial
         ) {
             $studentId = (int) $student->id;
             $studentMarks = $markedSubjectsByStudent->get($studentId, collect());
@@ -353,7 +367,9 @@ class ConsolidatedMarksheetController extends Controller
 
             $assignedCombSubjects = $studentAssignments
                 ->flatMap(fn ($assignment) => $subjectsByCombination->get((int) $assignment->assign_this_combtoall, collect()))
-                ->filter(fn ($s) => strtolower(trim($s->subject_type ?? '')) === 'academic' && !in_array(strtolower(trim($s->subject_name ?? '')), ['test', 'te4st', 'dummy']))
+                ->filter(fn ($s) => strtolower(trim($s->subject_type ?? '')) === 'academic'
+                    && !in_array(strtolower(trim($s->subject_name ?? '')), ['test', 'te4st', 'dummy'])
+                    && !$isSpecial($s->id, $s->subject_name))
                 ->unique('id')
                 ->values();
 
@@ -381,7 +397,11 @@ class ConsolidatedMarksheetController extends Controller
                 $subjects = $classAcademicSubjects;
             }
 
-            $subjects = $subjects->unique('id')->sortBy('subject_name')->values();
+            $subjects = $subjects
+                ->reject(fn ($s) => $isSpecial($s->id, $s->subject_name))
+                ->unique('id')
+                ->sortBy('subject_name')
+                ->values();
 
             return [$studentId => $subjects];
         });
@@ -453,6 +473,18 @@ class ConsolidatedMarksheetController extends Controller
             ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'subject_name'), function ($query) {
                 $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
             })
+            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area'), function ($query) {
+                $query->where(function ($inner) {
+                    $inner->where('s.do_not_print_in_main_scholastic_area', 0)
+                        ->orWhereNull('s.do_not_print_in_main_scholastic_area');
+                });
+            })
+            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting'), function ($query) {
+                $query->where(function ($inner) {
+                    $inner->where('s.special_subject_formatting', 0)
+                        ->orWhereNull('s.special_subject_formatting');
+                });
+            })
             ->orderBy('cs.subject_order')
             ->orderBy('s.subject_name')
             ->select('cs.subject_combination_id', 's.id', 's.subject_name', 's.subject_type')
@@ -491,6 +523,18 @@ class ConsolidatedMarksheetController extends Controller
             })
             ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'subject_name'), function ($query) {
                 $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
+            })
+            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area'), function ($query) {
+                $query->where(function ($inner) {
+                    $inner->where('s.do_not_print_in_main_scholastic_area', 0)
+                        ->orWhereNull('s.do_not_print_in_main_scholastic_area');
+                });
+            })
+            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting'), function ($query) {
+                $query->where(function ($inner) {
+                    $inner->where('s.special_subject_formatting', 0)
+                        ->orWhereNull('s.special_subject_formatting');
+                });
             })
             ->orderBy('s.subject_name')
             ->select('s.id', 's.subject_name', 's.subject_type')
@@ -631,6 +675,20 @@ class ConsolidatedMarksheetController extends Controller
 
         if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'subject_name')) {
             $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
+        }
+
+        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')) {
+            $query->where(function ($inner) {
+                $inner->where('s.do_not_print_in_main_scholastic_area', 0)
+                    ->orWhereNull('s.do_not_print_in_main_scholastic_area');
+            });
+        }
+
+        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting')) {
+            $query->where(function ($inner) {
+                $inner->where('s.special_subject_formatting', 0)
+                    ->orWhereNull('s.special_subject_formatting');
+            });
         }
 
         return $query
@@ -1100,5 +1158,165 @@ class ConsolidatedMarksheetController extends Controller
         }
 
         return $exam;
+    }
+
+    private function specialSubjectIds(): array
+    {
+        if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return [];
+        }
+
+        $hasDoNotPrint = Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area');
+        $hasSpecialFormatting = Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting');
+
+        if (!$hasDoNotPrint && !$hasSpecialFormatting) {
+            return [];
+        }
+
+        return DB::connection('dynamic')
+            ->table('subjectmaster')
+            ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
+                if ($hasDoNotPrint) {
+                    $q->orWhere('do_not_print_in_main_scholastic_area', 1);
+                }
+                if ($hasSpecialFormatting) {
+                    $q->orWhere('special_subject_formatting', 1);
+                }
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    private function specialSubjectNames(): array
+    {
+        if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return [];
+        }
+
+        $hasDoNotPrint = Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area');
+        $hasSpecialFormatting = Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting');
+
+        if (!$hasDoNotPrint && !$hasSpecialFormatting) {
+            return [];
+        }
+
+        return DB::connection('dynamic')
+            ->table('subjectmaster')
+            ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
+                if ($hasDoNotPrint) {
+                    $q->orWhere('do_not_print_in_main_scholastic_area', 1);
+                }
+                if ($hasSpecialFormatting) {
+                    $q->orWhere('special_subject_formatting', 1);
+                }
+            })
+            ->pluck('subject_name')
+            ->map(fn ($n) => strtolower(trim((string) $n)))
+            ->filter()
+            ->all();
+    }
+
+    private function sessionYearVariants(?string $sessionYear): array
+    {
+        if (!$sessionYear) {
+            return [];
+        }
+
+        $normalizedDash = str_replace('_', '-', $sessionYear);
+        $normalizedUnderscore = str_replace('-', '_', $sessionYear);
+        $short = null;
+
+        if (preg_match('/^(\d{4})[-_](\d{4})$/', $sessionYear, $matches)) {
+            $short = $matches[1] . '-' . substr($matches[2], -2);
+        }
+
+        return collect([$sessionYear, $normalizedDash, $normalizedUnderscore, $short])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function collectiveAttendanceForMarksheet(?int $studentId, ?int $classId, ?int $examId, ?string $sessionYear, string $fallback = ''): string
+    {
+        if (!$studentId) {
+            return $fallback;
+        }
+
+        $sessionVariants = $this->sessionYearVariants($sessionYear);
+        $classIds = $classId ? $this->marksClassIdsFor($classId) : [];
+
+        if (Schema::connection('dynamic')->hasTable('academic_attendance_collectives') && Schema::connection('dynamic')->hasTable('academic_attendance_collective_details')) {
+            $record = DB::connection('dynamic')
+                ->table('academic_attendance_collective_details as acd')
+                ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
+                ->where('ac.is_delete', 0)
+                ->where('acd.student_id', $studentId)
+                ->when(!empty($classIds), fn ($q) => $q->whereIn('ac.class_id', $classIds))
+                ->when($examId, fn ($q) => $q->where('ac.exam_id', $examId))
+                ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('ac.academic_session', $sessionVariants))
+                ->orderByDesc('ac.id')
+                ->select('acd.present_days', 'acd.working_days', 'acd.attendance_percentage')
+                ->first();
+
+            if (!$record) {
+                $record = DB::connection('dynamic')
+                    ->table('academic_attendance_collective_details as acd')
+                    ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
+                    ->where('ac.is_delete', 0)
+                    ->where('acd.student_id', $studentId)
+                    ->when(!empty($classIds), fn ($q) => $q->whereIn('ac.class_id', $classIds))
+                    ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('ac.academic_session', $sessionVariants))
+                    ->orderByDesc('ac.id')
+                    ->select('acd.present_days', 'acd.working_days', 'acd.attendance_percentage')
+                    ->first();
+            }
+
+            if ($record && (float) $record->working_days > 0) {
+                $pres = ((int) $record->present_days == $record->present_days) ? (int) $record->present_days : (float) $record->present_days;
+                $work = (int) $record->working_days;
+                return "{$pres} / {$work}";
+            }
+        }
+
+        if ($fallback !== '' && !str_contains($fallback, '%')) {
+            return $fallback;
+        }
+
+        if (Schema::connection('dynamic')->hasTable('academic_attendance_details') && Schema::connection('dynamic')->hasTable('academic_attendance')) {
+            $dailyQuery = DB::connection('dynamic')
+                ->table('academic_attendance_details as aad')
+                ->join('academic_attendance as aa', 'aad.attendance_id', '=', 'aa.id')
+                ->where('aad.student_id', $studentId)
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('academic_attendance', 'is_delete')) {
+                        $q->where('aa.is_delete', 0)->orWhereNull('aa.is_delete');
+                    }
+                });
+
+            if (!empty($classIds)) {
+                $dailyQuery->whereIn('aa.class_id', array_map('strval', $classIds));
+            }
+            if (!empty($sessionVariants)) {
+                $dailyQuery->whereIn('aa.academic_session', $sessionVariants);
+            }
+
+            $totalDays = $dailyQuery->count();
+            if ($totalDays > 0) {
+                $statusCol = Schema::connection('dynamic')->hasColumn('academic_attendance_details', 'status') ? 'aad.status' : (Schema::connection('dynamic')->hasColumn('academic_attendance_details', 'attendance_status') ? 'aad.attendance_status' : null);
+                if ($statusCol) {
+                    $presentCount = (clone $dailyQuery)
+                        ->whereIn(DB::raw("LOWER($statusCol)"), ['present', 'p', 'half_day', 'pl'])
+                        ->selectRaw("SUM(CASE WHEN LOWER($statusCol) IN ('present', 'p', 'pl') THEN 1 WHEN LOWER($statusCol) = 'half_day' THEN 0.5 ELSE 0 END) as total")
+                        ->value('total');
+                    $presentDays = $presentCount !== null ? (float) $presentCount : 0.0;
+                    $formattedPresent = ((int) $presentDays == $presentDays) ? (int) $presentDays : number_format($presentDays, 1);
+                    return "{$formattedPresent} / {$totalDays}";
+                }
+            }
+        }
+
+        return $fallback;
     }
 }

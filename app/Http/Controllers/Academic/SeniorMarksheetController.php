@@ -321,11 +321,12 @@ class SeniorMarksheetController extends Controller
                     'exam_id' => $examId ?: 0,
                     'snapshot' => [
                         'marksheet_type' => 'senior_11_12',
+                        'pt_scale' => 50,
                         'template_name' => 'Class 11-12 Report Card',
                         'student_name' => $printData['student_meta']['student_name'],
                         'scholar_no' => $printData['student_meta']['scholar_no'],
                         'class_name' => optional($printData['class'])->class_name,
-                        'exam_name' => optional($printData['exam'])->exam_name ?: 'Term - II (Annual) Examination',
+                        'exam_name' => optional($printData['exam'])->exam_name ?: 'Annual Examination',
                         'print_date' => $printData['date'],
                         'print_data' => $snapshotPrintData,
                     ],
@@ -479,18 +480,41 @@ class SeniorMarksheetController extends Controller
         return redirect()->back()->with('success', 'Marksheet deleted successfully.');
     }
 
-    private function savedPrintSheet(Marksheet $marksheet, Request $request): array
+    public function savedPrintSheet(Marksheet $marksheet, Request $request): array
     {
         $snapshot = $marksheet->snapshot ?? [];
         $printData = $snapshot['print_data'] ?? [];
 
+        $studentId = (int) $marksheet->student_id;
+        $classId = (int) $marksheet->class_id;
+        $examId = $marksheet->exam_id ? (int) $marksheet->exam_id : null;
+
         if (empty($printData)) {
-            return $this->buildPrintData((int) $marksheet->class_id, (int) $marksheet->exam_id, (int) $marksheet->student_id, $request);
+            return $this->buildPrintData($classId, $examId, $studentId, $request);
+        }
+
+        // Check if live marks exist when snapshot had no marks or missing annual marks
+        if ($studentId && $classId) {
+            $livePrintData = $this->buildPrintData($classId, $examId, $studentId, $request);
+            if (!empty($livePrintData['has_marks']) && empty($printData['has_marks'])) {
+                $printData = $livePrintData;
+            } elseif (!empty($livePrintData['has_marks']) && !empty($printData['rows'])) {
+                $snapshotHasAnnual = false;
+                foreach ($printData['rows'] as $sr) {
+                    if ((isset($sr['annual_obtained']) && $sr['annual_obtained'] !== '') ||
+                        (isset($sr['annual_theory_obt']) && $sr['annual_theory_obt'] !== '') ||
+                        (isset($sr['annual_practical_obt']) && $sr['annual_practical_obt'] !== '')) {
+                        $snapshotHasAnnual = true;
+                        break;
+                    }
+                }
+                if (!$snapshotHasAnnual) {
+                    $printData = $livePrintData;
+                }
+            }
         }
 
         // Re-hydrate dynamic student and class instances if needed
-        $studentId = (int) $marksheet->student_id;
-        $classId = (int) $marksheet->class_id;
         $printData['student'] = $this->studentById($studentId);
         $printData['class'] = $classId ? Classes::find($classId) : null;
 
@@ -498,7 +522,117 @@ class SeniorMarksheetController extends Controller
             $printData['date'] = $this->formatSeniorDate($request->input('print_date'));
         }
 
+        if (!empty($printData['title'])) {
+            $printData['title'] = preg_replace('/term\s*[-_]?\s*(ii|i|1|2)\s*(\(([^)]+)\))?\s*/i', '$3 ', $printData['title']);
+            $printData['title'] = preg_replace('/\s+/', ' ', trim($printData['title']));
+        }
+
+        if ($request->filled('attendance')) {
+            $printData['attendance'] = $request->input('attendance');
+        } elseif (empty($printData['attendance']) || str_contains($printData['attendance'], '%')) {
+            $liveAtt = $this->collectiveAttendanceForMarksheet(
+                $studentId,
+                $classId,
+                $marksheet->exam_id ? (int) $marksheet->exam_id : null,
+                $this->resolveDynamicSessionYear($request),
+                $request->input('attendance', '')
+            );
+            if ($liveAtt !== '' && $liveAtt !== '/') {
+                $printData['attendance'] = $liveAtt;
+            }
+        }
+
+        // Ensure Term II percentage and total are calculated based exclusively on Term II marks and corresponding maximum marks
+        $term2Calc = $this->calculateSeniorTerm2Percentage($printData);
+        if ($term2Calc !== null) {
+            $printData['annual_percentage'] = number_format($term2Calc['percentage'], 2, '.', '') . ' %';
+            if (empty($printData['total_annual_obtained']) && $term2Calc['obtained'] > 0) {
+                $printData['total_annual_obtained'] = number_format($term2Calc['obtained'], 2, '.', '');
+            }
+        }
+
+        // Convert PT marks to scale of 50 if not already converted
+        if (!empty($printData['rows'])) {
+            $isAlreadyConverted = (!empty($snapshot['pt_scale']) && (int) $snapshot['pt_scale'] === 50)
+                || (!empty($printData['pt_scale']) && (int) $printData['pt_scale'] === 50);
+
+            if (!$isAlreadyConverted) {
+                foreach ($printData['rows'] as &$sr) {
+                    if (isset($sr['pt1']) && $sr['pt1'] !== '' && $sr['pt1'] !== 'AB' && is_numeric($sr['pt1'])) {
+                        $sr['pt1'] = $this->convertSeniorPtMark($sr['pt1']);
+                    }
+                    if (isset($sr['pt2']) && $sr['pt2'] !== '' && $sr['pt2'] !== 'AB' && is_numeric($sr['pt2'])) {
+                        $sr['pt2'] = $this->convertSeniorPtMark($sr['pt2']);
+                    }
+                    $p1 = is_numeric($sr['pt1'] ?? '') ? (float) $sr['pt1'] : 0.0;
+                    $hy = is_numeric($sr['hy_obtained'] ?? '') ? (float) $sr['hy_obtained'] : 0.0;
+                    if ((isset($sr['pt1']) && $sr['pt1'] !== '') || (isset($sr['hy_obtained']) && $sr['hy_obtained'] !== '')) {
+                        $sr['hy_grand_total'] = (float) ($p1 + $hy);
+                    }
+                    $p2 = is_numeric($sr['pt2'] ?? '') ? (float) $sr['pt2'] : 0.0;
+                    $an = is_numeric($sr['annual_obtained'] ?? '') ? (float) $sr['annual_obtained'] : 0.0;
+                    if ((isset($sr['pt2']) && $sr['pt2'] !== '') || (isset($sr['annual_obtained']) && $sr['annual_obtained'] !== '')) {
+                        $sr['annual_total'] = (float) ($p2 + $an);
+                    }
+                    if (isset($sr['hy_grand_total']) || isset($sr['annual_total'])) {
+                        $g1 = is_numeric($sr['hy_grand_total'] ?? '') ? (float) $sr['hy_grand_total'] : 0.0;
+                        $g2 = is_numeric($sr['annual_total'] ?? '') ? (float) $sr['annual_total'] : 0.0;
+                        $sr['combined_grand_total'] = (float) ($g1 + $g2);
+                    }
+                }
+                unset($sr);
+                $printData['pt_scale'] = 50;
+            }
+        }
+
         return $printData;
+    }
+
+    public function calculateSeniorTerm2Percentage(array $printData): ?array
+    {
+        $rows = $printData['rows'] ?? [];
+        if (empty($rows)) {
+            return null;
+        }
+
+        $term2Obtained = 0.0;
+        $term2Max = 0.0;
+        $hasTerm2Marks = false;
+
+        foreach ($rows as $row) {
+            $obtained = $row['annual_obtained'] ?? '';
+            if ($obtained === '' || !is_numeric($obtained)) {
+                $th = $row['annual_theory_obt'] ?? '';
+                $pr = $row['annual_practical_obt'] ?? '';
+                if ((is_numeric($th) && $th !== '') || (is_numeric($pr) && $pr !== '')) {
+                    $obtained = (float) (is_numeric($th) ? $th : 0) + (float) (is_numeric($pr) ? $pr : 0);
+                }
+            }
+
+            if ($obtained !== '' && is_numeric($obtained)) {
+                $term2Obtained += (float) $obtained;
+                $thMax = isset($row['annual_theory_mm']) && is_numeric($row['annual_theory_mm']) ? (float) $row['annual_theory_mm'] : null;
+                $prMax = isset($row['annual_practical_mm']) && is_numeric($row['annual_practical_mm']) ? (float) $row['annual_practical_mm'] : null;
+                $subjMax = (($thMax !== null ? $thMax : 0.0) + ($prMax !== null ? $prMax : 0.0));
+                if ($subjMax <= 0) {
+                    $subjMax = 100.0;
+                }
+                $term2Max += $subjMax;
+                $hasTerm2Marks = true;
+            }
+        }
+
+        if (!$hasTerm2Marks || $term2Max <= 0) {
+            return null;
+        }
+
+        $percentage = round(($term2Obtained / $term2Max) * 100, 2);
+
+        return [
+            'obtained' => $term2Obtained,
+            'max' => $term2Max,
+            'percentage' => $percentage,
+        ];
     }
 
     public function buildPrintData(?int $classId, ?int $examId, ?int $studentId, Request $request): array
@@ -523,7 +657,13 @@ class SeniorMarksheetController extends Controller
 
         $rows = [];
         $totalHYObtained = 0.0;
+        $totalHYMax = 0.0;
+        $hasHYMarks = false;
+
         $totalAnnualObtained = 0.0;
+        $totalAnnualMax = 0.0;
+        $hasAnnualMarks = false;
+
         $hasAnyMarks = false;
         $hasFailingSubject = false;
 
@@ -568,8 +708,9 @@ class SeniorMarksheetController extends Controller
             $pt2Mark = $pt2Exam ? $this->findMark($marks, $subjectId, $pt2Exam->id) : null;
             $annualMark = $annualExam ? $this->findMark($marks, $subjectId, $annualExam->id) : null;
 
-            // PT - 1 (out of 40)
-            $pt1Val = $this->extractObtainedMark($pt1Mark);
+            // PT - 1 (entered out of 40, converted to scale of 50)
+            $rawPt1 = $this->extractObtainedMark($pt1Mark);
+            $pt1Val = $this->convertSeniorPtMark($rawPt1);
             if ($pt1Val !== '') $hasAnyMarks = true;
 
             // Half Yearly Exam
@@ -591,8 +732,9 @@ class SeniorMarksheetController extends Controller
                 $hyGrandTotal = (float) ($p1 + $hy);
             }
 
-            // PT - II (out of 40)
-            $pt2Val = $this->extractObtainedMark($pt2Mark);
+            // PT - II (entered out of 40, converted to scale of 50)
+            $rawPt2 = $this->extractObtainedMark($pt2Mark);
+            $pt2Val = $this->convertSeniorPtMark($rawPt2);
             if ($pt2Val !== '') $hasAnyMarks = true;
 
             // Annual Exam
@@ -621,11 +763,24 @@ class SeniorMarksheetController extends Controller
                 $combinedGrandTotal = (float) ($g1 + $g2);
             }
 
-            if (is_numeric($hyMarksObtained)) {
-                $totalHYObtained += (float) $hyMarksObtained;
-            }
-            if (is_numeric($annualMarksObtained)) {
+            $athMm = is_numeric($annualTheoryMax) ? (float) $annualTheoryMax : 0.0;
+            $aprMm = is_numeric($annualPracticalMax) ? (float) $annualPracticalMax : 0.0;
+            $annualSubjMax = ($athMm + $aprMm) > 0 ? ($athMm + $aprMm) : 100.0;
+
+            if ($annualMarksObtained !== '' && is_numeric($annualMarksObtained)) {
                 $totalAnnualObtained += (float) $annualMarksObtained;
+                $totalAnnualMax += $annualSubjMax;
+                $hasAnnualMarks = true;
+            }
+
+            $hthMm = is_numeric($hyTheoryMax) ? (float) $hyTheoryMax : 0.0;
+            $hprMm = is_numeric($hyPracticalMax) ? (float) $hyPracticalMax : 0.0;
+            $hySubjMax = ($hthMm + $hprMm) > 0 ? ($hthMm + $hprMm) : 100.0;
+
+            if ($hyMarksObtained !== '' && is_numeric($hyMarksObtained)) {
+                $totalHYObtained += (float) $hyMarksObtained;
+                $totalHYMax += $hySubjMax;
+                $hasHYMarks = true;
             }
 
             $validSubjectCount++;
@@ -653,15 +808,15 @@ class SeniorMarksheetController extends Controller
             ];
         }
 
-        // Percentage calculations
+        // Percentage calculations: Term II percentage calculated based exclusively on Term II marks and corresponding maximum marks
         $hyPercentage = null;
-        if ($validSubjectCount > 0 && $totalHYObtained > 0) {
-            $hyPercentage = ($totalHYObtained / ($validSubjectCount * 100)) * 100;
+        if ($hasHYMarks && $totalHYMax > 0) {
+            $hyPercentage = round(($totalHYObtained / $totalHYMax) * 100, 2);
         }
 
         $annualPercentage = null;
-        if ($validSubjectCount > 0 && $totalAnnualObtained > 0) {
-            $annualPercentage = ($totalAnnualObtained / ($validSubjectCount * 100)) * 100;
+        if ($hasAnnualMarks && $totalAnnualMax > 0) {
+            $annualPercentage = round(($totalAnnualObtained / $totalAnnualMax) * 100, 2);
         }
 
         // Attendance & Teacher Remarks
@@ -680,6 +835,7 @@ class SeniorMarksheetController extends Controller
 
         return [
             'marksheet_type' => 'senior_11_12',
+            'pt_scale' => 50,
             'has_marks' => $hasAnyMarks,
             'student' => $student,
             'student_meta' => $this->studentMeta($student),
@@ -697,7 +853,7 @@ class SeniorMarksheetController extends Controller
             'date' => $this->formatSeniorDate($request->input('print_date', $request->input('date'))),
             'session_year' => $sessionYear,
             'display_session' => $displaySession,
-            'title' => 'Term - II (Annual) Examination Report Card',
+            'title' => 'Annual Examination Report Card',
         ];
     }
 
@@ -757,6 +913,30 @@ class SeniorMarksheetController extends Controller
         if (!empty($mark->is_absent_pr)) return 'AB';
         $val = $mark->mark_practical ?? null;
         return $this->formatNumeric($val);
+    }
+
+    public function convertSeniorPtMark($val): string
+    {
+        if ($val === null || $val === '' || $val === '-') {
+            return '';
+        }
+        if (is_string($val) && strtoupper(trim($val)) === 'AB') {
+            return 'AB';
+        }
+        if (!is_numeric($val)) {
+            return (string) $val;
+        }
+
+        $obtained = (float) $val;
+        if ($obtained <= 0) {
+            return '0';
+        }
+
+        // PT marks entered out of 40 converted to scale of 50
+        $converted = ($obtained / 40.0) * 50.0;
+        $rounded = round(min(50.0, max(0.0, $converted)), 0, PHP_ROUND_HALF_UP);
+
+        return (string) (int) $rounded;
     }
 
     private function formatNumeric($val): string
@@ -1205,17 +1385,34 @@ class SeniorMarksheetController extends Controller
             return $fallback;
         }
 
+        $sessionVariants = $this->sessionYearVariants($sessionYear);
+        $classIds = $this->marksClassIdsFor($classId);
+
         if (Schema::connection('dynamic')->hasTable('academic_attendance_collectives') && Schema::connection('dynamic')->hasTable('academic_attendance_collective_details')) {
             $record = DB::connection('dynamic')
                 ->table('academic_attendance_collective_details as acd')
                 ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
                 ->where('ac.is_delete', 0)
                 ->where('acd.student_id', $studentId)
-                ->when($classId, fn ($q) => $q->where('ac.class_id', $classId))
+                ->when(!empty($classIds), fn ($q) => $q->whereIn('ac.class_id', $classIds))
                 ->when($examId, fn ($q) => $q->where('ac.exam_id', $examId))
+                ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('ac.academic_session', $sessionVariants))
                 ->orderByDesc('ac.id')
                 ->select('acd.present_days', 'acd.working_days', 'acd.attendance_percentage')
                 ->first();
+
+            if (!$record) {
+                $record = DB::connection('dynamic')
+                    ->table('academic_attendance_collective_details as acd')
+                    ->join('academic_attendance_collectives as ac', 'acd.collective_id', '=', 'ac.id')
+                    ->where('ac.is_delete', 0)
+                    ->where('acd.student_id', $studentId)
+                    ->when(!empty($classIds), fn ($q) => $q->whereIn('ac.class_id', $classIds))
+                    ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('ac.academic_session', $sessionVariants))
+                    ->orderByDesc('ac.id')
+                    ->select('acd.present_days', 'acd.working_days', 'acd.attendance_percentage')
+                    ->first();
+            }
 
             if ($record && (float) $record->working_days > 0) {
                 $pres = ((int) $record->present_days == $record->present_days) ? (int) $record->present_days : (float) $record->present_days;
@@ -1224,7 +1421,62 @@ class SeniorMarksheetController extends Controller
             }
         }
 
-        return $fallback;
+        if ($fallback !== '' && !str_contains($fallback, '%')) {
+            return $fallback;
+        }
+
+        if (Schema::connection('dynamic')->hasTable('academic_attendance_details') && Schema::connection('dynamic')->hasTable('academic_attendance')) {
+            $dailyQuery = DB::connection('dynamic')
+                ->table('academic_attendance_details as aad')
+                ->join('academic_attendance as aa', 'aad.attendance_id', '=', 'aa.id')
+                ->where('aad.student_id', $studentId)
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('academic_attendance', 'is_delete')) {
+                        $q->where('aa.is_delete', 0)->orWhereNull('aa.is_delete');
+                    }
+                });
+
+            if (!empty($classIds)) {
+                $dailyQuery->whereIn('aa.class_id', array_map('strval', $classIds));
+            }
+            if (!empty($sessionVariants)) {
+                $dailyQuery->whereIn('aa.academic_session', $sessionVariants);
+            }
+
+            $totalDays = $dailyQuery->count();
+            if ($totalDays > 0) {
+                $presentCount = (clone $dailyQuery)
+                    ->whereIn(DB::raw('LOWER(aad.status)'), ['present', 'p', 'half_day', 'pl'])
+                    ->selectRaw("SUM(CASE WHEN LOWER(aad.status) IN ('present', 'p', 'pl') THEN 1 WHEN LOWER(aad.status) = 'half_day' THEN 0.5 ELSE 0 END) as total")
+                    ->value('total');
+                $presentDays = $presentCount !== null ? (float) $presentCount : 0.0;
+                $formattedPresent = ((int) $presentDays == $presentDays) ? (int) $presentDays : number_format($presentDays, 1);
+                return "{$formattedPresent} / {$totalDays}";
+            }
+        }
+
+        return (!str_contains($fallback, '%')) ? $fallback : '';
+    }
+
+    private function sessionYearVariants(?string $sessionYear): array
+    {
+        if (!$sessionYear) {
+            return [];
+        }
+
+        $normalizedDash = str_replace('_', '-', $sessionYear);
+        $normalizedUnderscore = str_replace('-', '_', $sessionYear);
+        $short = null;
+
+        if (preg_match('/^(\d{4})[-_](\d{4})$/', $sessionYear, $matches)) {
+            $short = $matches[1] . '-' . substr($matches[2], -2);
+        }
+
+        return collect([$sessionYear, $normalizedDash, $normalizedUnderscore, $short])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function teacherRemarkForStudent(?int $studentId, ?int $examId): ?string

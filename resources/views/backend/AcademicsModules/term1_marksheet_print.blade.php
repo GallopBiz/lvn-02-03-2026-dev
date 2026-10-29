@@ -106,14 +106,19 @@
     .t1-header-logo {
         flex: 0 0 auto;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: flex-end;
+        align-self: flex-start;
+        margin-top: -5mm;
     }
 
-    .t1-header-logo svg {
+    .t1-header-logo img,
+    .t1-cbse-logo {
         display: block;
-        width: 62px;
-        height: 62px;
+        width: 20mm;
+        height: auto;
+        max-height: 20mm;
+        object-fit: contain;
     }
 
     .t1-session-wrap {
@@ -411,10 +416,17 @@
 
         .t1-header-logo {
             display: flex !important;
+            align-self: flex-start !important;
+            margin-top: -5mm !important;
         }
 
-        .t1-header-logo svg {
+        .t1-header-logo img,
+        .t1-cbse-logo {
             display: block !important;
+            width: 20mm !important;
+            height: auto !important;
+            max-height: 20mm !important;
+            object-fit: contain !important;
         }
 
         .sheet-term-1:last-child {
@@ -500,37 +512,12 @@
                     <header class="t1-header">
                         <div class="t1-header-top">
                             <div class="t1-header-left">
-                                <div class="t1-header-title">TERM - I REPORT CARD</div>
+                                {{-- <div class="t1-header-title">TERM - I REPORT CARD</div> --}}
                             </div>
 
-                            <!-- Top Right School Seal in Header -->
+                            <!-- Top Right CBSE Logo in Header -->
                             <div class="t1-header-logo">
-                                <svg width="62" height="62" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="60" cy="60" r="57" stroke="#000" stroke-width="2.5" fill="#fff"/>
-                                    <circle cx="60" cy="60" r="51" stroke="#000" stroke-width="1.2" stroke-dasharray="2.5,2" fill="#fff"/>
-                                    <circle cx="60" cy="60" r="39" stroke="#000" stroke-width="1.5" fill="#fff"/>
-                                    
-                                    <path id="t1SealArcTop_{{ $loop->index }}" d="M 17,60 A 43,43 0 0,1 103,60" fill="none"/>
-                                    <text font-size="8.2" font-family="'Times New Roman', serif" font-weight="bold" letter-spacing="1.2">
-                                        <textPath href="#t1SealArcTop_{{ $loop->index }}" startOffset="50%" text-anchor="middle">
-                                            LOKMANYA VIDYA NIKETAN
-                                        </textPath>
-                                    </text>
-
-                                    <!-- Central Torch & Book Emblem -->
-                                    <g transform="translate(60, 57)">
-                                        <!-- Flame -->
-                                        <path d="M0,-16 Q4,-8 0,-4 Q-4,-8 0,-16 Z" fill="#000"/>
-                                        <!-- Torch cup -->
-                                        <path d="M-5,-4 L5,-4 L3,3 L-3,3 Z" fill="#000"/>
-                                        <!-- Torch handle -->
-                                        <rect x="-1.5" y="3" width="3" height="10" fill="#000"/>
-                                        <!-- Book base -->
-                                        <path d="M-11,12 Q0,9 11,12 L9,15 Q0,12 -9,15 Z" fill="#000"/>
-                                    </g>
-
-                                    <text x="60" y="105" font-size="8.5" font-family="'Times New Roman', serif" font-weight="bold" letter-spacing="1" text-anchor="middle">INDORE</text>
-                                </svg>
+                                <img src="{{ asset('images/cbse-logo.png') }}" alt="CBSE Logo" class="t1-cbse-logo">
                             </div>
                         </div>
 

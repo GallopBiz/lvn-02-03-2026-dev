@@ -4,7 +4,7 @@
 <style id="senior-marksheet-print-styles">
     @page {
         size: A4 landscape;
-        margin: 8mm;
+        margin: 8mm 8mm 4mm 8mm;
     }
 
     :root {
@@ -34,7 +34,7 @@
         min-height: 194mm;
         height: auto;
         margin: 0 auto;
-        padding: 16mm 4mm 6mm;
+        padding: 42mm 0 2mm;
         position: relative;
         overflow: visible;
         background: #fff;
@@ -58,7 +58,7 @@
     .top-right-logo {
         position: absolute;
         top: 2mm;
-        right: 4mm;
+        right: 0;
         width: 24mm;
         text-align: right;
         line-height: 0;
@@ -76,33 +76,33 @@
     .print-date {
         text-align: right;
         font-size: 13px;
-        margin-top: 20mm;
-        margin-bottom: 2mm;
+        margin-top: 0;
+        margin-bottom: 1.5mm;
         font-weight: 500;
     }
 
     .header-title {
         text-align: center;
-        margin-bottom: 3mm;
+        margin-bottom: 1.5mm;
     }
 
     .header-title .session-text {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: bold;
         letter-spacing: 0.5px;
     }
 
     .header-title .report-card-text {
-        font-size: 18px;
+        font-size: 17px;
         font-weight: bold;
-        margin-top: 1mm;
+        margin-top: 0.5mm;
     }
 
     .student-info-box {
         width: 100%;
-        margin-bottom: 2.5mm;
-        font-size: 13.5px;
-        line-height: 1.35;
+        margin-bottom: 2mm;
+        font-size: 13px;
+        line-height: 1.25;
     }
 
     .student-info-table {
@@ -137,7 +137,7 @@
     .senior-marks-table th,
     .senior-marks-table td {
         border: 1px solid #333;
-        padding: 3px 2px;
+        padding: 2.5px 2px;
         text-align: center;
         vertical-align: middle;
         overflow-wrap: anywhere;
@@ -194,12 +194,12 @@
     }
 
     .footer-signatures {
-        margin-top: 14mm;
+        margin-top: 7mm;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
         width: 100%;
-        font-size: 13.5px;
+        font-size: 13px;
         font-weight: bold;
         padding: 0 4mm;
     }
@@ -215,7 +215,7 @@
     @media print {
         @page {
             size: A4 landscape;
-            margin: 8mm;
+            margin: 8mm 8mm 4mm 8mm;
         }
 
         body {
@@ -223,34 +223,45 @@
             padding: 0 !important;
             background: #fff !important;
             color: #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
         }
 
-        .main-content,
-        .main-content * {
-            visibility: visible;
-        }
-
-        .header-top,
+        .main-header,
+        .header-menu,
         .sidebar-left,
         .sidebar-left-secondary,
+        .side-content-wrap,
+        .app-footer,
         .breadcrumb,
         .separator-breadcrumb,
-        .print-actions,
-        .marksheet-preview {
+        .print-actions {
             display: none !important;
+            visibility: hidden !important;
             padding: 0 !important;
             margin: 0 !important;
             background: none !important;
         }
 
-        .marksheet-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+        .main-content,
+        .main-content-wrap,
+        .marksheet-preview {
+            display: block !important;
             margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            overflow: visible !important;
+            visibility: visible !important;
+            width: 100% !important;
+        }
+
+        .marksheet-print-area {
+            display: block !important;
+            margin: 0 auto !important;
             padding: 0 !important;
             width: 100% !important;
             background: #fff !important;
+            visibility: visible !important;
         }
 
         .sheet {
@@ -261,7 +272,20 @@
             overflow: visible !important;
             box-shadow: none !important;
             page-break-inside: avoid !important;
-            padding-top: 10mm !important;
+            break-inside: avoid !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            padding: 42mm 0 2mm !important;
+            visibility: visible !important;
+        }
+
+        .sheet:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+        }
+
+        .sheet * {
+            visibility: visible !important;
         }
     }
 </style>
@@ -307,23 +331,41 @@
                     <img src="{{ asset('images/cbse-logo.png') }}" alt="CBSE Emblem">
                 </div>
 
+                @php
+                    $rawTitle = $data['title'] ?? 'Annual Examination Report Card';
+                    $cleanedTitle = preg_replace('/term\s*[-_]?\s*(ii|i|1|2)\s*(\(([^)]+)\))?\s*/i', '$3 ', $rawTitle);
+                    $cleanedTitle = preg_replace('/\s+/', ' ', trim($cleanedTitle));
+                    if (empty($cleanedTitle)) {
+                        $cleanedTitle = 'Annual Examination Report Card';
+                    }
+                @endphp
                 {{-- Header Title --}}
                 <div class="header-title">
                     <div class="session-text">Academic Session : {{ $data['display_session'] ?? '2025-2026' }}</div>
-                    <div class="report-card-text">{{ $data['title'] ?? 'Term - II (Annual) Examination Report Card' }}</div>
+                    <div class="report-card-text">{{ $cleanedTitle }}</div>
                 </div>
 
                 {{-- Date Top Right --}}
                 <div class="print-date">Date : {{ $data['date'] ?? date('d-M-Y') }}</div>
 
-                {{-- Student Information Box (Exact 2-Column layout matching reference image) --}}
+                {{-- Student Information Box (Matches marksheet layout) --}}
+                @php
+                $attendanceDisplay = $data['attendance'] ?? '';
+                if (str_contains($attendanceDisplay, '%')) {
+                    $attendanceDisplay = '';
+                }
+                @endphp
                 <div class="student-info-box">
                     <table class="student-info-table">
                         <tr>
                             <td style="width: 50%;">
                                 <table style="width: 100%;">
                                     <tr>
-                                        <td class="label-col" style="width: 32mm;">Student's Name</td>
+                                        <td class="label-col" style="width: 32mm;">Scholar No.</td>
+                                        <td class="val-col">: {{ $meta['scholar_no'] ?? '' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label-col">Student's Name</td>
                                         <td class="val-col">: {{ $meta['student_name'] ?? '' }}</td>
                                     </tr>
                                     <tr>
@@ -339,16 +381,16 @@
                             <td style="width: 50%;">
                                 <table style="width: 100%;">
                                     <tr>
-                                        <td class="label-col" style="width: 32mm;">Scholar No.</td>
-                                        <td class="val-col">: {{ $meta['scholar_no'] ?? '' }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="label-col">Roll No.</td>
+                                        <td class="label-col" style="width: 32mm;">Roll No.</td>
                                         <td class="val-col">: {{ $data['roll_no'] ?? '' }}</td>
                                     </tr>
                                     <tr>
                                         <td class="label-col">Class-Section</td>
                                         <td class="val-col">: {{ \App\Academic\AcademicHelper::formatClassSection($data['class_section'] ?? '') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label-col">Attendance</td>
+                                        <td class="val-col">: {{ $attendanceDisplay }}</td>
                                     </tr>
                                     <tr>
                                         <td class="label-col">Date of Birth</td>
@@ -363,7 +405,8 @@
                 {{-- Exact 16-Column Senior Marksheet Table --}}
                 <table class="senior-marks-table">
                     <thead>
-                        {{-- Super Header Row --}}
+                        {{-- Super Header Row (Term - I / Term - II) removed --}}
+                        {{--
                         <tr>
                             <th rowspan="4" class="col-sub-name" style="vertical-align: top; padding: 4px 6px;">
                                 <div style="font-size: 12px; font-weight: bold; text-align: left;">Scholastic Area</div>
@@ -372,18 +415,23 @@
                             <th colspan="7" style="font-size: 13px;">Term - I</th>
                             <th colspan="8" style="font-size: 13px;">Term-II</th>
                         </tr>
+                        --}}
                         {{-- Sub Header Row --}}
                         <tr>
-                            <th rowspan="2" class="col-pt">PT - 1<br>(40)</th>
+                            <th rowspan="3" class="col-sub-name" style="vertical-align: top; padding: 4px 6px;">
+                                <div style="font-size: 12px; font-weight: bold; text-align: left;">Scholastic Area</div>
+                                <div style="font-size: 12px; font-weight: bold; text-align: center; margin-top: 10px;">Subject's Name</div>
+                            </th>
+                            <th rowspan="3" class="col-pt">PT - 1<br>(5)</th>
                             <th colspan="4">Half Yearly Exam</th>
-                            <th rowspan="2" class="col-obt-100">Marks<br>Obtained<br>HY (100)</th>
-                            <th rowspan="2" class="col-total-140">Grand<br>Total<br>(140)</th>
+                            <th rowspan="3" class="col-obt-100">Marks<br>Obtained<br>HY (100)</th>
+                            <th rowspan="3" class="col-total-140">Grand<br>Total<br>(140)</th>
 
-                            <th rowspan="2" class="col-pt">PT - II<br>(40)</th>
+                            <th rowspan="3" class="col-pt">PT - II<br>(5)</th>
                             <th colspan="4">Annual Exam</th>
-                            <th rowspan="2" class="col-obt-100">Marks<br>Obtained<br>(100)</th>
-                            <th rowspan="2" class="col-total-140">Total<br>(140)</th>
-                            <th rowspan="2" class="col-grand-280">Grand<br>Total<br>(280)</th>
+                            <th rowspan="3" class="col-obt-100">Marks<br>Obtained<br>(100)</th>
+                            <th rowspan="3" class="col-total-140">Total<br>(140)</th>
+                            <th rowspan="3" class="col-grand-280">Grand<br>Total<br>(280)</th>
                         </tr>
                         {{-- Theory & Practical Group Row --}}
                         <tr>
@@ -392,7 +440,7 @@
                             <th colspan="2">Theory</th>
                             <th colspan="2">Practical</th>
                         </tr>
-                        {{-- M.M. and M.OBT. Row --}}
+                        {{-- M.OBT. and M.M. Row --}}
                         <tr>
                             <th>M.M.</th>
                             <th>M.OBT.</th>
@@ -408,20 +456,20 @@
                         @forelse($rows as $row)
                         <tr>
                             <td class="subject-name">{{ $row['subject_name'] ?? '' }}</td>
-                            {{-- Term I --}}
+                            {{-- Term I (Half Yearly) --}}
                             <td>{{ $row['pt1'] !== '' ? $row['pt1'] : '' }}</td>
-                            <td>{{ $row['hy_theory_mm'] ?? '' }}</td>
                             <td>{{ $row['hy_theory_obt'] !== '' ? $row['hy_theory_obt'] : '' }}</td>
-                            <td>{{ $row['hy_practical_mm'] ?? '' }}</td>
+                            <td>{{ $row['hy_theory_mm'] ?? '' }}</td>
                             <td>{{ $row['hy_practical_obt'] !== '' ? $row['hy_practical_obt'] : '' }}</td>
+                            <td>{{ $row['hy_practical_mm'] ?? '' }}</td>
                             <td style="font-weight: 500;">{{ $row['hy_obtained'] !== '' ? $row['hy_obtained'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['hy_grand_total'] !== '' ? $row['hy_grand_total'] : '' }}</td>
-                            {{-- Term II --}}
+                            {{-- Term II (Annual) --}}
                             <td>{{ $row['pt2'] !== '' ? $row['pt2'] : '' }}</td>
-                            <td>{{ $row['annual_theory_mm'] ?? '' }}</td>
                             <td>{{ $row['annual_theory_obt'] !== '' ? $row['annual_theory_obt'] : '' }}</td>
-                            <td>{{ $row['annual_practical_mm'] ?? '' }}</td>
+                            <td>{{ $row['annual_theory_mm'] ?? '' }}</td>
                             <td>{{ $row['annual_practical_obt'] !== '' ? $row['annual_practical_obt'] : '' }}</td>
+                            <td>{{ $row['annual_practical_mm'] ?? '' }}</td>
                             <td style="font-weight: 500;">{{ $row['annual_obtained'] !== '' ? $row['annual_obtained'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['annual_total'] !== '' ? $row['annual_total'] : '' }}</td>
                             <td style="font-weight: bold;">{{ $row['combined_grand_total'] !== '' ? $row['combined_grand_total'] : '' }}</td>
@@ -431,6 +479,45 @@
                             <td colspan="16" class="text-center py-3">No subjects found for this student.</td>
                         </tr>
                         @endforelse
+
+                        @php
+                            $totalAnnualDisplay = $data['total_annual_obtained'] ?? '';
+                            $annualPercentageDisplay = $data['annual_percentage'] ?? '';
+                            if ((empty($totalAnnualDisplay) || empty($annualPercentageDisplay)) && !empty($rows)) {
+                                $t2Obtained = 0.0;
+                                $t2Max = 0.0;
+                                $hasT2Marks = false;
+                                foreach ($rows as $r) {
+                                    $obt = $r['annual_obtained'] ?? '';
+                                    if ($obt === '' || !is_numeric($obt)) {
+                                        $th = $r['annual_theory_obt'] ?? '';
+                                        $pr = $r['annual_practical_obt'] ?? '';
+                                        if ((is_numeric($th) && $th !== '') || (is_numeric($pr) && $pr !== '')) {
+                                            $obt = (float) (is_numeric($th) ? $th : 0) + (float) (is_numeric($pr) ? $pr : 0);
+                                        }
+                                    }
+                                    if ($obt !== '' && is_numeric($obt)) {
+                                        $t2Obtained += (float) $obt;
+                                        $thM = isset($r['annual_theory_mm']) && is_numeric($r['annual_theory_mm']) ? (float) $r['annual_theory_mm'] : null;
+                                        $prM = isset($r['annual_practical_mm']) && is_numeric($r['annual_practical_mm']) ? (float) $r['annual_practical_mm'] : null;
+                                        $sM = (($thM !== null ? $thM : 0.0) + ($prM !== null ? $prM : 0.0));
+                                        if ($sM <= 0) {
+                                            $sM = 100.0;
+                                        }
+                                        $t2Max += $sM;
+                                        $hasT2Marks = true;
+                                    }
+                                }
+                                if ($hasT2Marks) {
+                                    if (empty($totalAnnualDisplay) && $t2Obtained > 0) {
+                                        $totalAnnualDisplay = number_format($t2Obtained, 2, '.', '');
+                                    }
+                                    if (empty($annualPercentageDisplay) && $t2Max > 0) {
+                                        $annualPercentageDisplay = number_format(($t2Obtained / $t2Max) * 100, 2, '.', '') . ' %';
+                                    }
+                                }
+                            }
+                        @endphp
 
                         {{-- Total Row --}}
                         <tr class="total-row">
@@ -447,7 +534,7 @@
                             <td></td>
                             <td></td>
                             <td></td>
-                            <td style="text-align: center;">{{ $data['total_annual_obtained'] ?? '' }}</td>
+                            <td style="text-align: center;">{{ $totalAnnualDisplay }}</td>
                             <td></td>
                             <td></td>
                         </tr>
@@ -466,7 +553,7 @@
                             <td></td>
                             <td></td>
                             <td colspan="2" style="text-align: center;">Percentage</td>
-                            <td style="text-align: center;">{{ $data['annual_percentage'] ?? '' }}</td>
+                            <td style="text-align: center;">{{ $annualPercentageDisplay }}</td>
                             <td></td>
                             <td></td>
                         </tr>
@@ -477,7 +564,7 @@
                                 <strong>Class Teacher Remark : </strong> &nbsp; {{ $data['remarks'] ?? 'Passed and promoted to next class.' }}
                             </td>
                             <td colspan="5" style="text-align: right; padding: 5px 8px; white-space: nowrap;">
-                                <strong>Attendance : </strong> &nbsp; {{ $data['attendance'] ?? '' }}
+                                <strong>Attendance : </strong> &nbsp; {{ $attendanceDisplay }}
                             </td>
                         </tr>
                     </tbody>

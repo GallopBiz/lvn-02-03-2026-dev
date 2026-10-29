@@ -180,9 +180,10 @@
                                 $serialNo = $studentIndex + 1;
                                 $subjectRows = collect($studentRow['subjects']);
                                 $existingSubjects = $subjectRows->pluck('subject')->map(fn ($subject) => strtolower(preg_replace('/\s+/', ' ', trim((string) $subject))))->all();
+                                $specialNames = $report['special_subject_names'] ?? [];
                                 $classOneSubjects = $isClassOne
                                     ? collect(['Computer', 'Sanskrit'])
-                                        ->reject(fn ($subject) => $hasSubject($existingSubjects, $subject))
+                                        ->reject(fn ($subject) => in_array(strtolower(trim((string) $subject)), $specialNames, true) || $hasSubject($existingSubjects, $subject))
                                         ->map(fn ($subject) => [
                                             'subject' => $subject,
                                             'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
@@ -194,7 +195,10 @@
                                         ])
                                         ->values()
                                     : collect();
-                                $displaySubjects = $subjectRows->merge($classOneSubjects)->values();
+                                $displaySubjects = $subjectRows
+                                    ->reject(fn ($s) => in_array(strtolower(trim((string) ($s['subject'] ?? ''))), $specialNames, true))
+                                    ->merge($classOneSubjects)
+                                    ->values();
                                 $rowspanCount = $displaySubjects->count() + ($subjectRows->count() > 0 ? 1 : 0);
                             ?>
                             <tbody class="student-group">
@@ -205,7 +209,7 @@
                                             <td rowspan="{{ $rowspanCount }}" class="align-middle text-left font-weight-bold text-dark">{{ $studentRow['student']->student_name }}</td>
                                             <td rowspan="{{ $rowspanCount }}" class="align-middle">
                                                 <div class="font-weight-500">{{ $studentRow['student']->scholar_no }}</div>
-                                                <div class="text-muted small">{{ $studentRow['attendance'] ?: '/' }}</div>
+                                                <div class="text-muted small">{{ $studentRow['attendance'] ?: '-' }}</div>
                                             </td>
                                         @endif
                                         <td class="text-left font-weight-500 text-dark">{{ $subject['subject'] }}</td>
@@ -225,18 +229,9 @@
                                             <td class="font-weight-bold text-dark">{{ is_numeric($subject['term_2']['total']) ? $formatMark($subject['term_2']['total']) : '-' }}</td>
                                             <td class="font-weight-bold">{{ $subject['term_2']['grade'] ?: '-' }}</td>
                                         @endif
-                                        <td>{{ isset($subject['percentage']) && $subject['percentage'] !== null && $subject['percentage'] !== '' ? $formatPercentage($subject['percentage']) : '-' }}</td>
-                                        <td>{{ $subject['division'] ?? '-' }}</td>
-                                        <td>
-                                            <?php $res = $subject['result_short'] ?? ($subject['result'] === 'Pass' ? 'P' : ($subject['result'] === 'Fail' ? 'F' : '-')); ?>
-                                            @if($res === 'P')
-                                                <span class="badge badge-success px-2">P</span>
-                                            @elseif($res === 'F')
-                                                <span class="badge badge-danger px-2">F</span>
-                                            @else
-                                                -
-                                            @endif
-                                        </td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
                                     </tr>
                                 @empty
                                     <tr>
@@ -244,7 +239,7 @@
                                         <td class="text-left font-weight-bold">{{ $studentRow['student']->student_name }}</td>
                                         <td>
                                             <div>{{ $studentRow['student']->scholar_no }}</div>
-                                            <div class="text-muted small">{{ $studentRow['attendance'] ?: '/' }}</div>
+                                            <div class="text-muted small">{{ $studentRow['attendance'] ?: '-' }}</div>
                                         </td>
                                         <td colspan="{{ !empty($report['show_term_2']) ? 15 : 8 }}" class="text-muted">No assigned subjects found</td>
                                         <td>{{ $studentRow['percentage'] !== null ? $formatPercentage($studentRow['percentage']) : '-' }}</td>
