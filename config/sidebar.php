@@ -40,6 +40,7 @@ return [
                 'icon' => 'i-Certificate',
                 'children' => [
                     [ 'title' => 'Bonafide Certificate', 'route' => 'bonafide-certificate', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Character Certificate', 'route' => 'character-certificate', 'roles' => ['Admin', 'Staff', 'Academic Staff (Teacher)'] ],
                 ],
             ],
             [
@@ -222,6 +223,7 @@ return [
                     [ 'title' => 'Class 11-12 Marksheet', 'route' => 'academic/senior-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Consolidated Marksheet', 'route' => 'academic/consolidated-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Class 11-12 Consolidated Marksheet', 'route' => 'academic/senior-consolidated-marksheets', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Result Analysis', 'route' => 'academic/result-analysis', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Overall Grade', 'route' => 'gradingmaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Individual Subject Grades', 'route' => 'grade', 'roles' => ['Admin'] ],
                     [ 'title' => 'Remark Master', 'route' => 'remarkmaster', 'roles' => ['Admin'] ],

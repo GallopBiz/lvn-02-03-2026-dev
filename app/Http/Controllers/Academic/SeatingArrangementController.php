@@ -309,6 +309,12 @@ class SeatingArrangementController extends Controller
 
         $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
 
+        if ($students->contains(fn ($s) => !empty($s->roll_no))) {
+            $students = $students->sortBy(function ($s) {
+                return !empty($s->roll_no) ? $s->roll_no : 'ZZZZZZ';
+            })->values();
+        }
+
         return view('backend.AcademicsModules.admit_card_print', compact('students', 'className', 'sectionName', 'sessionName', 'exam'));
     }
 
@@ -383,6 +389,12 @@ class SeatingArrangementController extends Controller
         $students = $this->getClassSectionStudents($className, $sectionName, $sessionName, $studentIds);
 
         $this->applyRollAndRoomNumbers($students, $className, $sectionName, $sessionName, (int) $examId);
+
+        if ($students->contains(fn ($s) => !empty($s->roll_no))) {
+            $students = $students->sortBy(function ($s) {
+                return !empty($s->roll_no) ? $s->roll_no : 'ZZZZZZ';
+            })->values();
+        }
 
         return view('backend.AcademicsModules.admit_card_print', compact('students', 'className', 'sectionName', 'sessionName', 'exam'));
     }
@@ -473,6 +485,10 @@ class SeatingArrangementController extends Controller
 
     private function assignRollNumbers(Collection $students, string $className, string $sectionName, string $sessionName, int $examId): void
     {
+        if ($this->isSeniorClass($className)) {
+            $students = $this->orderSeniorStudentsByCombination($students, $className, $sectionName);
+        }
+
         $classCode = $this->resolveClassCode($className);
         $sectionCode = $this->resolveSectionDigit($sectionName);
         $serial = 1;
@@ -612,6 +628,215 @@ class SeatingArrangementController extends Controller
             $query->whereIn('sr.id', $studentIds);
         }
 
-        return $query->get();
+        $students = $query->get();
+
+        if ($this->isSeniorClass($className)) {
+            return $this->orderSeniorStudentsByCombination($students, $className, $sectionName);
+        }
+
+        return $students;
+    }
+
+    private function isSeniorClass(?string $className): bool
+    {
+        if (empty($className)) {
+            return false;
+        }
+
+        if (preg_match('/(out|test)/i', $className)) {
+            return false;
+        }
+
+        $seniorNames = ['11', '12', 'CLASS 11', 'CLASS 12', 'XI', 'XII', 'CLASS XI', 'CLASS XII', '011', '012'];
+        $upper = strtoupper(trim($className));
+        if (in_array($upper, $seniorNames, true)) {
+            return true;
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $className);
+        return $digits === '11' || $digits === '12';
+    }
+
+    private function orderSeniorStudentsByCombination(Collection $students, string $className, string $sectionName): Collection
+    {
+        if ($students->isEmpty()) {
+            return $students;
+        }
+
+        $combMap = $this->getStudentCombinationMap();
+
+        foreach ($students as $student) {
+            $combInfo = $combMap[$student->id] ?? null;
+            $combName = $combInfo['combination_name'] ?? null;
+            $combId = $combInfo['combination_id'] ?? null;
+            $streamName = $combInfo['stream_name'] ?? null;
+
+            if (empty($combName) && !empty($student->subject_combination)) {
+                $combName = $student->subject_combination;
+            }
+
+            if (empty($combName) && !empty($student->json_str)) {
+                $json = is_array($student->json_str) ? $student->json_str : json_decode((string) $student->json_str, true);
+                if (is_array($json)) {
+                    if (!empty($json['subject_combination'])) {
+                        $combName = $json['subject_combination'];
+                    } elseif (!empty($json['combination'])) {
+                        $combName = $json['combination'];
+                    }
+                }
+            }
+
+            $student->combination_id = $combId;
+            $student->combination_name = !empty($combName) ? trim((string) $combName) : '';
+            $student->stream_name = !empty($streamName) ? trim((string) $streamName) : '';
+        }
+
+        return $students->sort(function ($a, $b) {
+            // 1. Group by category: PCM first, PCB second, other combinations third, unassigned last
+            $pA = $this->getCombinationCategoryPriority($a->combination_name);
+            $pB = $this->getCombinationCategoryPriority($b->combination_name);
+            if ($pA !== $pB) {
+                return $pA <=> $pB;
+            }
+
+            // 2. Alphabetical order based on subject combination
+            $normA = $this->normalizeCombinationForSort($a->combination_name);
+            $normB = $this->normalizeCombinationForSort($b->combination_name);
+            $normCmp = strnatcasecmp($normA, $normB);
+            if ($normCmp !== 0) {
+                return $normCmp;
+            }
+
+            // Raw combination name comparison to ensure identical combinations group strictly together
+            $rawCmp = strnatcasecmp(trim((string) $a->combination_name), trim((string) $b->combination_name));
+            if ($rawCmp !== 0) {
+                return $rawCmp;
+            }
+
+            // 3. Within each combination group, sort students alphabetically by name
+            $nameA = trim((string) ($a->student_name ?? ''));
+            $nameB = trim((string) ($b->student_name ?? ''));
+            $nameCmp = strnatcasecmp($nameA, $nameB);
+            if ($nameCmp !== 0) {
+                return $nameCmp;
+            }
+
+            // Tie-breaker on scholar_no or ID
+            $schA = trim((string) ($a->scholar_no ?? ''));
+            $schB = trim((string) ($b->scholar_no ?? ''));
+            if ($schA !== '' && $schB !== '' && $schA !== $schB) {
+                return strnatcasecmp($schA, $schB);
+            }
+
+            return ((int) ($a->id ?? 0)) <=> ((int) ($b->id ?? 0));
+        })->values();
+    }
+
+    private function getStudentCombinationMap(): array
+    {
+        if (!Schema::connection('dynamic')->hasTable('subject_assign_student')) {
+            return [];
+        }
+
+        $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+
+        $query = DB::connection('dynamic')
+            ->table('subject_assign_student as sas')
+            ->leftJoin('subject_combinations as sc', 'sc.id', '=', 'sas.assign_this_combtoall')
+            ->leftJoin('streams as str', 'str.id', '=', 'sc.streams')
+            ->select(
+                'sas.id',
+                'sas.students_details',
+                'sas.class_name',
+                'sas.section_name',
+                'sc.id as combination_id',
+                'sc.combination_name',
+                'str.id as stream_id',
+                'str.streams as stream_name'
+            );
+
+        if ($hasIsDelete) {
+            $query->addSelect('sas.is_delete');
+        }
+
+        $assignments = $query->orderBy('sas.id', 'asc')->get();
+
+        $activeMap = [];
+        $fallbackMap = [];
+        foreach ($assignments as $a) {
+            $raw = $a->students_details;
+            $ids = [];
+            if (is_numeric($raw)) {
+                $ids[] = (int) $raw;
+            } elseif (is_string($raw) && str_starts_with(trim($raw), '[')) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $d) {
+                        if (is_numeric($d)) $ids[] = (int) $d;
+                    }
+                }
+            } elseif (is_string($raw) && str_contains($raw, ',')) {
+                foreach (explode(',', $raw) as $d) {
+                    if (is_numeric(trim($d))) $ids[] = (int) trim($d);
+                }
+            } elseif (!empty($raw) && is_numeric(trim($raw))) {
+                $ids[] = (int) trim($raw);
+            }
+
+            $combInfo = [
+                'combination_id' => $a->combination_id,
+                'combination_name' => $a->combination_name,
+                'stream_id' => $a->stream_id,
+                'stream_name' => $a->stream_name,
+            ];
+
+            $isDeleted = $hasIsDelete && !empty($a->is_delete) && (int) $a->is_delete === 1;
+
+            foreach ($ids as $sId) {
+                if (!$isDeleted) {
+                    $activeMap[$sId] = $combInfo;
+                } else {
+                    $fallbackMap[$sId] = $combInfo;
+                }
+            }
+        }
+
+        // Active assignments take priority over fallback assignments
+        return $activeMap + $fallbackMap;
+    }
+
+    private function getCombinationCategoryPriority(?string $combName): int
+    {
+        if (empty($combName) || trim($combName) === '' || strcasecmp(trim($combName), 'General Combination') === 0) {
+            return 99; // Unassigned / fallback at the end
+        }
+
+        $c = strtoupper(trim($combName));
+
+        // 1. PCM combinations (e.g. PCM, PCM 11+ PE, PCM+CS, but not PCMB)
+        if (preg_match('/\bPCM\b/i', $c) && !preg_match('/\bPCMB\b/i', $c)) {
+            return 1;
+        }
+
+        // 2. PCB / PCMB combinations
+        if (preg_match('/\bPCB\b/i', $c) || preg_match('/\bPCMB\b/i', $c)) {
+            return 2;
+        }
+
+        // 3. Other combinations (Commerce, Humanities, etc.)
+        return 3;
+    }
+
+    private function normalizeCombinationForSort(?string $combName): string
+    {
+        if (empty($combName)) {
+            return '';
+        }
+
+        // Strip class numbers like 11, 12, XI, XII to compare subjects cleanly (e.g. "PCM 11+ PE" vs "PCM+CS")
+        $s = preg_replace('/\b(11|12|XI|XII)\b/i', '', $combName);
+        $s = preg_replace('/[\s+]+/', ' ', trim($s));
+
+        return strtoupper($s);
     }
 }

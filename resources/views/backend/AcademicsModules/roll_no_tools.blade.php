@@ -1,5 +1,10 @@
 @extends('layouts.app')
 @section('content')
+<style>
+    .uperletter {
+        text-transform: uppercase;
+    }
+</style>
 <div class="container">
     <h2>Roll Number & Admit Card Tools</h2>
 
@@ -133,7 +138,14 @@
                                     <input type="checkbox" class="student-checkbox" value="{{ $student->id }}">
                                 </td>
                                 <td>{{ $index + 1 }}</td>
-                                <td>{{ $student->student_name }}</td>
+                                <td>
+                                    {{ $student->student_name }}
+                                    @if(!empty($student->combination_name))
+                                        <div class="mt-1">
+                                            <span class="uperletter badge bg-primary">{{ $student->combination_name }}</span>
+                                        </div>
+                                    @endif
+                                </td>
                                 <td>{{ $rollMap[$student->id] ?? '-' }}</td>
                                 <td>
                                     <input

@@ -135,11 +135,19 @@ class ManualAttendanceController extends Controller
                 optional($classObj)->class_name
             ])));
 
+            $session = $filters['academic_session'] ?? '';
+            $sessionVariants = array_unique(array_filter([
+                $session,
+                str_replace('_', '-', $session),
+                str_replace('-', '_', $session),
+            ]));
+
+            // School Working Days: Leave days must be counted as school working days
             $recordedDays = (int) Attendance::query()
                 ->where('is_delete', 0)
                 ->whereIn('class_id', $classIds)
                 ->where('section_name', $selectedSectionName)
-                ->where('academic_session', $filters['academic_session'])
+                ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('academic_session', $sessionVariants))
                 ->whereBetween('attendance_date', [$startDate, $endDate])
                 ->where(function ($q) {
                     $q->where('total_students', '>', 0)
@@ -184,31 +192,47 @@ class ManualAttendanceController extends Controller
 
             // Check if prefill from daily attendance was requested
             $dailyCounts = collect();
+            $dailyStudentWorkingCounts = collect();
             if ($request->boolean('prefill_daily')) {
                 $studentIds = $students->pluck('id')->values();
                 if ($studentIds->isNotEmpty()) {
                     $dailyCounts = AttendanceDetail::query()
                         ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
                         ->where('academic_attendance.is_delete', 0)
-                        ->where('academic_attendance.class_id', $filters['class_id'])
-                        ->where('academic_attendance.section_name', $filters['section_name'])
+                        ->whereIn('academic_attendance.class_id', $classIds)
+                        ->where('academic_attendance.section_name', $selectedSectionName)
                         ->where('academic_attendance_details.status', 'present')
                         ->whereIn('academic_attendance_details.student_id', $studentIds)
-                        ->when($filters['start_date'] && $filters['end_date'], function ($q) use ($filters) {
-                            $q->whereBetween('academic_attendance.attendance_date', [$filters['start_date'], $filters['end_date']]);
+                        ->when($startDate && $endDate, function ($q) use ($startDate, $endDate) {
+                            $q->whereBetween('academic_attendance.attendance_date', [$startDate, $endDate]);
                         })
                         ->groupBy('academic_attendance_details.student_id')
                         ->selectRaw('academic_attendance_details.student_id, COUNT(*) as present_days')
                         ->pluck('present_days', 'student_id');
+
+                    // Student Working Days: Leave days must NOT be counted as student working days
+                    $dailyStudentWorkingCounts = AttendanceDetail::query()
+                        ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
+                        ->where('academic_attendance.is_delete', 0)
+                        ->whereIn('academic_attendance.class_id', $classIds)
+                        ->where('academic_attendance.section_name', $selectedSectionName)
+                        ->whereIn('academic_attendance_details.status', ['present', 'half_day', 'absent'])
+                        ->whereIn('academic_attendance_details.student_id', $studentIds)
+                        ->when($startDate && $endDate, function ($q) use ($startDate, $endDate) {
+                            $q->whereBetween('academic_attendance.attendance_date', [$startDate, $endDate]);
+                        })
+                        ->groupBy('academic_attendance_details.student_id')
+                        ->selectRaw('academic_attendance_details.student_id, COUNT(DISTINCT academic_attendance.attendance_date) as working_days')
+                        ->pluck('working_days', 'student_id');
                 }
             }
 
-            $studentRows = $students->map(function ($student) use ($existingDetails, $dailyCounts, $schoolWorkingDays, $request) {
+            $studentRows = $students->map(function ($student) use ($existingDetails, $dailyCounts, $dailyStudentWorkingCounts, $schoolWorkingDays, $request) {
                 $existing = $existingDetails->get($student->id);
 
                 if ($request->boolean('prefill_daily')) {
                     $presentDays = (float) ($dailyCounts->get($student->id, 0));
-                    $workingDays = $schoolWorkingDays;
+                    $workingDays = (int) ($dailyStudentWorkingCounts->get($student->id, $schoolWorkingDays));
                     $remarks = $existing ? $existing->remarks : '';
                 } elseif ($existing) {
                     $presentDays = (float) $existing->present_days;

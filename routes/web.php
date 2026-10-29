@@ -122,6 +122,7 @@ use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\backend\StudentOnlineFeesController;
 use App\Http\Controllers\backend\StudentTransferController;
 use App\Http\Controllers\backend\BonafideCertificateController;
+use App\Http\Controllers\backend\CharacterCertificateController;
 use App\Http\Controllers\backend\InquiryReportController;
 use App\Http\Controllers\backend\TuitionCertificateController;
 use App\Http\Controllers\backend\ExemptionController;
@@ -143,6 +144,7 @@ use App\Http\Controllers\Academic\MarksheetController as AcademicMarksheetContro
 use App\Http\Controllers\Academic\Term1MarksheetController;
 use App\Http\Controllers\Academic\SeniorMarksheetController;
 use App\Http\Controllers\Academic\SeniorConsolidatedMarksheetController;
+use App\Http\Controllers\Academic\ResultAnalysisController;
 use App\Http\Controllers\Academic\TeacherRemarkEntryController;
 use App\Http\Controllers\Academic\AttendanceController as AcademicAttendanceController;
 use App\Http\Controllers\Academic\ManualAttendanceController as AcademicManualAttendanceController;
@@ -307,6 +309,11 @@ Route::group(['middleware' => ['auth', 'admin']], function() {
 	Route::get('bonafide-certificate', [BonafideCertificateController::class, 'showForm'])->name('bonafide.showForm');
 	Route::match(['get', 'post'], 'generate-bonafide', [BonafideCertificateController::class, 'generateCertificate'])->name('bonafide.generateCertificate');
 	Route::get('bonafide-students', [BonafideCertificateController::class, 'getStudentsBySession'])->name('bonafide.students');
+
+	// Character Certificate
+	Route::get('character-certificate', [CharacterCertificateController::class, 'showForm'])->name('character-certificate.showForm');
+	Route::match(['get', 'post'], 'generate-character-certificate', [CharacterCertificateController::class, 'generateCertificate'])->name('character-certificate.generateCertificate');
+	Route::get('character-certificate-student-details', [CharacterCertificateController::class, 'getStudentDetails'])->name('character-certificate.studentDetails');
 
 
     Route::resource('inquiry-data', InquiryController::class);
@@ -630,6 +637,12 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('senior-consolidated-marksheet', [SeniorConsolidatedMarksheetController::class, 'index'])->name('senior-consolidated-marksheet.index');
     Route::get('academic/senior-consolidated-marksheets', [SeniorConsolidatedMarksheetController::class, 'index'])->name('academic.senior-consolidated-marksheets.index');
     Route::get('academic/senior-consolidated-marksheets/print', [SeniorConsolidatedMarksheetController::class, 'print'])->name('academic.senior-consolidated-marksheets.print');
+
+    // Result Analysis - Dedicated Module
+    Route::get('result-analysis', [ResultAnalysisController::class, 'index'])->name('result-analysis.index');
+    Route::get('academic/result-analysis', [ResultAnalysisController::class, 'index'])->name('academic.result-analysis.index');
+    Route::get('academic/result-analysis/print', [ResultAnalysisController::class, 'print'])->name('academic.result-analysis.print');
+    Route::get('academic/result-analysis/export-excel', [ResultAnalysisController::class, 'exportExcel'])->name('academic.result-analysis.export-excel');
 
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks']);

@@ -30,31 +30,15 @@ class InquiryEntryController extends Controller
 {
     public function __construct(Request $request)
     {
-        if (isset($_COOKIE['selectedYear'])) {
-            $selectedYear = $_COOKIE['selectedYear'];
-            // Now you can use $selectedYear in your PHP code
-            $selectedYear;
-        }
-        
-        if (!empty($request->session)){
-            $db_name = $request->session; 
-        } else if (!empty($request->session_name)){
-            $db_name = $request->session_name;
-        } else {
-            if (isset($_COOKIE['selectedYear'])) {
-                $db_name = $_COOKIE['selectedYear'];
-            } else {
-                $db_name = Config::get('database.connections.dynamic.database') ?: env('DB_DATABASE', '2026_2027');
-            }
-            
-        }
-        // $db_name = "2023_2024";
+        $db_name = $request->session
+            ?? $request->session_name
+            ?? ($_COOKIE['selectedYear'] ?? session('db_names') ?? Config::get('database.connections.dynamic.database') ?? env('DB_DATABASE', '2025_2026'));
+
         $dynamicConnectionName = 'dynamic';
         $dynamicConfig = Config::get("database.connections.{$dynamicConnectionName}");
-		$dynamicConfig['database'] = $db_name;
+        $dynamicConfig['database'] = $db_name;
         Config::set('database.connections.dynamic', $dynamicConfig);
         DB::reconnect('dynamic');
-
     }
 
     public function save_class_name()
@@ -1397,6 +1381,23 @@ class InquiryEntryController extends Controller
         $data['inqArr'] = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','Form Selected')->get(); 
         $data['stutdentsArr'] = DB::connection('dynamic')->table('student_registration')->get(); 
         $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get(); 
+
+        if ($data['all_inquiry']->isEmpty()) {
+            foreach (['2025_2026', '2026_2027', '2024_2025'] as $candidateDb) {
+                try {
+                    $dynamicConfig = Config::get('database.connections.dynamic');
+                    $dynamicConfig['database'] = $candidateDb;
+                    Config::set('database.connections.dynamic', $dynamicConfig);
+                    DB::reconnect('dynamic');
+                    $check = DB::connection('dynamic')->table('student_registration')->where('id', $id)->get();
+                    if ($check->isNotEmpty()) {
+                        $data['all_inquiry'] = $check;
+                        break;
+                    }
+                } catch (\Exception $e) {}
+            }
+        }
+
         if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
             $data['drivername'] = HrmsEmployee::query()
                 ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
@@ -1416,7 +1417,23 @@ class InquiryEntryController extends Controller
             $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->where('is_delete', 0)->get();
             $data['staffList'] = collect([]);
         }
+
         $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
+
+        $data['classlist'] = DB::connection('dynamic')->table('class_name')
+            ->whereNotNull('class_name')
+            ->distinct()
+            ->orderBy('id')
+            ->get();
+        if ($data['classlist']->isEmpty() && Schema::connection('dynamic')->hasTable('classes')) {
+            $data['classlist'] = DB::connection('dynamic')->table('classes')
+                ->whereNotNull('class_name')
+                ->select('class_name')
+                ->distinct()
+                ->orderBy('class_name')
+                ->get();
+        }
+
         return view('backend.student_registrations.edit_registration',$data); 
     }
 
@@ -1434,7 +1451,36 @@ public function perstudueamount($id){
 }
     
    public function saveeditregistration(Request $request){   //   thisone....
+        $dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
+        if (!empty($dbName)) {
+            Config::set('database.connections.dynamic.database', $dbName);
+            DB::purge('dynamic');
+        }
+
+        $existingStudent = DB::connection('dynamic')->table('student_registration')->where('id', $request->id)->first();
+        if (!$existingStudent) {
+            foreach (['2025_2026', '2026_2027', '2024_2025'] as $candidateDb) {
+                try {
+                    Config::set('database.connections.dynamic.database', $candidateDb);
+                    DB::purge('dynamic');
+                    $existingStudent = DB::connection('dynamic')->table('student_registration')->where('id', $request->id)->first();
+                    if ($existingStudent) {
+                        session(['db_names' => $candidateDb]);
+                        break;
+                    }
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+        }
+
+        $existingJson = (!empty($existingStudent) && !empty($existingStudent->json_str)) ? json_decode($existingStudent->json_str, true) : [];
+        if (!is_array($existingJson)) {
+            $existingJson = [];
+        }
+
         $postData_html = $request->all();
+        $files = [];
         
         // echo '<pre>';
         // echo"<pre>";print_r($postData_html);die();
@@ -1545,189 +1591,145 @@ public function perstudueamount($id){
 
 
 
+        $studentDobVal = !empty($request->student_dob) ? $request->student_dob : (!empty($existingStudent->date_of_birth) ? $existingStudent->date_of_birth : ($existingJson['student_dob'] ?? ''));
+        $nationalityVal = !empty($postData_html['nationality']) ? $postData_html['nationality'] : ($existingJson['nationality'] ?? 'Indian');
+        $categoryVal = !empty($request->category) ? $request->category : ($existingJson['category'] ?? '');
+        $classNameVal = !empty($request->classname) ? $request->classname : (!empty($existingStudent->class_name) ? $existingStudent->class_name : ($existingJson['classname'] ?? ''));
+        $sessionNameVal = !empty($request->session_name) ? $request->session_name : (!empty($existingStudent->session_name) ? $existingStudent->session_name : ($existingJson['session_name'] ?? ''));
+        $batchNameVal = (!empty($postData_html['batch']) && $postData_html['batch'] !== 'select') ? $postData_html['batch'] : ($existingJson['batch'] ?? '');
+        $casteVal = (!empty($request->student_caste) && $request->student_caste !== '0' && $request->student_caste !== 'select') ? $request->student_caste : (!empty($request->caste) && $request->caste !== '0' ? $request->caste : ($existingJson['student_caste'] ?? ($existingJson['caste'] ?? '')));
+        $sectionNameVal = (!empty($postData_html['section_name'])) ? $postData_html['section_name'] : (!empty($existingStudent->section_name) ? $existingStudent->section_name : ($existingJson['section_name'] ?? ''));
+        $studentNameVal = !empty($request->studentname) ? $request->studentname : (!empty($request->student_name) ? $request->student_name : (!empty($existingStudent->student_name) ? $existingStudent->student_name : ($existingJson['studentname'] ?? '')));
+
         $postData = [
-        
-            "scholar_no"    => $postData_html['scholar_no'] ,
-            "application_for"   => $postData_html['application_for'] ,
-            "form_number"    => $postData_html['form_number'] ,
-            "studentname_prefix" => $postData_html['studentname_prefix'] ,
-            "studentname"   => $postData_html['studentname'],
-            "received_amount"   => $postData_html['received_amount'],
-            "amount"   => $postData_html['amount'],
-            "gender" => (!empty($postData_html['gender'])) ? $postData_html['gender'] : "",
-            "student_dob"   => $postData_html['student_dob'],
-            "nationality" => $postData_html['nationality'],
-            "session_name"   => $postData_html['session_name'],
-            "present_address"   => $postData_html['present_address'],
-            "permanent_address"   => $postData_html['permanent_address'],
-            "phone_number"   => $postData_html['phone_number'],
-            "mobile_number"   => $postData_html['mobile_number'],
-            "mother_tongue"   => $postData_html['mother_tongue'],
-            "remarks"   => $postData_html['remarks'],
-            "vaccaination"   => $postData_html['vaccaination'],
-            "SSSMID"   => $postData_html['SSSMID'],
-            "family_SSSMID"   => $postData_html['family_SSSMID'],
+            "scholar_no"    => $postData_html['scholar_no'] ?? ($existingStudent->scholar_no ?? ($existingJson['scholar_no'] ?? '')),
+            "application_for"   => $postData_html['application_for'] ?? ($existingStudent->application_for ?? ($existingJson['application_for'] ?? '')),
+            "form_number"    => $postData_html['form_number'] ?? ($existingStudent->form_number ?? ($existingJson['form_number'] ?? '')),
+            "studentname_prefix" => $postData_html['studentname_prefix'] ?? ($existingJson['studentname_prefix'] ?? ''),
+            "studentname"   => $studentNameVal,
+            "received_amount"   => $postData_html['received_amount'] ?? ($existingJson['received_amount'] ?? ''),
+            "amount"   => $postData_html['amount'] ?? ($existingJson['amount'] ?? ''),
+            "gender" => $postData_html['gender'] ?? ($existingJson['gender'] ?? ''),
+            "student_dob"   => $studentDobVal,
+            "nationality" => $nationalityVal,
+            "session_name"   => $sessionNameVal,
+            "present_address"   => $postData_html['present_address'] ?? ($existingJson['present_address'] ?? ''),
+            "permanent_address"   => $postData_html['permanent_address'] ?? ($existingJson['permanent_address'] ?? ''),
+            "phone_number"   => $postData_html['phone_number'] ?? ($existingJson['phone_number'] ?? ''),
+            "mobile_number"   => $postData_html['mobile_number'] ?? ($existingJson['mobile_number'] ?? ''),
+            "mother_tongue"   => $postData_html['mother_tongue'] ?? ($existingJson['mother_tongue'] ?? ''),
+            "remarks"   => $postData_html['remarks'] ?? ($existingJson['remarks'] ?? ''),
+            "vaccaination"   => $postData_html['vaccaination'] ?? ($existingJson['vaccaination'] ?? ''),
+            "SSSMID"   => $postData_html['SSSMID'] ?? ($existingJson['SSSMID'] ?? ''),
+            "family_SSSMID"   => $postData_html['family_SSSMID'] ?? ($existingJson['family_SSSMID'] ?? ''),
 
-            "AadharNo"   => $postData_html['AadharNo'],
-            "apaar_id"   => (!empty($postData_html['apaar_id'])) ? $postData_html['apaar_id'] : "",
-            "pen_no"     => (!empty($postData_html['pen_no'])) ? $postData_html['pen_no'] : "",
-            "student_medical_conserns"   => $postData_html['student_medical_conserns'],
-            "present_school_name"   => $postData_html['present_school_name'],
-            "is_sibling_applied_for_admission"   => (!empty($postData_html['is_sibling_applied_for_admission'])) ? $postData_html['is_sibling_applied_for_admission'] : "",
-            "searchfather"   => $postData_html['searchfather'],
-            "siblings_namesecond"   => $postData_html['siblings_namesecond'],
-            "siblings_section_second"    => (!empty($postData_html['siblings_section_second'])) ? $postData_html['siblings_section_second'] : "" ,
-            "sibling_class_second"    => (!empty($postData_html['sibling_class_second'])) ? $postData_html['sibling_class_second'] : "" ,
+            "AadharNo"   => $postData_html['AadharNo'] ?? ($existingJson['AadharNo'] ?? ''),
+            "apaar_id"   => $postData_html['apaar_id'] ?? ($existingJson['apaar_id'] ?? ''),
+            "pen_no"     => $postData_html['pen_no'] ?? ($existingJson['pen_no'] ?? ''),
+            "student_medical_conserns"   => $postData_html['student_medical_conserns'] ?? ($existingJson['student_medical_conserns'] ?? ''),
+            "present_school_name"   => $postData_html['present_school_name'] ?? ($existingJson['present_school_name'] ?? ''),
+            "is_sibling_applied_for_admission"   => $postData_html['is_sibling_applied_for_admission'] ?? ($existingJson['is_sibling_applied_for_admission'] ?? ''),
+            "searchfather"   => $postData_html['searchfather'] ?? ($existingJson['searchfather'] ?? ''),
+            "siblings_namesecond"   => $postData_html['siblings_namesecond'] ?? ($existingJson['siblings_namesecond'] ?? ''),
+            "siblings_section_second"    => $postData_html['siblings_section_second'] ?? ($existingJson['siblings_section_second'] ?? ''),
+            "sibling_class_second"    => $postData_html['sibling_class_second'] ?? ($existingJson['sibling_class_second'] ?? ''),
             
-            "siblings_bod_second"    => $postData_html['siblings_bod_second'],
-            "driver_name"    => $postData_html['driver_name'],
-            "bus_facility_start_date"    => $postData_html['bus_facility_start_date'],
-            "is_staff_applied_for_admission" => (!empty($postData_html['is_staff_applied_for_admission'])) ? $postData_html['is_staff_applied_for_admission'] : "",
-            "staff_name"    => (!empty($postData_html['staff_name'])) ? $postData_html['staff_name'] : "",
-            "fathername_prefix" =>$postData_html['fathername_prefix'] ,
-            "fathername"    => $postData_html['fathername'],
-            "father_education"    => $postData_html['father_education'],
-            "father_organization"    => $postData_html['father_organization'],
-            "father_designation"    => $postData_html['father_designation'],
-            "father_office_telephone"    => $postData_html['father_office_telephone'],
-            "father_email_id"   =>$postData_html['father_email_id'],
-            "father_mobile"   =>$postData_html['father_mobile'],
-            "fatherSSSMID"   => (!empty($postData_html['fatherSSSMID'])) ? $postData_html['fatherSSSMID'] : "" ,
-            "fatherAadharNo"   =>(!empty($postData_html['fatherAadharNo'])) ? $postData_html['fatherAadharNo'] : "",
-            "father_res_address"   =>(!empty($postData_html['father_res_address'])) ? $postData_html['father_res_address'] : "",           
+            "siblings_bod_second"    => $postData_html['siblings_bod_second'] ?? ($existingJson['siblings_bod_second'] ?? ''),
+            "driver_name"    => $postData_html['driver_name'] ?? ($existingJson['driver_name'] ?? ''),
+            "bus_facility_start_date"    => $postData_html['bus_facility_start_date'] ?? ($existingJson['bus_facility_start_date'] ?? ''),
+            "is_staff_applied_for_admission" => $postData_html['is_staff_applied_for_admission'] ?? ($existingJson['is_staff_applied_for_admission'] ?? ''),
+            "staff_name"    => $postData_html['staff_name'] ?? ($existingJson['staff_name'] ?? ''),
+            "fathername_prefix" => $postData_html['fathername_prefix'] ?? ($existingJson['fathername_prefix'] ?? ''),
+            "fathername"    => $postData_html['fathername'] ?? ($existingJson['fathername'] ?? ''),
+            "father_education"    => $postData_html['father_education'] ?? ($existingJson['father_education'] ?? ''),
+            "father_organization"    => $postData_html['father_organization'] ?? ($existingJson['father_organization'] ?? ''),
+            "father_designation"    => $postData_html['father_designation'] ?? ($existingJson['father_designation'] ?? ''),
+            "father_office_telephone"    => $postData_html['father_office_telephone'] ?? ($existingJson['father_office_telephone'] ?? ''),
+            "father_email_id"   => $postData_html['father_email_id'] ?? ($existingJson['father_email_id'] ?? ''),
+            "father_mobile"   => $postData_html['father_mobile'] ?? ($existingJson['father_mobile'] ?? ''),
+            "fatherSSSMID"   => $postData_html['fatherSSSMID'] ?? ($existingJson['fatherSSSMID'] ?? ''),
+            "fatherAadharNo"   => $postData_html['fatherAadharNo'] ?? ($existingJson['fatherAadharNo'] ?? ''),
+            "father_res_address"   => $postData_html['father_res_address'] ?? ($existingJson['father_res_address'] ?? ''),           
             
-            "father_emergency_contact"   =>$postData_html['father_emergency_contact'],
-            "mothername_prefix" => $postData_html['mothername_prefix'],
-            "mothername"   =>$postData_html['mothername'],
-            "mother_education"   =>$postData_html['mother_education'],
-            "mother_organization"   =>$postData_html['mother_organization'],
-            "mother_office_telephone"   =>$postData_html['mother_office_telephone'],
-            "mother_email"   =>$postData_html['mother_email'],
-            "mother_mobile"   =>$postData_html['mother_mobile'],
-            "motherSSSMID"   =>(!empty($postData_html['motherSSSMID'])) ? $postData_html['motherSSSMID'] : "",
-            "motherAadharNo"   =>(!empty($postData_html['motherAadharNo'])) ? $postData_html['motherAadharNo'] : "",
-            "mother_res_address"=>(!empty($postData_html['mother_res_address'])) ? $postData_html['mother_res_address'] : "",
-            "mother_emergency_contact"   =>$postData_html['mother_emergency_contact'],
-            "guardian_name"   =>$postData_html['guardian_name'],
+            "father_emergency_contact"   => $postData_html['father_emergency_contact'] ?? ($existingJson['father_emergency_contact'] ?? ''),
+            "mothername_prefix" => $postData_html['mothername_prefix'] ?? ($existingJson['mothername_prefix'] ?? ''),
+            "mothername"   => $postData_html['mothername'] ?? ($existingJson['mothername'] ?? ''),
+            "mother_education"   => $postData_html['mother_education'] ?? ($existingJson['mother_education'] ?? ''),
+            "mother_organization"   => $postData_html['mother_organization'] ?? ($existingJson['mother_organization'] ?? ''),
+            "mother_office_telephone"   => $postData_html['mother_office_telephone'] ?? ($existingJson['mother_office_telephone'] ?? ''),
+            "mother_email"   => $postData_html['mother_email'] ?? ($existingJson['mother_email'] ?? ''),
+            "mother_mobile"   => $postData_html['mother_mobile'] ?? ($existingJson['mother_mobile'] ?? ''),
+            "motherSSSMID"   => $postData_html['motherSSSMID'] ?? ($existingJson['motherSSSMID'] ?? ''),
+            "motherAadharNo"   => $postData_html['motherAadharNo'] ?? ($existingJson['motherAadharNo'] ?? ''),
+            "mother_res_address" => $postData_html['mother_res_address'] ?? ($existingJson['mother_res_address'] ?? ''),
+            "mother_emergency_contact"   => $postData_html['mother_emergency_contact'] ?? ($existingJson['mother_emergency_contact'] ?? ''),
+            "guardian_name"   => $postData_html['guardian_name'] ?? ($existingJson['guardian_name'] ?? ''),
             
-            "guardian_office_telephone"   =>$postData_html['guardian_office_telephone'],
-            "guardian_email_id"   =>$postData_html['guardian_email_id'],
-            "guardian_mobile"   =>$postData_html['guardian_mobile'],
-            "guardian_permanent_address"   =>$postData_html['guardian_permanent_address'],
-            "guardian_emergency_contact"   =>$postData_html['guardian_emergency_contact'],
-            "guardian_relation"   =>$postData_html['guardian_relation'],
-            'amount' =>(!empty($postData_html['amount'])) ? $postData_html['amount'] : "",
-            "bankName"   =>(!empty($postData_html['bankName'])) ? $postData_html['bankName'] : "",
-            "branchName"   =>(!empty($postData_html['branchName'])) ? $postData_html['branchName'] : "",
-            "account_number" =>(!empty($postData_html['account_number'])) ? $postData_html['account_number'] : "",
-            "ifsc_code"   =>(!empty($postData_html['ifsc_code'])) ? $postData_html['ifsc_code'] : "",
-            'reference_number'=>(!empty($postData_html['reference_number'])) ? $postData_html['reference_number'] : "",
-            'reference_number'=>(!empty($postData_html['ifsc_code'])) ? $postData_html['ifsc_code'] : "",
-            "iid"   =>(!empty($postData_html['iid'])) ? $postData_html['iid'] : "",
-            "submit"   =>"submit",     //add
+            "guardian_office_telephone"   => $postData_html['guardian_office_telephone'] ?? ($existingJson['guardian_office_telephone'] ?? ''),
+            "guardian_email_id"   => $postData_html['guardian_email_id'] ?? ($existingJson['guardian_email_id'] ?? ''),
+            "guardian_mobile"   => $postData_html['guardian_mobile'] ?? ($existingJson['guardian_mobile'] ?? ''),
+            "guardian_permanent_address"   => $postData_html['guardian_permanent_address'] ?? ($existingJson['guardian_permanent_address'] ?? ''),
+            "guardian_emergency_contact"   => $postData_html['guardian_emergency_contact'] ?? ($existingJson['guardian_emergency_contact'] ?? ''),
+            "guardian_relation"   => $postData_html['guardian_relation'] ?? ($existingJson['guardian_relation'] ?? ''),
+            'amount' => $postData_html['amount'] ?? ($existingJson['amount'] ?? ''),
+            "bankName"   => $postData_html['bankName'] ?? ($existingJson['bankName'] ?? ''),
+            "branchName"   => $postData_html['branchName'] ?? ($existingJson['branchName'] ?? ''),
+            "account_number" => $postData_html['account_number'] ?? ($existingJson['account_number'] ?? ''),
+            "ifsc_code"   => $postData_html['ifsc_code'] ?? ($existingJson['ifsc_code'] ?? ''),
+            'reference_number' => $postData_html['reference_number'] ?? ($existingJson['reference_number'] ?? ''),
+            "iid"   => $postData_html['iid'] ?? ($existingJson['iid'] ?? ''),
+            "submit"   => "submit",
 
-            "bus_facility_end_date" => "",  // editonly
-            "id" => (!empty($postData_html['id'])) ? $postData_html['id'] : "",          // editonly
-            "classname" => (!empty($postData_html['classname'])) ? $postData_html['classname'] : "",    // editonly
-            "batch" => (!empty($postData_html['batch'])) ? $postData_html['batch'] : "" ,  // editonly
-            "section_name" => (!empty($postData_html['section_name'])) ? $postData_html['section_name'] : "",  // editonly
-            "father_dob" => "",    // editonly
-            "mother_dob" => "",    // editonly
-            "mother_ocupation" => $postData_html['mother_ocupation'],   //editonly     
-            "local_guardian" => "",  //editonly
-            "local_address" => "", ////editonly
-            "guradian_phone"  => "", ////editonly
-            "guradian_mobile" => "", ////editonly
-            "guradian_parent_category" => "", //editonly
-            "guradian_new_category" => "", //editonly
-            "guradian_new_house" => "", //editonly
+            "bus_facility_end_date" => $postData_html['bus_facility_end_date'] ?? ($existingJson['bus_facility_end_date'] ?? ''),
+            "id" => $request->id,
+            "classname" => $classNameVal,
+            "batch" => $batchNameVal,
+            "section_name" => $sectionNameVal,
+            "father_dob" => $postData_html['father_dob'] ?? ($existingJson['father_dob'] ?? ''),
+            "mother_dob" => $postData_html['mother_dob'] ?? ($existingJson['mother_dob'] ?? ''),
+            "mother_ocupation" => $postData_html['mother_ocupation'] ?? ($existingJson['mother_ocupation'] ?? ''),
+            "local_guardian" => $postData_html['local_guardian'] ?? ($existingJson['local_guardian'] ?? ''),
+            "local_address" => $postData_html['local_address'] ?? ($existingJson['local_address'] ?? ''),
+            "guradian_phone"  => $postData_html['guradian_phone'] ?? ($existingJson['guradian_phone'] ?? ''),
+            "guradian_mobile" => $postData_html['guradian_mobile'] ?? ($existingJson['guradian_mobile'] ?? ''),
+            "guradian_parent_category" => $postData_html['guradian_parent_category'] ?? ($existingJson['guradian_parent_category'] ?? ''),
+            "guradian_new_category" => $postData_html['guradian_new_category'] ?? ($existingJson['guradian_new_category'] ?? ''),
+            "guradian_new_house" => $postData_html['guradian_new_house'] ?? ($existingJson['guradian_new_house'] ?? ''),
             // ----------------------------------------------------------
 
                 
-            "category" => $request->category,
-            "religion" => $request->religion,
-            "student_caste" => $request->student_caste,
-            "classname" => $request->classname,
-            "required_school_transport"    =>$request->required_school_transport,
-            "section_name" => "",  // editonly
-            "birth_certificate_chk" => $request->birth_certificate_chk,
-            "transfer_certificate_chk" => $request->transfer_certificate_chk,
-            "address_proof_chk" => $request->address_proof_chk,
-            "cast_chk"=>$request->cast_chk,
-            "aadhar_chk"=>$request->aadhar_chk,
-            "bankb_chk"=>$request->bankb_chk,
-            "stuprof_chk"=>$request->stuprof_chk,
-            "sssmprof_chk"=>$request->sssmprof_chk,
-            "salaryprof_chk"=>$request->salaryprof_chk,
-            "last_report_card_chk" => $request->last_report_card_chk,
-            "BirthCertificate" =>(!empty($postData_html['BirthCertificate'])) ? $BirthCertificate : $postData_html['BirthCertificate1'],
-            "TransferCertificate" =>(!empty($postData_html['TransferCertificate'])) ? $TransferCertificate : $postData_html['TransferCertificate1'],
-            "AddressProff" => (!empty($postData_html['AddressProff'])) ? $AddressProff : $postData_html['AddressProff1'],
-            "CastProff"=>(!empty($postData_html['CastProff'])) ? $CastProff : $postData_html['CastProff1'],
-            "aadharProff"=>(!empty($postData_html['aadharProff'])) ? $aadharProff : $postData_html['aadharProff1'],
-            "bankbProff"=>(!empty($postData_html['bankbProff'])) ? $bankbProff : $postData_html['bankbProff1'],
-            "StuProf"=>(!empty($postData_html['StuProf'])) ? $StuProf : $postData_html['StuProf1'],
-            "sssmprof"=>(!empty($postData_html['sssmprof'])) ? $sssmprof : $postData_html['sssmprof1'],
-            "salaryprof"=>(!empty($postData_html['salaryprof'])) ? $salaryprof : $postData_html['salaryprof1'],
-            "LastReportCard" =>(!empty($postData_html['LastReportCard'])) ? $LastReportCard : $postData_html['LastReportCard1']
+            "category" => $categoryVal,
+            "religion" => !empty($request->religion) ? $request->religion : ($existingJson['religion'] ?? ""),
+            "student_caste" => $casteVal,
+            "required_school_transport" => $request->required_school_transport ?? ($existingJson['required_school_transport'] ?? ''),
+            "birth_certificate_chk" => $request->birth_certificate_chk ?? ($existingJson['birth_certificate_chk'] ?? ''),
+            "transfer_certificate_chk" => $request->transfer_certificate_chk ?? ($existingJson['transfer_certificate_chk'] ?? ''),
+            "address_proof_chk" => $request->address_proof_chk ?? ($existingJson['address_proof_chk'] ?? ''),
+            "cast_chk" => $request->cast_chk ?? ($existingJson['cast_chk'] ?? ''),
+            "aadhar_chk" => $request->aadhar_chk ?? ($existingJson['aadhar_chk'] ?? ''),
+            "bankb_chk" => $request->bankb_chk ?? ($existingJson['bankb_chk'] ?? ''),
+            "stuprof_chk" => $request->stuprof_chk ?? ($existingJson['stuprof_chk'] ?? ''),
+            "sssmprof_chk" => $request->sssmprof_chk ?? ($existingJson['sssmprof_chk'] ?? ''),
+            "salaryprof_chk" => $request->salaryprof_chk ?? ($existingJson['salaryprof_chk'] ?? ''),
+            "last_report_card_chk" => $request->last_report_card_chk ?? ($existingJson['last_report_card_chk'] ?? ''),
+            "BirthCertificate" => (!empty($postData_html['BirthCertificate'])) ? $BirthCertificate : (!empty($postData_html['BirthCertificate1']) ? $postData_html['BirthCertificate1'] : ($existingJson['BirthCertificate'] ?? null)),
+            "TransferCertificate" => (!empty($postData_html['TransferCertificate'])) ? $TransferCertificate : (!empty($postData_html['TransferCertificate1']) ? $postData_html['TransferCertificate1'] : ($existingJson['TransferCertificate'] ?? null)),
+            "AddressProff" => (!empty($postData_html['AddressProff'])) ? $AddressProff : (!empty($postData_html['AddressProff1']) ? $postData_html['AddressProff1'] : ($existingJson['AddressProff'] ?? null)),
+            "CastProff" => (!empty($postData_html['CastProff'])) ? $CastProff : (!empty($postData_html['CastProff1']) ? $postData_html['CastProff1'] : ($existingJson['CastProff'] ?? null)),
+            "aadharProff" => (!empty($postData_html['aadharProff'])) ? $aadharProff : (!empty($postData_html['aadharProff1']) ? $postData_html['aadharProff1'] : ($existingJson['aadharProff'] ?? null)),
+            "bankbProff" => (!empty($postData_html['bankbProff'])) ? $bankbProff : (!empty($postData_html['bankbProff1']) ? $postData_html['bankbProff1'] : ($existingJson['bankbProff'] ?? null)),
+            "StuProf" => (!empty($postData_html['StuProf'])) ? $StuProf : (!empty($postData_html['StuProf1']) ? $postData_html['StuProf1'] : ($existingJson['StuProf'] ?? null)),
+            "sssmprof" => (!empty($postData_html['sssmprof'])) ? $sssmprof : (!empty($postData_html['sssmprof1']) ? $postData_html['sssmprof1'] : ($existingJson['sssmprof'] ?? null)),
+            "salaryprof" => (!empty($postData_html['salaryprof'])) ? $salaryprof : (!empty($postData_html['salaryprof1']) ? $postData_html['salaryprof1'] : ($existingJson['salaryprof'] ?? null)),
+            "LastReportCard" => (!empty($postData_html['LastReportCard'])) ? $LastReportCard : (!empty($postData_html['LastReportCard1']) ? $postData_html['LastReportCard1'] : ($existingJson['LastReportCard'] ?? null))
 
     ];
 
-    if (!empty($postData['scholar_no'])) {
-        echo '<input type="hidden" name="scholar_no" value="' . $postData['scholar_no'] . '">';
-    }
-
-    if (!empty($postData['SSSMID'])) {
-        echo '<input type="hidden" name="SSSMID" value="' . $postData['SSSMID'] . '">';
-    }
-    if (!empty($postData['AadharNo'])) {
-        echo '<input type="hidden" name="AadharNo" value="' . $postData['AadharNo'] . '">';
-    }
-    if (!empty($postData['siblings_section_second'])) {
-        echo '<input type="hidden" name="siblings_section_second" value="' . $postData['siblings_section_second'] . '">';
-    }
-    // if (!empty($postData['staff_name'])) {
-    //     echo '<input type="hidden" name="staff_name" value="' . $postData['staff_name'] . '">';
-    // }
-    if (!empty($postData['father_office_telephone'])) {
-        echo '<input type="hidden" name="father_office_telephone" value="' . $postData['father_office_telephone'] . '">';
-    }
-    if (!empty($postData['fatherSSSMID'])) {
-        echo '<input type="hidden" name="fatherSSSMID" value="' . $postData['fatherSSSMID'] . '">';
-    }
-    if (!empty($postData['fatherAadharNo'])) {
-        echo '<input type="hidden" name="fatherAadharNo" value="' . $postData['fatherAadharNo'] . '">';
-    }
-    if (!empty($postData['motherSSSMID'])) {
-        echo '<input type="hidden" name="motherSSSMID" value="' . $postData['motherSSSMID'] . '">';
-    }
-    if (!empty($postData['motherAadharNo'])) {
-        echo '<input type="hidden" name="motherAadharNo" value="' . $postData['motherAadharNo'] . '">';
-    }
-    if (!empty($postData['iid'])) {
-        echo '<input type="hidden" name="iid" value="' . $postData['iid'] . '">';
-    }
-    if (!empty($postData['submit'])) {
-        echo '<input type="hidden" name="submit" value="' . $postData['submit'] . '">';
-    }
 
 
 
 
 
-            // addonly.....start....
-            // "scholar_no"    => "" ,  // addonly
-            // "SSSMID"   => "",     // addonly
-            // "AadharNo"   => "",     // addonly
-            // "siblings_section_second"    => "", // addonly
-            // "staff_name"    => "",    // addonly
-            // "father_office_telephone"    => "" ,  // addonly
-            // "fatherSSSMID"   =>"",    // add
-            // "fatherAadharNo"   =>"",  //add
-            // "motherSSSMID"   =>"",    //add
-            // "motherAadharNo"   =>"",  //add
-            // "iid"   =>"",               //add
-            // "submit"   =>"submit",     //add
 
 
 
@@ -1749,25 +1751,69 @@ public function perstudueamount($id){
 
         unset($postData['_token']);
 
-        $files = [];
-        $postData['files'] = $files;
+        // Merge existing json_str so unrelated fields are not lost
+        $mergedPostData = array_merge($existingJson, array_filter($postData, function($val) {
+            return $val !== null && $val !== '';
+        }));
+
+        $studentDobVal = !empty($request->student_dob) ? $request->student_dob : (!empty($existingStudent->date_of_birth) ? $existingStudent->date_of_birth : ($existingJson['student_dob'] ?? ''));
+        $nationalityVal = !empty($postData_html['nationality']) ? $postData_html['nationality'] : ($existingJson['nationality'] ?? 'Indian');
+        $categoryVal = !empty($request->category) ? $request->category : ($existingJson['category'] ?? '');
+        $classNameVal = !empty($request->classname) ? $request->classname : (!empty($existingStudent->class_name) ? $existingStudent->class_name : ($existingJson['classname'] ?? ''));
+        $sessionNameVal = !empty($request->session_name) ? $request->session_name : (!empty($existingStudent->session_name) ? $existingStudent->session_name : ($existingJson['session_name'] ?? ''));
+        $batchNameVal = (!empty($postData_html['batch']) && $postData_html['batch'] !== 'select') ? $postData_html['batch'] : ($existingJson['batch'] ?? '');
+        $casteVal = (!empty($request->student_caste) && $request->student_caste !== '0' && $request->student_caste !== 'select') ? $request->student_caste : (!empty($request->caste) && $request->caste !== '0' ? $request->caste : ($existingJson['student_caste'] ?? ($existingJson['caste'] ?? '')));
+        $sectionNameVal = (!empty($postData_html['section_name'])) ? $postData_html['section_name'] : (!empty($existingStudent->section_name) ? $existingStudent->section_name : ($existingJson['section_name'] ?? ''));
+        $studentNameVal = !empty($request->studentname) ? $request->studentname : (!empty($request->student_name) ? $request->student_name : (!empty($existingStudent->student_name) ? $existingStudent->student_name : ($existingJson['studentname'] ?? '')));
+
+        $mergedPostData['student_dob'] = $studentDobVal;
+        $mergedPostData['nationality'] = $nationalityVal;
+        $mergedPostData['category'] = $categoryVal;
+        $mergedPostData['classname'] = $classNameVal;
+        $mergedPostData['session_name'] = $sessionNameVal;
+        $mergedPostData['batch'] = $batchNameVal;
+        $mergedPostData['student_caste'] = $casteVal;
+        $mergedPostData['caste'] = $casteVal;
+        $mergedPostData['section_name'] = $sectionNameVal;
+        if (!empty($studentNameVal)) {
+            $mergedPostData['studentname'] = $studentNameVal;
+        }
 
         $insertArr  = [
-            'application_for'=>$request->application_for,
-            'form_number'=>$request->form_number,
-            'date_of_birth'=>$request->student_dob,
-            'class_name'=>$request->classname,
-            'student_name'=> $request->studentname,
-            'session_name'=>$request->session_name,
-            // 'student_name'=>$request->student_name,
+            'application_for'=> !empty($request->application_for) ? $request->application_for : ($existingStudent->application_for ?? ''),
+            'form_number'=> !empty($request->form_number) ? $request->form_number : ($existingStudent->form_number ?? ''),
+            'scholar_no'=> !empty($request->scholar_no) ? $request->scholar_no : ($existingStudent->scholar_no ?? ''),
+            'date_of_birth'=> $studentDobVal,
+            'class_name'=> $classNameVal,
+            'section_name'=> $sectionNameVal,
+            'student_name'=> $studentNameVal,
+            'session_name'=> $sessionNameVal,
             'inq_mode'=>'off',
             'status'=>'r',
-            'json_str'=>json_encode($postData),
-			'registration_date'=> !empty($request->registration_date) ? $request->registration_date : date('Y-m-d'),
+            'json_str'=>json_encode($mergedPostData),
+            'registration_date'=> !empty($request->registration_date) ? $request->registration_date : (!empty($existingStudent->registration_date) ? $existingStudent->registration_date : date('Y-m-d')),
         ];
-// echo"<pre>";print_r($insertArr);exit;
-        
-        $inquiry_data = DB::table('student_registration')->where('id',$request->id)->update($insertArr);
+
+        if (!empty($classNameVal)) {
+            $classQuery = DB::connection('dynamic')->table('classes')->where('class_name', $classNameVal);
+            if (!empty($sectionNameVal)) {
+                $matchedClass = (clone $classQuery)->where('section_name', $sectionNameVal)->first();
+                if ($matchedClass) {
+                    $insertArr['class_id'] = $matchedClass->id;
+                }
+            }
+            if (empty($insertArr['class_id'])) {
+                $firstClass = $classQuery->first();
+                if ($firstClass) {
+                    $insertArr['class_id'] = $firstClass->id;
+                }
+            }
+        }
+        if (empty($insertArr['class_id']) && !empty($existingStudent->class_id)) {
+            $insertArr['class_id'] = $existingStudent->class_id;
+        }
+
+        $inquiry_data = DB::connection('dynamic')->table('student_registration')->where('id', $request->id)->update($insertArr);
         
         $sibling = 0;
         $staff = 0;
@@ -1783,7 +1829,7 @@ public function perstudueamount($id){
         }
         DB::connection('dynamic')->table('student_fees_exempted')->updateOrInsert(
             [
-                'scholar_no' => $request->scholar_no,
+                'scholar_no' => !empty($request->scholar_no) ? $request->scholar_no : ($existingStudent->scholar_no ?? ''),
                 'head_name'  => 'TUITION FEES'
             ],
             [
@@ -1792,7 +1838,7 @@ public function perstudueamount($id){
                 'exempt_per' => $percentage_total
             ]
         );
-        return redirect()->back()->with('success', 'Student Registred successfully Update');  
+        return redirect()->route('registrationeditlist', ['id' => $request->id])->with('success', 'Student registration updated successfully.');
     }
 
 

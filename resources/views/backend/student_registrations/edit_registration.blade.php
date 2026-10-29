@@ -79,8 +79,191 @@
    <div class="row">
       @if(!empty($all_inquiry))
       @foreach($all_inquiry as $each_inq)
-      <?php $notificationData1 = json_decode($each_inq->json_str, true);
-      // echo"<pre>";print_r($notificationData1);exit;
+      <?php
+         $notificationData1 = json_decode($each_inq->json_str, true);
+         if (!is_array($notificationData1)) {
+             $notificationData1 = [];
+         }
+
+         // 1. Student DOB normalization to YYYY-MM-DD
+         $rawDob = !empty($notificationData1['student_dob']) ? $notificationData1['student_dob'] : (!empty($each_inq->date_of_birth) ? $each_inq->date_of_birth : '');
+         $formattedDob = '';
+         if (!empty($rawDob)) {
+             $rawDob = trim($rawDob);
+             if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDob)) {
+                 $parts = explode('-', $rawDob);
+                 if (str_starts_with($parts[0], '00')) {
+                     $parts[0] = '20' . substr($parts[0], 2);
+                 }
+                 $formattedDob = implode('-', $parts);
+             } elseif (preg_match('/^(\d{1,2})[-\/\.](\d{1,2})[-\/\.](00|19|20)?(\d{2})$/', $rawDob, $m)) {
+                 $d = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                 $mo = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+                 $prefix = !empty($m[3]) ? $m[3] : '';
+                 $yy = $m[4];
+                 if ($prefix === '00' || empty($prefix)) {
+                     $year = ($yy > 30) ? ('19' . $yy) : ('20' . $yy);
+                 } else {
+                     $year = $prefix . $yy;
+                 }
+                 $formattedDob = "$year-$mo-$d";
+             } else {
+                 $ts = strtotime($rawDob);
+                 if ($ts && $ts > 0) {
+                     $y = (int)date('Y', $ts);
+                     if ($y < 100) {
+                         $y = ($y > 30) ? 1900 + $y : 2000 + $y;
+                         $formattedDob = sprintf('%04d-%s-%s', $y, date('m', $ts), date('d', $ts));
+                     } else {
+                         $formattedDob = date('Y-m-d', $ts);
+                     }
+                 } else {
+                     $formattedDob = $rawDob;
+                 }
+             }
+         }
+
+         // 2. Nationality
+         $savedNationality = !empty($notificationData1['nationality']) ? trim($notificationData1['nationality']) : 'Indian';
+         if (strcasecmp($savedNationality, 'INDIA') === 0 || strcasecmp($savedNationality, 'Indian') === 0) {
+             $savedNationality = 'Indian';
+         }
+         $nationalityOptions = ['Indian', 'NRI', 'Others'];
+         if (!empty($savedNationality) && !in_array($savedNationality, $nationalityOptions)) {
+             $nationalityOptions[] = $savedNationality;
+         }
+
+         // 3. Category
+         $savedCategory = !empty($notificationData1['category']) ? trim($notificationData1['category']) : '';
+
+         // 4. Class Name
+         $savedClass = !empty($each_inq->class_name) ? trim($each_inq->class_name) : (!empty($notificationData1['classname']) ? trim($notificationData1['classname']) : '');
+         $rawClasses = [];
+         if (!empty($classlist)) {
+             foreach ($classlist as $c) {
+                 $rawClasses[] = is_object($c) ? ($c->class_name ?? '') : (string)$c;
+             }
+         }
+         if (empty($rawClasses)) {
+             $rawClasses = config('global.class_name') ?? [];
+         }
+         if (!empty($savedClass)) {
+             $rawClasses[] = $savedClass;
+         }
+         $allClasses = [];
+         $classSeen = [];
+         foreach ($rawClasses as $cl) {
+             $cl = trim($cl);
+             if ($cl === '') continue;
+             $lower = strtolower($cl);
+             if (!isset($classSeen[$lower])) {
+                 $classSeen[$lower] = true;
+                 if (strcasecmp($savedClass, $cl) === 0) {
+                     $allClasses[] = $savedClass;
+                 } else {
+                     $allClasses[] = $cl;
+                 }
+             }
+         }
+
+         // 5. Session Name
+         $savedSession = !empty($each_inq->session_name) ? trim($each_inq->session_name) : (!empty($notificationData1['session_name']) ? trim($notificationData1['session_name']) : (session('db_names') ?? '2025_2026'));
+         $rawSessions = [];
+         if (!empty($databaseNames) && is_array($databaseNames)) {
+             foreach ($databaseNames as $db) {
+                 if (is_numeric(substr($db, 0, 1))) {
+                     $rawSessions[] = $db;
+                 }
+             }
+         }
+         $globalSessions = config('global.session_name') ?? [];
+         foreach ($globalSessions as $gs) {
+             $rawSessions[] = str_replace('-', '_', $gs);
+         }
+         if (!empty($savedSession)) {
+             $rawSessions[] = $savedSession;
+         }
+         $sessionList = [];
+         $sessionSeen = [];
+         foreach ($rawSessions as $s) {
+             $sKey = str_replace('-', '_', $s);
+             if (!isset($sessionSeen[$sKey])) {
+                 $sessionSeen[$sKey] = true;
+                 if (str_replace('-', '_', $savedSession) === $sKey) {
+                     $sessionList[] = $savedSession;
+                 } else {
+                     $sessionList[] = $s;
+                 }
+             }
+         }
+
+         // 6. Batch Name
+         $savedBatch = (!empty($notificationData1['batch']) && $notificationData1['batch'] !== 'select') ? trim($notificationData1['batch']) : (!empty($each_inq->batch) ? trim($each_inq->batch) : '');
+         $rawBatches = [];
+         if (!empty($databaseNames) && is_array($databaseNames)) {
+             foreach ($databaseNames as $db) {
+                 if (is_numeric(substr($db, 0, 1))) {
+                     $rawBatches[] = $db;
+                 }
+             }
+         }
+         for ($y = 2015; $y <= 2030; $y++) {
+             $rawBatches[] = $y . '_' . ($y + 1);
+         }
+         if (!empty($savedBatch) && $savedBatch !== 'select') {
+             $rawBatches[] = $savedBatch;
+         }
+         $batchList = [];
+         $batchSeen = [];
+         foreach ($rawBatches as $b) {
+             $bKey = str_replace('-', '_', $b);
+             if (!isset($batchSeen[$bKey])) {
+                 $batchSeen[$bKey] = true;
+                 if (str_replace('-', '_', $savedBatch) === $bKey) {
+                     $batchList[] = $savedBatch;
+                 } else {
+                     $batchList[] = $b;
+                 }
+             }
+         }
+         sort($batchList);
+
+         // 7. Caste
+         $savedCaste = (!empty($notificationData1['student_caste']) && $notificationData1['student_caste'] !== '0' && $notificationData1['student_caste'] !== 'select')
+             ? trim($notificationData1['student_caste'])
+             : ((!empty($notificationData1['caste']) && $notificationData1['caste'] !== '0' && $notificationData1['caste'] !== 'select')
+                 ? trim($notificationData1['caste'])
+                 : '');
+         $rawCastes = [];
+         if (!empty($caste) && count($caste) > 0) {
+             foreach ($caste as $c) {
+                 $rawCastes[] = is_object($c) ? ($c->caste_name ?? '') : (string)$c;
+             }
+         }
+         $globalCastes = config('global.caste') ?? [];
+         foreach ($globalCastes as $gc) {
+             $rawCastes[] = $gc;
+         }
+         if (!empty($savedCaste) && $savedCaste !== '0') {
+             $rawCastes[] = $savedCaste;
+         }
+         $casteList = [];
+         $casteSeen = [];
+         foreach ($rawCastes as $c) {
+             $c = trim($c);
+             if ($c === '' || $c === '0') continue;
+             $lower = strtolower($c);
+             if (!isset($casteSeen[$lower])) {
+                 $casteSeen[$lower] = true;
+                 if (strcasecmp($savedCaste, $c) === 0) {
+                     $casteList[] = $savedCaste;
+                 } else {
+                     $casteList[] = $c;
+                 }
+             }
+         }
+         natcasesort($casteList);
+         $casteList = array_values($casteList);
       ?>
       <div class="col-md-12">
          <form novalidate="novalidate" method="post" action="{{url('saveeditregistration')}}" class="rg_form" id="form-id" enctype="multipart/form-data">
@@ -192,18 +375,19 @@
                                                                                                                                                                           
                            </div>
                            <div class="col-md-4 form-group mb-3">
-                              <label for="studentname">Student DOB<b class="validation_err">*</b></label>
-                              <input type="date" name="student_dob" class="form-control" id="student_dob" placeholder="Enter Student DOB" value="<?php if (!empty($notificationData1['student_dob'])) {
-                                                                                                                                                      echo $notificationData1['student_dob'];
-                                                                                                                                                   } ?>" />
+                              <label for="student_dob">Student DOB<b class="validation_err">*</b></label>
+                              <input type="date" name="student_dob" class="form-control" id="student_dob" placeholder="Enter Student DOB" value="{{ $formattedDob }}" required />
                               <span class="student_dob_msg validation_err"></span>
                            </div>
                            <div class="col-md-4 form-group mb-3">
-                              <label for="studentname">Nationality<b class="validation_err">*</b></label>
-                              <input name="nationality" class="form-control uperletter" id="nationality" placeholder="Enter Nationality" value="<?php if (!empty($notificationData1['nationality'])) {
-                                                                                                                                          echo $notificationData1['nationality'];
-                                                                                                                                       } ?>" />
-                              <span class="student_dob_msg validation_err"></span>
+                              <label for="nationality">Nationality<b class="validation_err">*</b></label>
+                              <select id="nationality" class="form-control" name="nationality" required>
+                                 <option value="" disabled {{ empty($savedNationality) ? 'selected' : '' }}>Please select</option>
+                                 @foreach($nationalityOptions as $natOption)
+                                    <option value="{{ $natOption }}" {{ (strcasecmp($savedNationality, $natOption) === 0 || (strcasecmp($savedNationality, 'INDIA') === 0 && strcasecmp($natOption, 'Indian') === 0)) ? 'selected' : '' }}>{{ $natOption }}</option>
+                                 @endforeach
+                              </select>
+                              <span class="nationality_msg validation_err"></span>
                            </div>
 
                            {{-- <div class="col-md-4 form-group mb-3">
@@ -235,30 +419,11 @@
                            </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="Caste">Caste<b class="validation_err">*</b></label>
-                              <!-- <input class="form-control Caste" id="Caste" placeholder="Student Caste" name="student_caste" /> -->
-                              <select id="Caste" class="form-control Caste select2" name="student_caste" autocomplete="" data-placeholder="Please select caste">
-                                 <option value="" disabled selected>Please select</option>
-                                 @if(!empty($caste) && count($caste) > 0)
-                                     @foreach($caste as $each)
-                                     <option <?php if (!empty($notificationData1['student_caste'])) {
-                                                 if ($notificationData1['student_caste'] == $each->caste_name) {
-                                                    echo "selected";
-                                                 }
-                                              } ?> value="{{$each->caste_name}}">{{$each->caste_name}}</option>
-                                     @endforeach
-                                 @else
-                                     @php
-                                        $globalCastes = config('global.caste') ?? [];
-                                        natcasesort($globalCastes);
-                                     @endphp
-                                     @foreach($globalCastes as $each)
-                                     <option <?php if (!empty($notificationData1['student_caste'])) {
-                                                 if ($notificationData1['student_caste'] == $each) {
-                                                    echo "selected";
-                                                 }
-                                              } ?> value="{{$each}}">{{$each}}</option>
-                                     @endforeach
-                                 @endif
+                              <select id="Caste" class="form-control Caste select2" name="student_caste" data-placeholder="Please select caste">
+                                 <option value="" disabled {{ empty($savedCaste) ? 'selected' : '' }}>Please select caste</option>
+                                 @foreach($casteList as $eachCaste)
+                                    <option value="{{ $eachCaste }}" {{ (strcasecmp($savedCaste, $eachCaste) === 0) ? 'selected' : '' }}>{{ $eachCaste }}</option>
+                                 @endforeach
                               </select>
                               <span class="student_caste_msg validation_err"></span>
                            </div>
@@ -276,93 +441,49 @@
                               </select>
                               <span class="religion validation_err"></span>
                            </div>
-                           {{-- <div class="col-md-4 form-group mb-3">
-                              <label for="category">Category<b class="validation_err">*</b></label>
-                              <select id="category" class="form-control" name="category" autocomplete="" required>
-                                 <option value="" disabled selected>Please select</option>
-                                 @foreach(config('global.cate') as $each)
-                                 <option </?php if ($notificationData1['category'] == $each) {
-                                             echo "selected";
-                                          } ?> value="{{$each}}">{{$each}}</option>
-                                 @endforeach
-                              </select>
-                              <span class="category_msg validation_err"></span>
-                           </div> --}}
-
-
                            <div class="col-md-4 form-group mb-3">
                               <label for="category">Category<b class="validation_err">*</b></label>
-                              <select id="category" class="form-control" name="category" autocomplete="" required>
-                                  <option value="" disabled selected>Please select</option>
+                              <select id="category" class="form-control" name="category" required>
+                                  <option value="" disabled {{ empty($savedCategory) ? 'selected' : '' }}>Please select</option>
                                   @foreach(config('global.cate') as $each)
-                                      <option value="{{$each}}" {{ isset($notificationData1['category']) && $notificationData1['category'] == $each ? 'selected' : '' }}>
-                                          {{$each}}
+                                      <option value="{{ $each }}" {{ (strcasecmp($savedCategory, $each) === 0) ? 'selected' : '' }}>
+                                          {{ $each }}
                                       </option>
                                   @endforeach
                               </select>
                               <span class="category_msg validation_err"></span>
-                          </div>
+                           </div>
                 
                            <div class="col-md-4 form-group mb-3">
-                              <label for="firstName1">Class Name<b class="validation_err">*</b></label>
-                              <select id="classname" class="form-control" name="classname" autocomplete="" required>
-                                 <option disabled selected>Please select</option>
-                                 @foreach(config('global.class_name') as $each)
-                                 <option <?php if ($each_inq->class_name == $each) {
-                                             echo "selected";
-                                          } ?> value="{{$each}}">{{$each}}</option>
+                              <label for="classname">Class Name<b class="validation_err">*</b></label>
+                              <select id="classname" class="form-control" name="classname" required>
+                                 <option value="" disabled {{ empty($savedClass) ? 'selected' : '' }}>Please select</option>
+                                 @foreach($allClasses as $each)
+                                    <option value="{{ $each }}" {{ ((string)$savedClass === (string)$each || (is_numeric($savedClass) && is_numeric($each) && (int)$savedClass === (int)$each) || strcasecmp($savedClass, $each) === 0) ? 'selected' : '' }}>{{ $each }}</option>
                                  @endforeach
                               </select>
                               <span class="classname_msg validation_err"></span>
-
                            </div>
                            <div class="col-md-4 form-group mb-3">
-                              <label for="firstName1">Session Name<b class="validation_err">*</b></label>
-                              <input type="text" readonly id="session_name" class="form-control" value="{{ $each_inq->session_name ?? (session('db_names') ?? ($_COOKIE['selectedYear'] ?? '2026_2027')) }}" name="session_name">
-                              <!-- <select id="session_name" class="form-control" name="session_name" autocomplete="" required>
-                                 <option disabled selected>Please select</option>
-                                 @foreach(config('global.session_name') as $each)
-                                 <option <?php //if ($each_inq->session_name == $each) {
-                                             //echo "selected";
-                                          //} ?> value="{{$each}}">{{$each}}</option>
+                              <label for="session_name">Session Name<b class="validation_err">*</b></label>
+                              <select id="session_name" class="form-control" name="session_name" required>
+                                 <option value="" disabled {{ empty($savedSession) ? 'selected' : '' }}>Please select</option>
+                                 @foreach($sessionList as $eachSession)
+                                    <option value="{{ $eachSession }}" {{ ($savedSession === $eachSession) ? 'selected' : '' }}>{{ $eachSession }}</option>
                                  @endforeach
-                              </select> -->
+                              </select>
                               <span class="session_name_msg validation_err"></span>
-
                            </div>
                            <div class="col-md-4 form-group mb-3">
-                                        <label for="firstName1">Batch Name<b class="validation_err">*</b></label>
-                                        <!-- <input type="text" readonly id="session_name" class="form-control" value="" name="session_name"> -->
-                                        <?php 
-                                            $currentYear = date('Y') + 1;
-                                            $nextYear = date('Y') + 2;
-                                            $nextSchoolYear = $currentYear . '_' . $nextYear;
-                                            $currentSchoolYear = session('db_names');
-                                            
-                                        ?>
-                                        
-                                        <select name="batch" id="batch" class="form-control" >
-                                            <option value="select" selected> - Year - </option>
-                                            @foreach($databaseNames as $databaseName)
-                                                @if (is_numeric(substr($databaseName, 0, 1)))
-                                                   <?php 
-                                                      if(!empty($notificationData1['batch'])){ ?>
-                                                      <?php if($notificationData1['batch'] == $databaseName){ ?>
-                                                         <option selected value=<?php echo $databaseName; ?> ><?php echo $databaseName; ?></option>
-                                                      <?php } else { ?>
-                                                         <option value=<?php echo $databaseName; ?> ><?php echo $databaseName; ?></option>
-                                                      <?php }?>
-                                                   <?php } else { ?>
-                                                      <option value=<?php echo $databaseName; ?> ><?php echo $databaseName; ?></option>
-                                                   <?php } ?>
-                                                   
-                                                @endif
-                                            @endforeach
-                                            <!-- <option value="<?php //echo $nextSchoolYear; ?>"><?php //echo $nextSchoolYear; ?></option> -->
-                                        </select>
-                                        <span class="session_name_msg validation_err"></span>
-
-                                    </div>
+                              <label for="batch">Batch Name<b class="validation_err">*</b></label>
+                              <select name="batch" id="batch" class="form-control" required>
+                                 <option value="select" disabled {{ empty($savedBatch) || $savedBatch === 'select' ? 'selected' : '' }}> - Year - </option>
+                                 @foreach($batchList as $b)
+                                    <option value="{{ $b }}" {{ ($savedBatch === $b) ? 'selected' : '' }}>{{ $b }}</option>
+                                 @endforeach
+                              </select>
+                              <span class="batch_msg validation_err"></span>
+                           </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="address">Present Address :</label>
                               <input class="form-control uperletter" id="address" type="text" placeholder="Enter Present Address" name="present_address" value="<?php if (!empty($notificationData1['present_address'])) {
@@ -1242,21 +1363,58 @@
                $('input[name="form_number"]').val(response.inq_data.form_number);
                $('select[name="studentname_prefix"]').val(response.inq_str_data.studentname_prefix);
                $('input[name="studentname"]').val(response.inq_data.student_name);
-               $('input[name="student_dob"]').val(response.inq_data.date_of_birth);
-               $('select[name="gender"]').val(response.inq_str_data.gender);
-               if (response.inq_str_data && response.inq_str_data.caste) {
-                  if ($('select[name="student_caste"] option[value="' + response.inq_str_data.caste + '"]').length === 0) {
-                     var newCasteOption = new Option(response.inq_str_data.caste, response.inq_str_data.caste, true, true);
-                     $('select[name="student_caste"]').append(newCasteOption);
+               if (response.inq_data.date_of_birth) {
+                  var rawDobVal = response.inq_data.date_of_birth;
+                  if (rawDobVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                     $('input[name="student_dob"]').val(rawDobVal);
+                  } else {
+                     var parts = rawDobVal.split(/[-\/\.]/);
+                     if (parts.length === 3) {
+                        var yPart = parts[2].length === 2 ? '20' + parts[2] : (parts[2].startsWith('00') ? '20' + parts[2].substr(2) : parts[2]);
+                        $('input[name="student_dob"]').val(yPart + '-' + parts[1].padStart(2, '0') + '-' + parts[0].padStart(2, '0'));
+                     } else {
+                        $('input[name="student_dob"]').val(rawDobVal);
+                     }
                   }
-                  $('select[name="student_caste"]').val(response.inq_str_data.caste).trigger('change');
+               }
+               if (response.inq_str_data && response.inq_str_data.nationality) {
+                  var natVal = response.inq_str_data.nationality;
+                  if ($('select[name="nationality"] option[value="' + natVal + '"]').length === 0) {
+                     $('select[name="nationality"]').append(new Option(natVal, natVal, true, true));
+                  }
+                  $('select[name="nationality"]').val(natVal);
+               }
+               $('select[name="gender"]').val(response.inq_str_data.gender);
+               if (response.inq_str_data && (response.inq_str_data.caste || response.inq_str_data.student_caste)) {
+                  var castePick = response.inq_str_data.student_caste || response.inq_str_data.caste;
+                  if (castePick && castePick !== '0') {
+                     if ($('select[name="student_caste"] option[value="' + castePick + '"]').length === 0) {
+                        var newCasteOption = new Option(castePick, castePick, true, true);
+                        $('select[name="student_caste"]').append(newCasteOption);
+                     }
+                     $('select[name="student_caste"]').val(castePick).trigger('change');
+                  }
                }
                $('select[name="religion"]').val(response.inq_str_data.religion);
                $('select[name="category"]').val(response.inq_str_data.category);
-               $('select[name="classname"]').val(response.inq_data.class_name);
-               $('[name="session_name"]').val(response.inq_data.session_name || $("#session_name").val());
-               if ($('[name="session_name"]').val()) {
-                  $('.session_name_msg').text("");
+               if (response.inq_data.class_name) {
+                  if ($('select[name="classname"] option[value="' + response.inq_data.class_name + '"]').length === 0) {
+                     $('select[name="classname"]').append(new Option(response.inq_data.class_name, response.inq_data.class_name, true, true));
+                  }
+                  $('select[name="classname"]').val(response.inq_data.class_name);
+               }
+               if (response.inq_data.session_name) {
+                  if ($('select[name="session_name"] option[value="' + response.inq_data.session_name + '"]').length === 0) {
+                     $('select[name="session_name"]').append(new Option(response.inq_data.session_name, response.inq_data.session_name, true, true));
+                  }
+                  $('select[name="session_name"]').val(response.inq_data.session_name);
+               }
+               if (response.inq_str_data && response.inq_str_data.batch) {
+                  var bVal = response.inq_str_data.batch;
+                  if ($('select[name="batch"] option[value="' + bVal + '"]').length === 0) {
+                     $('select[name="batch"]').append(new Option(bVal, bVal, true, true));
+                  }
+                  $('select[name="batch"]').val(bVal);
                }
                $('input[name="present_address"]').val(response.inq_str_data.address);
                $('input[name="permanent_address"]').val(response.inq_str_data.address);
@@ -1291,91 +1449,111 @@
 
       var application_for = $('select[name="application_for"]').val();
       var registration_date = $('input[name="registration_date"]').val();
-      var student_name = $('input[name="student_name"]').val();
-      var student_dob = $('input[name="student_dob"]').val();
-      var student_caste = $('select[name="student_caste"]').val() || $('input[name="student_caste"]').val();
-      var religion = $('select[name="religion"]').val();
-      var classname = $('select[name="classname"]').val();
-      var session_name = $('[name="session_name"]').val();
+      var student_name = $('input[name="studentname"]').val() || $('input[name="student_name"]').val() || '';
+      student_name = $.trim(student_name);
+      var student_dob = $('input[name="student_dob"]').val() || '';
+      student_dob = $.trim(student_dob);
+      var nationality = $('select[name="nationality"], input[name="nationality"]').val() || '';
+      nationality = $.trim(nationality);
+      var student_caste = $('select[name="student_caste"]').val() || $('input[name="student_caste"]').val() || '';
+      student_caste = $.trim(student_caste);
+      var religion = $('select[name="religion"]').val() || '';
+      religion = $.trim(religion);
+      var category = $('select[name="category"]').val() || '';
+      category = $.trim(category);
+      var classname = $('select[name="classname"]').val() || '';
+      classname = $.trim(classname);
+      var session_name = $('[name="session_name"]').val() || '';
+      session_name = $.trim(session_name);
+      var batch = $('select[name="batch"]').val() || '';
+      batch = $.trim(batch);
 
-      if (!registration_date || registration_date.trim() == '') {
+      var isValid = true;
+
+      if (!registration_date || registration_date.trim() === '') {
          $('.registration_date_msg').text("This field is required*");
+         isValid = false;
       } else {
          $('.registration_date_msg').text("");
       }
 
-      if (application_for == null) {
+      if (!application_for || application_for === '' || application_for === 'Please Select') {
          $('.application_for_msg').text("This field is required*");
-         allinputmsg = '1';
+         isValid = false;
       } else {
-
          $('.application_for_msg').text("");
       }
 
-      if (student_name == null) {
+      if (!student_name || student_name === '') {
          $('.student_name_msg').text("This field is required*");
-         allinputmsg = '1';
+         isValid = false;
       } else {
-
          $('.student_name_msg').text("");
       }
 
-      if (student_dob == '') {
+      if (!student_dob || student_dob === '') {
          $('.student_dob_msg').text("This field is required*");
+         isValid = false;
       } else {
          $('.student_dob_msg').text("");
-
       }
 
-      if (student_caste == '' || student_caste == null) {
+      if (!nationality || nationality === '' || nationality === 'select') {
+         $('.nationality_msg').text("This field is required*");
+         isValid = false;
+      } else {
+         $('.nationality_msg').text("");
+      }
+
+      if (!student_caste || student_caste === '' || student_caste === '0' || student_caste === 'select') {
          $('.student_caste_msg').text("This field is required*");
+         isValid = false;
       } else {
          $('.student_caste_msg').text("");
-
       }
 
-      if (religion == '') {
+      if (!religion || religion === '' || religion === 'select') {
          $('.religion_msg').text("This field is required*");
+         isValid = false;
       } else {
          $('.religion_msg').text("");
-
       }
 
-      if (classname == null) {
-
-         $('.classname_msg').text("This field is required*");
-      } else {
-         $('.classname_msg').text("");
-
-      }
-
-      if (!session_name || session_name.trim() == '') {
-         $('.session_name_msg').text("This field is required*");
-      } else {
-         $('.session_name_msg').text("");
-
-      }
-
-      if (category == null) {
+      if (!category || category === '' || category === 'select') {
          $('.category_msg').text("This field is required*");
+         isValid = false;
       } else {
          $('.category_msg').text("");
-
       }
 
-      if (application_for !== null && student_name !== '' && student_dob !== '' && student_caste !== '' && student_caste !== null && religion !== '' && classname !== null && session_name !== null && category !== null && registration_date && registration_date.trim() !== '') {
-         var myForm = document.getElementById("form-id");
-         event.preventDefault();
-         HTMLFormElement.prototype.submit.call(myForm);
+      if (!classname || classname === '' || classname === 'select') {
+         $('.classname_msg').text("This field is required*");
+         isValid = false;
+      } else {
+         $('.classname_msg').text("");
+      }
 
+      if (!session_name || session_name === '' || session_name === 'select') {
+         $('.session_name_msg').text("This field is required*");
+         isValid = false;
+      } else {
+         $('.session_name_msg').text("");
+      }
+
+      if (!batch || batch === '' || batch === 'select') {
+         $('.batch_msg').text("This field is required*");
+         isValid = false;
+      } else {
+         $('.batch_msg').text("");
+      }
+
+      if (isValid) {
+         $('.allinput_msg').text("");
+         var myForm = document.getElementById("form-id");
+         HTMLFormElement.prototype.submit.call(myForm);
       } else {
          $('.allinput_msg').text("All required fields must be completed before you submit the form*");
-         if (allinputmsg == "1") {
-            $("#step1").addClass('s1');
-
-         } else {
-            $("#step1").removeClass('s1');
-         }
+         $("#step1").addClass('s1');
          console.log("invalid form");
       }
 
@@ -1857,10 +2035,20 @@
          });
       }
 
-      setTimeout(function() {
-         var year = $("#year").val();
-         $("#session_name").val(year);
-      }, 1000);
+      $('input[name="studentname"], input[name="student_dob"], select[name="nationality"], select[name="category"], select[name="classname"], select[name="session_name"], select[name="batch"], select[name="student_caste"], select[name="religion"], select[name="application_for"], input[name="registration_date"]').on('input change', function() {
+         var name = $(this).attr('name');
+         if (name === 'studentname') $('.student_name_msg').text('');
+         if (name === 'student_dob') $('.student_dob_msg').text('');
+         if (name === 'nationality') $('.nationality_msg').text('');
+         if (name === 'category') $('.category_msg').text('');
+         if (name === 'classname') $('.classname_msg').text('');
+         if (name === 'session_name') $('.session_name_msg').text('');
+         if (name === 'batch') $('.batch_msg').text('');
+         if (name === 'student_caste') $('.student_caste_msg').text('');
+         if (name === 'religion') $('.religion_msg').text('');
+         if (name === 'application_for') $('.application_for_msg').text('');
+         if (name === 'registration_date') $('.registration_date_msg').text('');
+      });
    });
 </script>
 

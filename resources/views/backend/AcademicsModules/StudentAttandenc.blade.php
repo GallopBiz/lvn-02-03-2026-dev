@@ -3,7 +3,7 @@
 <style>
     .attendance-page { color: #24324b; }
     .attendance-panel { background: #fff; border: 1px solid #e7edf5; border-radius: 8px; box-shadow: 0 8px 20px rgba(36, 50, 75, .05); padding: 20px; }
-    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
     .summary-card { border: 1px solid #e7edf5; border-radius: 8px; padding: 14px; background: #f8fbff; }
     .summary-card span { display:block; color:#69758a; font-size:12px; text-transform:uppercase; }
     .summary-card strong { font-size:24px; }
@@ -98,12 +98,23 @@
         </form>
     </div>
 
-    <div class="summary-grid mb-3">
-        <div class="summary-card"><span>{{ $selectedStudent ? 'Total Working Days' : 'Total Records' }}</span><strong>{{ $summary['total_students'] }}</strong></div>
-        <div class="summary-card"><span>Total Present</span><strong>{{ $summary['present'] }}</strong></div>
-        <div class="summary-card"><span>Total Absent</span><strong>{{ $summary['absent'] }}</strong></div>
-        <div class="summary-card"><span>Attendance %</span><strong>{{ number_format($summary['percentage'], 2) }}%</strong></div>
-    </div>
+    @if($selectedStudent)
+        <div class="summary-grid mb-3">
+            <div class="summary-card"><span>School Working Days</span><strong>{{ $summary['school_working_days'] }}</strong></div>
+            <div class="summary-card"><span>Student Working Days</span><strong>{{ $summary['student_working_days'] }}</strong></div>
+            <div class="summary-card"><span>Total Present</span><strong>{{ $summary['present'] }}</strong></div>
+            <div class="summary-card"><span>Total Absent</span><strong>{{ $summary['absent'] }}</strong></div>
+            <div class="summary-card"><span>Total Leave</span><strong>{{ $summary['leave'] }}</strong></div>
+            <div class="summary-card"><span>Attendance %</span><strong>{{ number_format($summary['percentage'], 2) }}%</strong></div>
+        </div>
+    @else
+        <div class="summary-grid mb-3">
+            <div class="summary-card"><span>Total Records</span><strong>{{ $summary['total_students'] }}</strong></div>
+            <div class="summary-card"><span>Total Present</span><strong>{{ $summary['present'] }}</strong></div>
+            <div class="summary-card"><span>Total Absent</span><strong>{{ $summary['absent'] }}</strong></div>
+            <div class="summary-card"><span>Attendance %</span><strong>{{ number_format($summary['percentage'], 2) }}%</strong></div>
+        </div>
+    @endif
 
     <div class="attendance-panel">
         <h4 class="mb-1">{{ $selectedStudent ? $selectedStudent->student_name . ' - Attendance History' : 'All Students Attendance Report' }}</h4>

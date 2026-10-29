@@ -674,12 +674,20 @@ class AttendanceController extends Controller
             optional($classObj)->class_name
         ])));
 
+        $session = $filters['academic_session'] ?? '';
+        $sessionVariants = array_unique(array_filter([
+            $session,
+            str_replace('_', '-', $session),
+            str_replace('-', '_', $session),
+        ]));
+
         // Count only days where attendance was recorded for this class/section
+        // School Working Days: Leave days must be counted as school working days
         $recordedDaysQuery = Attendance::query()
             ->where('is_delete', 0)
             ->whereIn('class_id', $classIds)
             ->where('section_name', $filters['section_name'])
-            ->where('academic_session', $filters['academic_session'])
+            ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('academic_session', $sessionVariants))
             ->whereBetween('attendance_date', [$filters['start_date'], $filters['end_date']])
             ->where(function ($q) {
                 $q->where('total_students', '>', 0)
@@ -695,7 +703,7 @@ class AttendanceController extends Controller
                 ->where('academic_attendance.is_delete', 0)
                 ->whereIn('academic_attendance.class_id', $classIds)
                 ->where('academic_attendance.section_name', $filters['section_name'])
-                ->where('academic_attendance.academic_session', $filters['academic_session'])
+                ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('academic_attendance.academic_session', $sessionVariants))
                 ->whereBetween('academic_attendance.attendance_date', [$filters['start_date'], $filters['end_date']])
                 ->where('academic_attendance_details.status', 'present')
                 ->whereIn('academic_attendance_details.student_id', $studentIds)
@@ -707,14 +715,14 @@ class AttendanceController extends Controller
                 ->pluck('present_days', 'student_id')
             : collect();
 
-        // Student working days exclude days marked as PL or Leave
+        // Student working days: Leave days and PL must NOT be counted as the individual student's working days
         $studentWorkingCounts = $studentIds->isNotEmpty()
             ? AttendanceDetail::query()
                 ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
                 ->where('academic_attendance.is_delete', 0)
                 ->whereIn('academic_attendance.class_id', $classIds)
                 ->where('academic_attendance.section_name', $filters['section_name'])
-                ->where('academic_attendance.academic_session', $filters['academic_session'])
+                ->when(!empty($sessionVariants), fn ($q) => $q->whereIn('academic_attendance.academic_session', $sessionVariants))
                 ->whereBetween('academic_attendance.attendance_date', [$filters['start_date'], $filters['end_date']])
                 ->whereIn('academic_attendance_details.status', ['present', 'half_day', 'absent'])
                 ->whereIn('academic_attendance_details.student_id', $studentIds)
@@ -726,17 +734,19 @@ class AttendanceController extends Controller
                 ->pluck('working_days', 'student_id')
             : collect();
 
-        $rows = $students->map(function ($student) use ($presentCounts, $studentWorkingCounts) {
+        $rows = $students->map(function ($student) use ($presentCounts, $studentWorkingCounts, $workingDays) {
             $presentDays = (int) ($presentCounts[$student->id] ?? 0);
             $studentWorkingDays = (int) ($studentWorkingCounts[$student->id] ?? 0);
-            $percentage = $studentWorkingDays > 0 ? round(($presentDays / $studentWorkingDays) * 100, 2) : 0;
+            // School Working Days: Leave days must be counted as school working days
+            $percentage = $workingDays > 0 ? round(($presentDays / $workingDays) * 100, 2) : 0;
 
             return [
                 'student_id' => $student->id,
                 'student_name' => $student->student_name,
                 'scholar_no' => $student->scholar_no ?: $student->form_number,
                 'present_days' => $presentDays,
-                'working_days' => $studentWorkingDays,
+                'working_days' => $workingDays,
+                'student_working_days' => $studentWorkingDays,
                 'percentage' => $percentage,
                 'is_below_minimum' => $percentage < 75,
             ];
@@ -863,12 +873,20 @@ class AttendanceController extends Controller
             $prevStart = $sessionStart->copy();
             $prevEnd = $start->copy()->subDay()->endOfDay();
 
+            $session = !empty($filters['academic_session']) ? $filters['academic_session'] : null;
+            $sessionVariants = $session ? array_unique([
+                $session,
+                str_replace('_', '-', $session),
+                str_replace('-', '_', $session),
+            ]) : [];
+
+            // School Working Days: Leave days must be counted as school working days
             $prevQuery = Attendance::where('is_delete', 0)
                 ->whereIn('class_id', $classIds)
                 ->where('section_name', $filters['section_name'])
                 ->whereBetween('attendance_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
-                ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
-                    $q->where('academic_session', $filters['academic_session']);
+                ->when(!empty($sessionVariants), function ($q) use ($sessionVariants) {
+                    $q->whereIn('academic_session', $sessionVariants);
                 });
             $this->applyWorkingDayOnlyFilter($prevQuery);
             $prevWorkingDays = (int) $prevQuery->distinct('attendance_date')->count('attendance_date');
@@ -880,8 +898,8 @@ class AttendanceController extends Controller
                 ->where('academic_attendance.section_name', $filters['section_name'])
                 ->whereBetween('academic_attendance.attendance_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
                 ->whereIn('academic_attendance_details.status', ['present', 'half_day'])
-                ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
-                    $q->where('academic_attendance.academic_session', $filters['academic_session']);
+                ->when(!empty($sessionVariants), function ($q) use ($sessionVariants) {
+                    $q->whereIn('academic_attendance.academic_session', $sessionVariants);
                 })
                 ->when(true, function ($q) {
                     $this->applyWorkingDayOnlyFilter($q);
@@ -896,15 +914,16 @@ class AttendanceController extends Controller
                 ->groupBy('academic_attendance_details.student_id')
                 ->pluck('total_present', 'student_id');
 
+            // School Working Days: Leave days must be counted as school working days
             $prevStudentWorkingQuery = AttendanceDetail::query()
                 ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
                 ->where('academic_attendance.is_delete', 0)
                 ->whereIn('academic_attendance.class_id', $classIds)
                 ->where('academic_attendance.section_name', $filters['section_name'])
                 ->whereBetween('academic_attendance.attendance_date', [$prevStart->toDateString(), $prevEnd->toDateString()])
-                ->whereIn('academic_attendance_details.status', ['present', 'half_day', 'absent'])
-                ->when(!empty($filters['academic_session']), function ($q) use ($filters) {
-                    $q->where('academic_attendance.academic_session', $filters['academic_session']);
+                ->whereIn('academic_attendance_details.status', ['present', 'half_day', 'absent', 'leave', 'pl'])
+                ->when(!empty($sessionVariants), function ($q) use ($sessionVariants) {
+                    $q->whereIn('academic_attendance.academic_session', $sessionVariants);
                 })
                 ->when(true, function ($q) {
                     $this->applyWorkingDayOnlyFilter($q);
@@ -983,8 +1002,8 @@ class AttendanceController extends Controller
                     'title' => $status ? ucwords(str_replace('_', ' ', $status)) : 'Not marked',
                 ];
 
-                // If a student is marked as PL (Present Leave) or Leave, that day should not be counted as a working day for that student
-                if (in_array($status, ['present', 'half_day', 'absent'])) {
+                // School Working Days: Leave days must be counted as school working days
+                if (in_array($status, ['present', 'half_day', 'absent', 'leave', 'pl'])) {
                     $workingDays++;
                 }
 
@@ -1281,21 +1300,30 @@ class AttendanceController extends Controller
 
     private function summaryFromDetails($details): array
     {
-        $counts = collect($details)->countBy('status');
+        $collection = collect($details);
+        $counts = $collection->countBy('status');
         $pl = (int) ($counts['pl'] ?? 0);
         $leave = (int) ($counts['leave'] ?? 0);
-        $workingDays = max(0, collect($details)->count() - $pl - $leave);
         $present = (int) ($counts['present'] ?? 0);
         $halfDay = (int) ($counts['half_day'] ?? 0);
+        $absent = (int) ($counts['absent'] ?? 0);
+
+        // School Working Days: Leave days must be counted as school working days
+        $schoolWorkingDays = $collection->count();
+
+        // Student Working Days: Leave days must not be counted as individual student's working days
+        $studentWorkingDays = max(0, $schoolWorkingDays - $pl - $leave);
 
         return [
-            'total_students' => $workingDays,
+            'total_students' => $schoolWorkingDays,
+            'school_working_days' => $schoolWorkingDays,
+            'student_working_days' => $studentWorkingDays,
             'present' => $present,
-            'absent' => (int) ($counts['absent'] ?? 0) + $leave,
+            'absent' => $absent + $leave,
             'leave' => $leave,
             'half_day' => $halfDay,
             'pl' => $pl,
-            'percentage' => $workingDays ? round((($present + ($halfDay * 0.5)) / $workingDays) * 100, 2) : 0,
+            'percentage' => $studentWorkingDays ? round((($present + ($halfDay * 0.5)) / $studentWorkingDays) * 100, 2) : 0,
         ];
     }
 
@@ -1303,6 +1331,8 @@ class AttendanceController extends Controller
     {
         return [
             'total_students' => $total,
+            'school_working_days' => $total,
+            'student_working_days' => $total,
             'present' => 0,
             'absent' => 0,
             'leave' => 0,
