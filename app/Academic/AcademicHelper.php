@@ -282,9 +282,10 @@ class AcademicHelper
             }
         }
 
-        // Rule 4: If no class is selected, the subject should appear in the main marks table for all classes.
+        // If Special Subject Formatting is checked and no specific classes are restricted,
+        // it applies to all classes of this subject.
         if (empty($selectedClasses)) {
-            return false;
+            return true;
         }
 
         // Resolve target class name if not provided

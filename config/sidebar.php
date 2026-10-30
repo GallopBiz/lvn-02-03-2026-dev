@@ -3,9 +3,10 @@ return [
     [
         'title' => 'Dashboard',
         'route' => 'admin-dashboard',
+        'staff_route' => 'staff.dashboard',
         'icon' => 'i-Bar-Chart',
         'permission' => 'dashboard',
-        'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
+        'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)', 'Staff'],
     ],
 	[
         'title' => 'Scholars',

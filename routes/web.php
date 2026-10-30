@@ -231,6 +231,8 @@ Route::middleware(['auth:web,staff'])->group(function () {
     Route::get('view-marks/{id}', [MarksController::class, 'view']);
     Route::post('store-marks', [MarksController::class, 'store']);
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
+    Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
+    Route::post('lock-current-marks-entry', [MarksController::class, 'lockCurrentEntry'])->name('lock-current-marks-entry');
     Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata']);
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject']);
@@ -245,6 +247,10 @@ Route::middleware(['auth:web,staff'])->group(function () {
 });
 
 Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(function () {
+    Route::get('attendance/monthly-report', [AcademicAttendanceController::class, 'monthlyReport'])->name('attendance.monthly-report');
+    Route::get('attendance/monthly-lock', [AcademicAttendanceController::class, 'monthlyReport'])->name('attendance.monthly-lock');
+    Route::post('attendance/monthly-lock', [AcademicAttendanceController::class, 'lockMonth'])->name('attendance.monthly-lock.store');
+
     Route::get('marks', [MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks'])->name('show_report_marks');
     Route::post('show_report_markss', [MarksController::class, 'show_report_markss'])->name('show_report_markss');
@@ -256,6 +262,7 @@ Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(functi
     Route::post('store-marks', [MarksController::class, 'store'])->name('store-marks');
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete'])->name('delete-marks');
     Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
+    Route::post('lock-current-marks-entry', [MarksController::class, 'lockCurrentEntry'])->name('lock-current-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata'])->name('getteachersdata');
     Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject'])->name('getteachersandsubject');
     Route::get('teacher-remark-entry', [TeacherRemarkEntryController::class, 'index'])->name('teacher-remark-entry');
@@ -482,6 +489,9 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('Attandencelist',[AttendanceController::class, 'index'])->name('Attandencelist');
     Route::get('Attandencereports',[AcademicAttendanceController::class, 'reports'])->name('Attandencereports');
     Route::get('academic/attendance-monthly-report',[AcademicAttendanceController::class, 'monthlyReport'])->name('academic.attendance.monthly-report');
+    Route::post('academic/attendance-monthly-locks/{lock}/unlock', [AcademicAttendanceController::class, 'unlockMonth'])
+        ->middleware('admin')
+        ->name('academic.attendance.monthly-lock.unlock');
     Route::get('academic.attendance.monthly-report',[AcademicAttendanceController::class, 'monthlyReport']);
     Route::get('monthly-attendance-report',[AcademicAttendanceController::class, 'monthlyReport'])->name('monthly-attendance-report');
     Route::get('academic/attendance-collective',[AcademicAttendanceController::class, 'collective'])->name('academic.attendance.collective');

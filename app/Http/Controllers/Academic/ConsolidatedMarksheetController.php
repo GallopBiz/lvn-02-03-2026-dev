@@ -193,7 +193,8 @@ class ConsolidatedMarksheetController extends Controller
             'marks_count' => $marks->count(),
             'is_term_1' => $isTerm1,
             'show_term_2' => $showTerm2,
-            'special_subject_names' => $this->specialSubjectNames(),
+            'special_subject_names' => $this->specialSubjectNames((int) ($class->id ?? 0), $class->class_name ?? null),
+            'special_subject_ids' => $this->specialSubjectIds((int) ($class->id ?? 0), $class->class_name ?? null),
         ];
     }
 
@@ -660,7 +661,7 @@ class ConsolidatedMarksheetController extends Controller
             $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
         }
 
-        $classModel = Classes::find($classId);
+        $classModel = Classes::find($classId) ?: Classname::find($classId);
         $specialIds = $this->specialSubjectIds($classId, $classModel?->class_name);
         if (!empty($specialIds)) {
             $query->whereNotIn('s.id', $specialIds);
@@ -1148,8 +1149,12 @@ class ConsolidatedMarksheetController extends Controller
             return [];
         }
 
-        $subjects = DB::connection('dynamic')
-            ->table('subjectmaster')
+        if (empty($className) && !empty($classId)) {
+            $classObj = Classes::find($classId) ?: Classname::find($classId);
+            $className = $classObj?->class_name;
+        }
+
+        $query = DB::connection('dynamic')->table('subjectmaster')
             ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
                 if ($hasDoNotPrint) {
                     $q->orWhere('do_not_print_in_main_scholastic_area', 1);
@@ -1157,8 +1162,15 @@ class ConsolidatedMarksheetController extends Controller
                 if ($hasSpecialFormatting) {
                     $q->orWhere('special_subject_formatting', 1);
                 }
-            })
-            ->get();
+            });
+
+        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+            $query->where(function ($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            });
+        }
+
+        $subjects = $query->get();
 
         return $subjects->filter(function ($sub) use ($classId, $className) {
             return \App\Academic\AcademicHelper::isSpecialFormattingForClass($sub, $classId, $className);
@@ -1178,8 +1190,12 @@ class ConsolidatedMarksheetController extends Controller
             return [];
         }
 
-        $subjects = DB::connection('dynamic')
-            ->table('subjectmaster')
+        if (empty($className) && !empty($classId)) {
+            $classObj = Classes::find($classId) ?: Classname::find($classId);
+            $className = $classObj?->class_name;
+        }
+
+        $query = DB::connection('dynamic')->table('subjectmaster')
             ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
                 if ($hasDoNotPrint) {
                     $q->orWhere('do_not_print_in_main_scholastic_area', 1);
@@ -1187,8 +1203,15 @@ class ConsolidatedMarksheetController extends Controller
                 if ($hasSpecialFormatting) {
                     $q->orWhere('special_subject_formatting', 1);
                 }
-            })
-            ->get();
+            });
+
+        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+            $query->where(function ($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            });
+        }
+
+        $subjects = $query->get();
 
         return $subjects->filter(function ($sub) use ($classId, $className) {
             return \App\Academic\AcademicHelper::isSpecialFormattingForClass($sub, $classId, $className);

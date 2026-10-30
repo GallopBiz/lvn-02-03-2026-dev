@@ -174,11 +174,69 @@ $staffUser = Auth::guard('staff')->user();
 					array_unshift($menu, [
 						'title' => 'Dashboard',
 						'route' => 'admin-dashboard',
+						'staff_route' => 'staff.dashboard',
 						'icon' => 'i-Bar-Chart',
 						'permission' => 'dashboard',
-						'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)'],
+						'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)', 'Staff'],
 					]);
 				}
+			}
+
+			if (isStaffRouteRequest() && Auth::guard('staff')->check()) {
+				$academicIndex = null;
+				foreach ($menu as $index => $item) {
+					if (strtolower($item['title'] ?? '') === 'academic') {
+						$academicIndex = $index;
+						break;
+					}
+				}
+
+				if ($academicIndex === null) {
+					$menu[] = [
+						'title' => 'Academic',
+						'icon' => 'i-Book',
+						'children' => [],
+					];
+					$academicIndex = array_key_last($menu);
+				}
+
+				if (empty($menu[$academicIndex]['children'])) {
+					$menu[$academicIndex]['children'] = [];
+				}
+
+				$attendanceIndex = null;
+				foreach ($menu[$academicIndex]['children'] as $index => $item) {
+					if (strtolower($item['title'] ?? '') === 'attendance') {
+						$attendanceIndex = $index;
+						break;
+					}
+				}
+
+				if ($attendanceIndex === null) {
+					$menu[$academicIndex]['children'][] = [
+						'title' => 'Attendance',
+						'icon' => 'i-Checked-User',
+						'children' => [],
+					];
+					$attendanceIndex = array_key_last($menu[$academicIndex]['children']);
+				}
+
+				if (empty($menu[$academicIndex]['children'][$attendanceIndex]['children'])) {
+					$menu[$academicIndex]['children'][$attendanceIndex]['children'] = [];
+				}
+
+				$menu[$academicIndex]['children'][$attendanceIndex]['children'] = array_values(array_filter(
+					$menu[$academicIndex]['children'][$attendanceIndex]['children'],
+					fn ($item) => !in_array($item['title'] ?? '', ['Monthly Attendance Summary', 'Lock Monthly Attendance'], true)
+				));
+				$menu[$academicIndex]['children'][$attendanceIndex]['children'][] = [
+					'title' => 'Monthly Attendance Summary',
+					'route' => 'staff.attendance.monthly-report',
+				];
+				$menu[$academicIndex]['children'][$attendanceIndex]['children'][] = [
+					'title' => 'Lock Monthly Attendance',
+					'route' => 'staff.attendance.monthly-lock',
+				];
 			}
 			@endphp
 

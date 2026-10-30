@@ -71,10 +71,18 @@ class SetDynamicDatabaseConnectionFromCookie
      */
     protected function resolveDatabaseSelection(Request $request): array
     {
-        // 1. Request input 'year' or 'session' (e.g. login form submission or academic year switcher)
-        $inputYear = $request->input('year') ?: $request->input('session') ?: $request->input('session_name');
-        if (is_string($inputYear) && trim($inputYear) !== '') {
-            return [trim($inputYear), 'request_input:year'];
+        // 1. Request input used for academic database/session selection.
+        // A report's calendar year (for example, year=2026) is not a database name.
+        foreach (['year', 'session', 'session_name'] as $inputKey) {
+            $inputValue = $request->input($inputKey);
+            if (!is_string($inputValue) || trim($inputValue) === '') {
+                continue;
+            }
+
+            $databaseName = $this->validateAndNormalizeDatabase($inputValue);
+            if ($databaseName !== null) {
+                return [$databaseName, 'request_input:' . $inputKey];
+            }
         }
 
         // 2. Laravel request cookie 'selectedYear'

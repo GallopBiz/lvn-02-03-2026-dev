@@ -174,9 +174,17 @@
                         </thead>
                         <tbody>
                             @forelse($generatedMarksheets as $marksheet)
-                                @php($snapshot = $marksheet->snapshot ?: [])
-                                @php($printData = $snapshot['print_data'] ?? [])
-                                @php($studentMeta = $printData['student_meta'] ?? [])
+                                <?php
+                                    $snapshot = $marksheet->snapshot ?: [];
+                                    $printData = $snapshot['print_data'] ?? [];
+                                    $studentMeta = $printData['student_meta'] ?? [];
+                                    $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($snapshot['class_name'] ?? null);
+                                    $isClass12 = ($normClass === '12');
+                                    $displayExam = $snapshot['exam_name'] ?? ($isClass12 ? 'Pre Board Examination' : 'Annual Examination');
+                                    if ($isClass12 && str_contains(strtolower((string)$displayExam), 'annual')) {
+                                        $displayExam = 'Pre Board Examination';
+                                    }
+                                ?>
                                 <tr>
                                     <td>
                                         <input type="checkbox" class="generated-check" name="marksheet_ids[]" value="{{ $marksheet->id }}">
@@ -184,14 +192,6 @@
                                     <td>{{ $snapshot['student_name'] ?? ('Student #'.$marksheet->student_id) }}</td>
                                     <td>{{ $snapshot['scholar_no'] ?? ($studentMeta['scholar_no'] ?? '-') }}</td>
                                     <td>{{ \App\Academic\AcademicHelper::toRoman($snapshot['class_name'] ?? ('Class #'.$marksheet->class_id)) }}</td>
-                                    @php
-                                        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($snapshot['class_name'] ?? null);
-                                        $isClass12 = ($normClass === '12');
-                                        $displayExam = $snapshot['exam_name'] ?? ($isClass12 ? 'Pre Board Examination' : 'Annual Examination');
-                                        if ($isClass12 && str_contains(strtolower($displayExam), 'annual')) {
-                                            $displayExam = 'Pre Board Examination';
-                                        }
-                                    @endphp
                                     <td>{{ $displayExam }}</td>
                                     <td>{{ $marksheet->session_year ?: '-' }}</td>
                                     <td>{{ optional($marksheet->created_at)->format('d M Y h:i A') }}</td>

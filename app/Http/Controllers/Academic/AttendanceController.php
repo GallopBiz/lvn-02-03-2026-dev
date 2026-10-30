@@ -7,6 +7,7 @@ use App\Models\Academic\Attendance;
 use App\Models\Academic\AttendanceCollective;
 use App\Models\Academic\AttendanceCollectiveDetail;
 use App\Models\Academic\AttendanceDetail;
+use App\Models\Academic\AttendanceMonthlyLock;
 use App\Models\Academic\Exam;
 use App\Models\Classes;
 use App\Models\Classname;
@@ -48,6 +49,9 @@ class AttendanceController extends Controller
             $editingAttendance = $this->accessibleAttendanceQuery()->with('details.student')->findOrFail($request->route('id'));
             if ($editingAttendance->is_locked) {
                 return redirect()->route('dailyattandence')->with('error', $this->lockedAttendanceMessage());
+            }
+            if ($this->isStaffAttendanceUser() && $this->isMonthLockedForAttendance($editingAttendance)) {
+                return redirect()->route('dailyattandence')->with('error', $this->lockedMonthlyAttendanceMessage());
             }
             $filters['date'] = optional($editingAttendance->attendance_date)->format('Y-m-d');
             $filters['class_id'] = $editingAttendance->class_id;
@@ -133,8 +137,22 @@ class AttendanceController extends Controller
             if ($attendance->is_locked) {
                 return redirect()->route('dailyattandence')->with('error', $this->lockedAttendanceMessage());
             }
-        } elseif (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'])) {
+            if ($this->isStaffAttendanceUser() && $this->isMonthLockedForAttendance($attendance)) {
+                return back()->withInput()->with('error', $this->lockedMonthlyAttendanceMessage());
+            }
+        }
+
+        if (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'])) {
             abort(403, 'You are not allowed to mark attendance for this class/section.');
+        }
+
+        if ($this->isStaffAttendanceUser() && AttendanceMonthlyLock::isMonthLocked(
+            $validated['class_id'],
+            $validated['section_name'],
+            (int) Carbon::parse($validated['attendance_date'])->format('Y'),
+            (int) Carbon::parse($validated['attendance_date'])->format('m')
+        )) {
+            return back()->withInput()->with('error', $this->lockedMonthlyAttendanceMessage());
         }
 
         $duplicate = Attendance::query()
@@ -194,6 +212,9 @@ class AttendanceController extends Controller
         if ($attendance->is_locked) {
             return redirect()->route('dailyattandence')->with('error', $this->lockedAttendanceMessage());
         }
+        if ($this->isStaffAttendanceUser() && $this->isMonthLockedForAttendance($attendance)) {
+            return redirect()->route('dailyattandence')->with('error', $this->lockedMonthlyAttendanceMessage());
+        }
 
         $attendance->update(['is_delete' => 1]);
 
@@ -209,6 +230,9 @@ class AttendanceController extends Controller
         $attendance = $this->accessibleAttendanceQuery()->findOrFail($attendance->id);
         if (!$this->canStaffAccessClassSection($attendance->class_id, $attendance->section_name, true)) {
             abort(403, 'Only the assigned class teacher can lock this attendance.');
+        }
+        if ($this->isMonthLockedForAttendance($attendance)) {
+            return redirect()->route('dailyattandence')->with('error', $this->lockedMonthlyAttendanceMessage());
         }
 
         $attendance->update([
@@ -334,6 +358,12 @@ class AttendanceController extends Controller
 
     public function monthlyReport(Request $request)
     {
+        $request->validate([
+            'year' => 'nullable|integer|between:1900,2200',
+            'month' => 'nullable|integer|between:1,12',
+            'month_year' => 'nullable|date_format:Y-m',
+        ]);
+
         $filters = $this->filters($request);
 
         $selectedYear = (int) ($request->query('year') ?: now()->format('Y'));
@@ -353,6 +383,21 @@ class AttendanceController extends Controller
         $classes = $this->classes();
         $sections = $this->sections($filters['class_id']);
 
+        if ($this->isStaffAttendanceUser()) {
+            if ($filters['class_id'] && !$classes->contains(function ($class) use ($filters) {
+                return (string) $class->id === (string) $filters['class_id']
+                    || (string) $class->class_name === (string) $filters['class_id'];
+            })) {
+                abort(403, 'You are not allowed to view attendance for this class.');
+            }
+            if ($filters['section_name'] && (
+                !$filters['class_id']
+                || !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])
+            )) {
+                abort(403, 'You are not allowed to view attendance for this class/section.');
+            }
+        }
+
         $selectedClass = $filters['class_id']
             ? (Classes::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first()
                 ?: (class_exists(Classname::class) ? Classname::where('id', $filters['class_id'])->orWhere('class_name', $filters['class_id'])->first() : null))
@@ -360,6 +405,9 @@ class AttendanceController extends Controller
 
         $report = ($filters['class_id'] && $filters['section_name'])
             ? $this->monthWiseAttendanceMatrix($filters)
+            : null;
+        $monthlyLock = ($filters['class_id'] && $filters['section_name'])
+            ? AttendanceMonthlyLock::getLockInfo($filters['class_id'], $filters['section_name'], $selectedYear, $selectedMonth)
             : null;
 
         $availableYears = range((int) now()->format('Y') - 2, (int) now()->format('Y') + 2);
@@ -377,7 +425,89 @@ class AttendanceController extends Controller
             'selectedMonth' => $selectedMonth,
             'availableYears' => $availableYears,
             'report' => $report,
+            'monthlyLock' => $monthlyLock,
         ]);
+    }
+
+    public function lockMonth(Request $request)
+    {
+        abort_unless($this->isStaffAttendanceUser(), 403, 'Only staff users can lock monthly attendance.');
+
+        $validated = $request->validate([
+            'class_id' => 'required|string|max:50',
+            'section_name' => 'required|string|max:100',
+            'year' => 'required|integer|between:1900,2200',
+            'month' => 'required|integer|between:1,12',
+        ]);
+
+        if (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'], true)) {
+            abort(403, 'Only the assigned class teacher can lock attendance for this class/section.');
+        }
+
+        $class = Classes::query()
+            ->where('id', $validated['class_id'])
+            ->orWhere('class_name', $validated['class_id'])
+            ->first();
+        if (!$class) {
+            $class = Classname::query()
+                ->where('id', $validated['class_id'])
+                ->orWhere('class_name', $validated['class_id'])
+                ->first();
+        }
+        $classId = (string) (optional($class)->id ?: $validated['class_id']);
+
+        DB::transaction(function () use ($validated, $classId) {
+            $lock = AttendanceMonthlyLock::query()
+                ->where('class_id', $classId)
+                ->where('section_name', $validated['section_name'])
+                ->where('year', $validated['year'])
+                ->where('month', $validated['month'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($lock && $lock->is_locked) {
+                return;
+            }
+
+            $lock = $lock ?: new AttendanceMonthlyLock();
+            $lock->fill([
+                'academic_session' => null,
+                'class_id' => $classId,
+                'section_name' => $validated['section_name'],
+                'year' => $validated['year'],
+                'month' => $validated['month'],
+                'is_locked' => true,
+                'locked_at' => now(),
+                'locked_by' => Auth::guard('staff')->id(),
+                'unlocked_at' => null,
+                'unlocked_by' => null,
+            ])->save();
+        });
+
+        return redirect()->route('staff.attendance.monthly-report', [
+            'class_id' => $classId,
+            'section_name' => $validated['section_name'],
+            'year' => $validated['year'],
+            'month' => $validated['month'],
+        ])->with('success', 'Monthly attendance locked. Contact an administrator if it needs to be unlocked.');
+    }
+
+    public function unlockMonth(AttendanceMonthlyLock $lock)
+    {
+        abort_unless(Auth::guard('web')->check() && !$this->isStaffAttendanceUser(), 403, 'Only an administrator can unlock monthly attendance.');
+
+        $lock->update([
+            'is_locked' => false,
+            'unlocked_at' => now(),
+            'unlocked_by' => Auth::guard('web')->id(),
+        ]);
+
+        return redirect()->route('academic.attendance.monthly-report', [
+            'class_id' => $lock->class_id,
+            'section_name' => $lock->section_name,
+            'year' => $lock->year,
+            'month' => $lock->month,
+        ])->with('success', 'Monthly attendance unlocked successfully.');
     }
 
     public function collective(Request $request)
@@ -1417,7 +1547,20 @@ class AttendanceController extends Controller
 
     private function isStaffAttendanceUser(): bool
     {
-        return Auth::guard('staff')->check() && !Auth::guard('web')->check();
+        return Auth::guard('staff')->check()
+            && (!Auth::guard('web')->check() || request()->routeIs('staff.attendance.*'));
+    }
+
+    private function isMonthLockedForAttendance(Attendance $attendance): bool
+    {
+        $date = Carbon::parse($attendance->attendance_date);
+
+        return AttendanceMonthlyLock::isMonthLocked(
+            $attendance->class_id,
+            $attendance->section_name,
+            (int) $date->format('Y'),
+            (int) $date->format('m')
+        );
     }
 
     private function staffEmployeeId(): ?int
@@ -1506,5 +1649,10 @@ class AttendanceController extends Controller
     private function lockedAttendanceMessage(): string
     {
         return 'This attendance is locked. Admin must unlock it before edit or delete.';
+    }
+
+    private function lockedMonthlyAttendanceMessage(): string
+    {
+        return 'Attendance for this month is locked. An administrator must unlock it before changes can be made.';
     }
 }

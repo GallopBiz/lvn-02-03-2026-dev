@@ -1,5 +1,10 @@
 @extends('backend.layouts.main')
 @section('main-container')
+@php
+    $isStaffPanel = auth()->guard('staff')->check()
+        && (!auth()->guard('web')->check() || request()->routeIs('staff.attendance.*'));
+    $monthlyReportRoute = $isStaffPanel ? 'staff.attendance.monthly-report' : 'academic.attendance.monthly-report';
+@endphp
 <style>
     .monthly-report-page {
         color: #24324b;
@@ -402,16 +407,22 @@
 
 <div class="main-content monthly-report-page pt-3">
     <!-- Top Action Buttons (Matching Screenshot) -->
-    <div class="top-nav-bar no-print">
-        <a href="{{ route('dailyattandence') }}" class="top-nav-btn"><i class="i-Check mr-1"></i> Daily Attendance Entry</a>
-        <a href="{{ route('academic.attendance.monthly-report') }}" class="top-nav-btn active"><i class="i-Calendar-4 mr-1"></i> Monthly Attendance Report</a>
-        {{-- <a href="{{ route('student-attandence-report') }}" class="top-nav-btn"><i class="i-Student-Hat mr-1"></i> Attendance Status Report</a> --}}
-        <a href="{{ route('Attandencereports') }}" class="top-nav-btn"><i class="i-Line-Chart mr-1"></i> Daily Student Attendance Report</a>
-        <a href="{{ route('academic.attendance.collective') }}" class="top-nav-btn"><i class="i-File-Clipboard-Text--Image mr-1"></i> Student Collective Attendance</a>
-        <a href="{{ route('academic.attendance.manual') }}" class="top-nav-btn"><i class="i-Gear mr-1"></i> Manual Student Attendance & Working Days</a>
-    </div>
+    @if(!$isStaffPanel)
+        <div class="top-nav-bar no-print">
+            <a href="{{ route('dailyattandence') }}" class="top-nav-btn"><i class="i-Check mr-1"></i> Daily Attendance Entry</a>
+            <a href="{{ route($monthlyReportRoute) }}" class="top-nav-btn active"><i class="i-Calendar-4 mr-1"></i> Monthly Attendance Report</a>
+            {{-- <a href="{{ route('student-attandence-report') }}" class="top-nav-btn"><i class="i-Student-Hat mr-1"></i> Attendance Status Report</a> --}}
+            <a href="{{ route('Attandencereports') }}" class="top-nav-btn"><i class="i-Line-Chart mr-1"></i> Daily Student Attendance Report</a>
+            <a href="{{ route('academic.attendance.collective') }}" class="top-nav-btn"><i class="i-File-Clipboard-Text--Image mr-1"></i> Student Collective Attendance</a>
+            <a href="{{ route('academic.attendance.manual') }}" class="top-nav-btn"><i class="i-Gear mr-1"></i> Manual Student Attendance & Working Days</a>
+        </div>
+    @endif
 
     <div class="report-card">
+        @if(session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
+        @if(session('error')) <div class="alert alert-danger">{{ session('error') }}</div> @endif
+        @if($errors->any()) <div class="alert alert-danger">{{ $errors->first() }}</div> @endif
+
         <!-- Title & Sub-tabs -->
         <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
             <div class="report-title mb-0">Attendance Report</div>
@@ -425,7 +436,7 @@
         </div>
 
         <!-- Filter Bar -->
-        <form method="GET" action="{{ route('academic.attendance.monthly-report') }}" id="monthlyReportFilterForm" class="filter-bar no-print">
+        <form method="GET" action="{{ route($monthlyReportRoute) }}" id="monthlyReportFilterForm" class="filter-bar no-print">
             <input type="hidden" name="academic_session" value="{{ $filters['academic_session'] }}">
 
             <div class="filter-item">
@@ -468,7 +479,7 @@
 
             <div class="filter-item ml-auto">
                 <button type="submit" class="btn btn-action-show mr-1"><i class="i-Magnifi-Glass1 mr-1"></i> Show</button>
-                <a href="{{ route('academic.attendance.monthly-report') }}" class="btn btn-action-new mr-2"><i class="i-Repeat mr-1"></i> New</a>
+                <a href="{{ route($monthlyReportRoute) }}" class="btn btn-action-new mr-2"><i class="i-Repeat mr-1"></i> New</a>
 
                 <label class="mb-0 mr-2 font-weight-normal text-muted" style="cursor: pointer;">
                     <input type="checkbox" id="pdfViewerToggle" onchange="togglePdfViewer(this)"> In PDF Viewer
@@ -476,9 +487,50 @@
 
                 <button type="button" class="btn btn-action-print mr-1" onclick="handlePrintReport()"><i class="i-Billing mr-1"></i> Print</button>
                 <button type="button" class="btn btn-action-excel mr-1" onclick="exportMonthlyReportTable()"><i class="i-File-Excel mr-1"></i> Excel</button>
-                <a href="{{ route('Academics') }}" class="btn btn-action-exit"><i class="i-Close mr-1"></i> Exit</a>
+                @if($isStaffPanel)
+                    <a href="{{ route('staff.dashboard') }}" class="btn btn-action-exit"><i class="i-Close mr-1"></i> Exit</a>
+                @else
+                    <a href="{{ route('Academics') }}" class="btn btn-action-exit"><i class="i-Close mr-1"></i> Exit</a>
+                @endif
             </div>
         </form>
+
+        @if($isStaffPanel)
+            <div class="alert {{ $monthlyLock && $monthlyLock->is_locked ? 'alert-warning' : 'alert-info' }} d-flex justify-content-between align-items-center flex-wrap no-print">
+                <div class="mr-3">
+                    <strong>Monthly attendance:</strong>
+                    @if($monthlyLock && $monthlyLock->is_locked)
+                        Locked for {{ $monthsList[$selectedMonth] }} {{ $selectedYear }}. Only an administrator can unlock it.
+                    @elseif($filters['class_id'] && $filters['section_name'])
+                        This will lock attendance for the selected class and section for {{ $monthsList[$selectedMonth] }} {{ $selectedYear }}.
+                    @else
+                        Select your assigned class and section to lock attendance for a month.
+                    @endif
+                </div>
+                @if($filters['class_id'] && $filters['section_name'] && !($monthlyLock && $monthlyLock->is_locked))
+                    <form method="POST" action="{{ route('staff.attendance.monthly-lock.store') }}" class="mt-2 mt-md-0">
+                        @csrf
+                        <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
+                        <input type="hidden" name="section_name" value="{{ $filters['section_name'] }}">
+                        <input type="hidden" name="month" value="{{ $selectedMonth }}">
+                        <input type="hidden" name="year" value="{{ $selectedYear }}">
+                        <button type="submit" class="btn btn-dark" onclick="return confirm('Lock attendance for this class, section, and month? Staff will not be able to make changes, and only an administrator can unlock it.');">
+                            <i class="i-Lock mr-1"></i> Lock Monthly Attendance
+                        </button>
+                    </form>
+                @endif
+            </div>
+        @elseif($monthlyLock && $monthlyLock->is_locked)
+            <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap no-print">
+                <span>Monthly attendance is locked for this class, section, and month.</span>
+                <form method="POST" action="{{ route('academic.attendance.monthly-lock.unlock', $monthlyLock->id) }}" class="mt-2 mt-md-0">
+                    @csrf
+                    <button type="submit" class="btn btn-warning" onclick="return confirm('Unlock monthly attendance for this class, section, and month?');">
+                        Unlock Monthly Attendance
+                    </button>
+                </form>
+            </div>
+        @endif
 
         <!-- Attendance Matrix Table -->
         @if($report && count($report['rows']) > 0)

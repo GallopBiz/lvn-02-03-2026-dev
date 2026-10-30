@@ -33,13 +33,27 @@
         <h1 class="me-2">Marks Entry :-</h1>
         @if(!empty($stream_master))
             <div>
-                @if(!empty($isStaffMarksUser) && empty($stream_master->is_locked))
-                    <form action="{{ route('staff.lock-marks-entry', $stream_master->id) }}" method="POST" style="display:inline;">
-                        @csrf
-                        <button type="submit" class="btn btn-dark" onclick="return confirm('Lock this marks entry? After locking, you must contact admin to make changes.');">Lock Entry</button>
-                    </form>
-                @elseif(!empty($isStaffMarksUser) && !empty($stream_master->is_locked))
-                    <button type="button" class="btn btn-secondary" disabled>Entry Locked</button>
+                @if(!empty($isStaffMarksUser))
+                    @if(empty($stream_master->is_locked))
+                        <form action="{{ route('staff.lock-marks-entry', $stream_master->id) }}" method="POST" style="display:inline;">
+                            @csrf
+                            <button type="submit" class="btn btn-dark" onclick="return confirm('Lock this marks entry? Once locked, it is final for marksheet printing and only Admin can unlock it.');"><i class="fa fa-lock"></i> Lock Entry</button>
+                        </form>
+                    @else
+                        <button type="button" class="btn btn-danger" disabled><i class="fa fa-lock"></i> Entry Locked (Final)</button>
+                    @endif
+                @else
+                    @if(!empty($stream_master->is_locked))
+                        <form action="{{ url('unlock-marks-entry/' . $stream_master->id) }}" method="POST" style="display:inline;">
+                            @csrf
+                            <button type="submit" class="btn btn-warning" onclick="return confirm('Unlock this marks entry for staff editing?');"><i class="fa fa-unlock"></i> Unlock Entry</button>
+                        </form>
+                    @else
+                        <form action="{{ url('lock-marks-entry/' . $stream_master->id) }}" method="POST" style="display:inline;">
+                            @csrf
+                            <button type="submit" class="btn btn-dark" onclick="return confirm('Lock this marks entry? Once locked, it is final for marksheet printing.');"><i class="fa fa-lock"></i> Lock Entry</button>
+                        </form>
+                    @endif
                 @endif
                 <a href="{{ !empty($isStaffMarksUser) ? route('staff.marks') : route('marks') }}" class="btn btn-secondary">Back</a>
             </div>
@@ -263,24 +277,30 @@
                                                     <td>{{ $className }}</td>
                                                     <td>{{ $sectionName }}</td>
                                                     <td class="uperletter">{{ $subjectName }}</td>
-                                                    <td class="d-flex">
+                                                    <td class="d-flex align-items-center saved-row-actions" data-id="{{ $streams->id }}">
                                                         <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') .'/'.$streams->id}}">Edit</a>
                                                         <?php $a = "previosly_saved_marks_entry"."-".$streams->id ; ?>
-                                                        @if(!empty($isStaffMarksUser) && (empty($streams->is_locked) && empty($streams->Exammaster->is_locked)))
-                                                            <form action="{{ route('staff.lock-marks-entry', $streams->id) }}" method="POST" style="display:inline;">
-                                                                @csrf
-                                                                <button type="submit" class="btn btn-dark m-1" onclick="return confirm('Lock this marks entry? After locking, you must contact admin to make changes.');">Lock</button>
-                                                            </form>
-                                                        @endif
-                                                        @if(!empty($isStaffMarksUser) && (!empty($streams->is_locked) || !empty($streams->Exammaster->is_locked)))
-                                                            <button type="button" class="btn btn-secondary m-1" disabled>Locked</button>
-                                                        @elseif(empty($isStaffMarksUser) && !empty($streams->is_locked))
-                                                            <form action="{{ url('unlock-marks-entry/' . $streams->id) }}" method="POST" style="display:inline;">
-                                                                @csrf
-                                                                <button type="submit" class="btn btn-warning m-1" onclick="return confirm('Unlock this marks entry for staff editing?');">Unlock</button>
-                                                            </form>
+                                                        @if(!empty($isStaffMarksUser))
+                                                            @if(empty($streams->is_locked) && empty($streams->Exammaster->is_locked))
+                                                                <button type="button" class="btn btn-dark m-1 lock-row-entry-btn" data-id="{{ $streams->id }}">
+                                                                    <i class="fa fa-lock"></i> Lock
+                                                                </button>
+                                                            @else
+                                                                <button type="button" class="btn btn-secondary m-1" disabled>
+                                                                    <i class="fa fa-lock"></i> Locked
+                                                                </button>
+                                                            @endif
                                                         @else
-                                                            <a class="btn btn-raised ripple btn-danger m-1" href="{{url($marksUrlPrefix . 'delete-marks').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
+                                                            @if(!empty($streams->is_locked))
+                                                                <button type="button" class="btn btn-warning m-1 unlock-row-entry-btn" data-id="{{ $streams->id }}">
+                                                                    <i class="fa fa-unlock"></i> Unlock
+                                                                </button>
+                                                            @else
+                                                                <button type="button" class="btn btn-dark m-1 lock-row-entry-btn" data-id="{{ $streams->id }}">
+                                                                    <i class="fa fa-lock"></i> Lock
+                                                                </button>
+                                                                <a class="btn btn-raised ripple btn-danger m-1" href="{{url($marksUrlPrefix . 'delete-marks').'/'.$a}}" onclick="confirmDelete(event)">Delete</a>
+                                                            @endif
                                                         @endif
                                                     </td>
                                                 </tr>
@@ -305,9 +325,23 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="mb-0">Student Marks</h4>
-                        <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center gap-2">
                             <span id="marks_save_status" class="marks-saving-text d-none">Saving marks...</span>
-                            <button type="submit" id="marks_submit_btn" class="btn btn-primary">Submit</button>
+                            @if(!empty($isStaffMarksUser))
+                                <button type="button" id="lock_marks_btn" class="btn btn-dark ms-2 {{ (!empty($stream_master) && empty($stream_master->is_locked)) ? '' : 'd-none' }}">
+                                    <i class="fa fa-lock"></i> Lock Marks Entry
+                                </button>
+                                <span id="locked_badge_indicator" class="badge badge-danger p-2 ms-2 {{ (!empty($stream_master) && !empty($stream_master->is_locked)) ? '' : 'd-none' }}">
+                                    <i class="fa fa-lock"></i> Locked (Final)
+                                </span>
+                            @else
+                                @if(!empty($stream_master) && !empty($stream_master->is_locked))
+                                    <button type="button" id="admin_unlock_marks_btn" class="btn btn-warning ms-2" data-id="{{ $stream_master->id }}">
+                                        <i class="fa fa-unlock"></i> Unlock Entry
+                                    </button>
+                                @endif
+                            @endif
+                            <button type="submit" id="marks_submit_btn" class="btn btn-primary ms-2">{{ !empty($stream_master) ? 'Update' : 'Submit' }}</button>
                         </div>
                     </div>
                     <div class="table-responsive" style="width: 100%;">
@@ -812,16 +846,18 @@
     }
 
     function applyMarksEntryLockState() {
-        if (!isStaffMarksUser || !isCurrentMarksEntryLocked) {
+        if (!isCurrentMarksEntryLocked) {
             return;
         }
 
         $('#marks_entry_status')
-            .removeClass('d-none alert-info')
-            .addClass('alert-warning')
-            .html('This marks entry is locked. Please contact admin to unlock it before editing or deleting marks.');
-        $('#show_students_btn').prop('disabled', true);
-        $('#marks_submit_btn').prop('disabled', true);
+            .removeClass('d-none alert-info alert-warning')
+            .addClass('alert-danger')
+            .html('<div class="d-flex align-items-center"><i class="fa fa-lock fa-2x me-3 text-danger"></i><div><strong>Marks Entry Locked:</strong> This marks entry is finalized and ready for marksheet printing. Editing is disabled. Only Admin can unlock this entry.</div></div>');
+        $('#show_students_btn').prop('disabled', false);
+        $('#marks_submit_btn').prop('disabled', true).addClass('d-none');
+        $('#lock_marks_btn').addClass('d-none');
+        $('#locked_badge_indicator').removeClass('d-none');
         $('#studentdatatable').find('input, select, button').prop('disabled', true);
     }
 
@@ -1397,7 +1433,20 @@
                 method: "POST",
                 dataType: 'json',
                 success: function(data) {
-                    if (data.is_locked) {
+                    if (data.is_entry_locked) {
+                        $('#marks_entry_status')
+                            .removeClass('d-none alert-info alert-warning')
+                            .addClass('alert-danger')
+                            .html(`<strong><i class="fa fa-lock"></i> Marks Entry Locked:</strong> ${data.message} <a href="${data.edit_url}" class="alert-link btn btn-sm btn-info ms-2">View Locked Marks</a>`);
+                        $('#show_students_btn').prop('disabled', false);
+                        $('#marks_submit_btn').prop('disabled', true).addClass('d-none');
+                        $('#lock_marks_btn').addClass('d-none');
+                        $('#locked_badge_indicator').removeClass('d-none');
+                        toastr.info("This marks entry is locked and finalized for marksheet printing.", "Entry Locked");
+                        return;
+                    }
+
+                    if (data.is_exam_locked) {
                         $('#marks_entry_status')
                             .removeClass('d-none alert-info')
                             .addClass('alert-warning')
@@ -1413,10 +1462,12 @@
                         $('#marks_entry_status')
                             .removeClass('d-none alert-info')
                             .addClass('alert-warning')
-                            .html(`${data.message} <a href="${data.edit_url}" class="alert-link btn btn-sm btn-primary ms-2">Open Existing Entry</a>`);
-                        $('#show_students_btn').prop('disabled', true);
-                        $('#marks_submit_btn').prop('disabled', true);
-                        $("#studentdatatable").html(`<tr><td colspan="12" class="text-center p-3">${data.message} <a href="${data.edit_url}" class="btn btn-sm btn-primary ms-2">Open Existing Entry to Update</a></td></tr>`);
+                            .html(`${data.message} <a href="${data.edit_url}" class="alert-link btn btn-sm btn-primary ms-2">Open Existing Entry to Update or Lock</a>`);
+                        $('#show_students_btn').prop('disabled', false);
+                        $('#marks_id').val(data.marks_id);
+                        if (isStaffMarksUser) {
+                            $('#lock_marks_btn').removeClass('d-none');
+                        }
                         toastr.info(data.message, "Entry Exists");
                     }
                 },
@@ -1750,10 +1801,18 @@
             }
             , success: function(response) {
                 if (response.status === "success") {
-                    toastr.success("Updated successfully.", "Success");
-                    setTimeout(() => {
-                        location.reload();
-                    }, 1500);
+                    toastr.success("Marks saved successfully.", "Success");
+                    if (response.marks_id) {
+                        $('#marks_id').val(response.marks_id);
+                        if (isStaffMarksUser) {
+                            $('#lock_marks_btn').removeClass('d-none');
+                        }
+                    }
+                    if (response.redirect_url) {
+                        setTimeout(() => {
+                            window.location.href = response.redirect_url;
+                        }, 1200);
+                    }
                 } else {
                     console.error("Unexpected response format.");
                 }
@@ -1834,10 +1893,10 @@
             }
             , success: function(response) {
                 if (response.status === "success") {
-                    toastr.success("Updated successfully.", "Success");
-                    setTimeout(() => {
-                        location.reload();
-                    }, 1500);
+                    toastr.success("Marks updated successfully.", "Success");
+                    if (isStaffMarksUser && !isCurrentMarksEntryLocked) {
+                        $('#lock_marks_btn').removeClass('d-none');
+                    }
                 } else {
                     console.error("Unexpected response format.");
                 }
@@ -1849,6 +1908,212 @@
             }
         });
     }
+
+    $(document).on('click', '#lock_marks_btn', function(e) {
+        e.preventDefault();
+
+        const marksId = $('#marks_id').val() || "{{ !empty($stream_master) ? $stream_master->id : '' }}";
+        const selectedClassText = $('#class_name option:selected').val() ? $('#class_name option:selected').text().trim() : '';
+        const className = selectedClassText || "{{ !empty($stream_master) ? ($className ?? '') : '' }}";
+        const sectionName = $('#section_name').val() || "{{ !empty($stream_master) ? $stream_master->section_name : '' }}";
+        const selectedSubjectText = $('#subject_name option:selected').val() ? $('#subject_name option:selected').text().trim() : '';
+        const subjectName = selectedSubjectText || "{{ !empty($stream_master) ? ($stream_master->Subject->subject_name ?? '') : '' }}";
+
+        const msg = `Are you sure you want to lock marks entry for:\n\n` +
+            `• Class: ${className}\n` +
+            `• Section: ${sectionName}\n` +
+            `• Subject: ${subjectName}\n\n` +
+            `Locking indicates marks entry is complete and ready for marksheet printing.\n` +
+            `Once locked, you will no longer be able to modify these marks, and ONLY ADMIN can unlock them.\n\n` +
+            `Proceed to lock?`;
+
+        if (!confirm(msg)) {
+            return;
+        }
+
+        const token = document.getElementsByName("_token")[0].value;
+        const postData = {
+            marks_id: marksId,
+            class_name: $('#class_name').val() || "{{ !empty($stream_master) ? $stream_master->class_id : '' }}",
+            section_name: $('#section_name').val() || "{{ !empty($stream_master) ? $stream_master->section_name : '' }}",
+            exam_name: $('#exam_name').val() || "{{ !empty($stream_master) ? $stream_master->exam_id : '' }}",
+            subject_name: $('#subject_name').val() || "{{ !empty($stream_master) ? $stream_master->subject_id : '' }}",
+            teacher_name: $('#teacher_name').val() || "{{ !empty($stream_master) ? $stream_master->teacher_id : '' }}"
+        };
+
+        const lockUrl = marksId
+            ? "{{ url($marksUrlPrefix . 'lock-marks-entry') }}/" + marksId
+            : "{{ url($marksUrlPrefix . 'lock-current-marks-entry') }}";
+
+        const btn = $(this);
+        btn.prop('disabled', true).text('Locking...');
+
+        $.ajax({
+            url: lockUrl,
+            type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            },
+            data: postData,
+            dataType: 'json',
+            success: function(resp) {
+                toastr.success(resp.message || "Marks entry locked successfully.", "Locked");
+                isCurrentMarksEntryLocked = true;
+                $('#lock_marks_btn').addClass('d-none');
+                $('#locked_badge_indicator').removeClass('d-none');
+                $('#marks_submit_btn').prop('disabled', true).addClass('d-none');
+                $('#studentdatatable').find('input, select, button').prop('disabled', true);
+                $('#marks_entry_status')
+                    .removeClass('d-none alert-info alert-warning')
+                    .addClass('alert-danger')
+                    .html(`<div class="d-flex align-items-center"><i class="fa fa-lock fa-2x me-3 text-danger"></i><div><strong>Marks Entry Locked:</strong> This marks entry is finalized and ready for marksheet printing. Only Admin can unlock it.</div></div>`);
+                if (resp.view_url && window.location.href.indexOf('view-marks') === -1) {
+                    setTimeout(() => {
+                        window.location.href = resp.view_url;
+                    }, 1200);
+                }
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).html('<i class="fa fa-lock"></i> Lock Marks Entry');
+                toastr.error(ajaxErrorMessage(xhr), "Error Locking Marks");
+            }
+        });
+    });
+
+    $(document).on('click', '.lock-row-entry-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const btn = $(this);
+        const marksId = btn.data('id');
+        if (!marksId) return;
+
+        const row = btn.closest('tr');
+        const examText = row.find('td:nth-child(3)').text().trim();
+        const classText = row.find('td:nth-child(4)').text().trim();
+        const sectionText = row.find('td:nth-child(5)').text().trim();
+        const subjectText = row.find('td:nth-child(6)').text().trim();
+
+        const msg = `Are you sure you want to lock marks entry for:\n\n` +
+            (classText ? `• Class: ${classText}\n` : '') +
+            (sectionText ? `• Section: ${sectionText}\n` : '') +
+            (subjectText ? `• Subject: ${subjectText}\n` : '') +
+            (examText ? `• Exam: ${examText}\n\n` : '\n') +
+            `Locking indicates marks entry is complete and ready for marksheet printing.\n` +
+            `Once locked, you will no longer be able to modify these marks, and ONLY ADMIN can unlock them.\n\n` +
+            `Proceed to lock?`;
+
+        if (!confirm(msg)) {
+            return;
+        }
+
+        const token = document.getElementsByName("_token")[0].value;
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Locking...');
+
+        $.ajax({
+            url: "{{ url($marksUrlPrefix . 'lock-marks-entry') }}/" + marksId,
+            type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            },
+            dataType: 'json',
+            success: function(resp) {
+                toastr.success(resp.message || "Marks entry locked successfully.", "Locked");
+                const cell = btn.closest('.saved-row-actions');
+                cell.html(`
+                    <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') }}/${marksId}">Edit</a>
+                    <button type="button" class="btn btn-secondary m-1" disabled><i class="fa fa-lock"></i> Locked</button>
+                `);
+
+                const currentOpenId = $('#marks_id').val();
+                if (String(currentOpenId) === String(marksId)) {
+                    isCurrentMarksEntryLocked = true;
+                    applyMarksEntryLockState();
+                }
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).html('<i class="fa fa-lock"></i> Lock');
+                toastr.error(ajaxErrorMessage(xhr), "Error Locking Marks");
+            }
+        });
+    });
+
+    $(document).on('click', '.unlock-row-entry-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const btn = $(this);
+        const marksId = btn.data('id');
+        if (!marksId) return;
+
+        if (!confirm('Unlock this marks entry so the teacher can edit marks again?')) {
+            return;
+        }
+
+        const token = document.getElementsByName("_token")[0].value;
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Unlocking...');
+
+        $.ajax({
+            url: "{{ url('unlock-marks-entry') }}/" + marksId,
+            type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            },
+            dataType: 'json',
+            success: function(resp) {
+                toastr.success(resp.message || "Marks entry unlocked successfully.", "Unlocked");
+                const cell = btn.closest('.saved-row-actions');
+                cell.html(`
+                    <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') }}/${marksId}">Edit</a>
+                    <button type="button" class="btn btn-dark m-1 lock-row-entry-btn" data-id="${marksId}"><i class="fa fa-lock"></i> Lock</button>
+                `);
+
+                const currentOpenId = $('#marks_id').val();
+                if (String(currentOpenId) === String(marksId)) {
+                    isCurrentMarksEntryLocked = false;
+                    location.reload();
+                }
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).html('<i class="fa fa-unlock"></i> Unlock');
+                toastr.error(ajaxErrorMessage(xhr), "Error Unlocking Marks");
+            }
+        });
+    });
+
+    $(document).on('click', '#admin_unlock_marks_btn', function(e) {
+        e.preventDefault();
+        const id = $(this).data('id');
+        if (!id || !confirm('Unlock this marks entry so the teacher can edit marks again?')) {
+            return;
+        }
+        const token = document.getElementsByName("_token")[0].value;
+        const btn = $(this);
+        btn.prop('disabled', true).text('Unlocking...');
+
+        $.ajax({
+            url: "{{ url('unlock-marks-entry') }}/" + id,
+            type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            },
+            dataType: 'json',
+            success: function(resp) {
+                toastr.success(resp.message || "Marks entry unlocked successfully.", "Unlocked");
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            },
+            error: function(xhr) {
+                btn.prop('disabled', false).html('<i class="fa fa-unlock"></i> Unlock Entry');
+                toastr.error(ajaxErrorMessage(xhr), "Error Unlocking Marks");
+            }
+        });
+    });
 </script>
 
 
