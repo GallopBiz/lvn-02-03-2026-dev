@@ -177,7 +177,10 @@ class ConsolidatedMarksheetController extends Controller
             ];
         })->values()->all();
 
-        $defaultExamTitle = $isTerm1 ? 'Consolidated Term - I Examination' : 'Consolidated Term - II (Annual) Examination';
+        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($class?->class_name);
+        $isClass10Or12 = in_array($normClass, ['10', '12'], true);
+        $defaultTerm2Title = $isClass10Or12 ? 'Consolidated Pre Board Examination' : 'Consolidated Annual Examination';
+        $defaultExamTitle = $isTerm1 ? 'Consolidated Half Yearly Examination' : $defaultTerm2Title;
         $examTitle = $classResolvedExam?->exam_name ?: ($selectedExam?->exam_name ?: $defaultExamTitle);
 
         return [
@@ -311,8 +314,8 @@ class ConsolidatedMarksheetController extends Controller
 
     private function assignedSubjectsForStudents($students, $class, $marks)
     {
-        $specialIds = $this->specialSubjectIds();
-        $specialNames = $this->specialSubjectNames();
+        $specialIds = $this->specialSubjectIds((int) $class->id, $class->class_name);
+        $specialNames = $this->specialSubjectNames((int) $class->id, $class->class_name);
 
         $isSpecial = function ($subjectId, $subjectName) use ($specialIds, $specialNames) {
             return in_array((int) $subjectId, $specialIds, true)
@@ -373,21 +376,14 @@ class ConsolidatedMarksheetController extends Controller
                 ->unique('id')
                 ->values();
 
-            if ($studentMarks->isNotEmpty()) {
-                // Student has academic marks entered
+            if ($assignedCombSubjects->isNotEmpty()) {
+                // If student has an assigned combination, strictly use the combination's subjects!
+                $subjects = $assignedCombSubjects;
+            } elseif ($studentMarks->isNotEmpty()) {
+                // Fallback only if no combination: student has academic marks entered
                 $subjects = $studentMarks;
-
-                // If combination has additional active subjects with marks in the class, include them
-                if ($assignedCombSubjects->isNotEmpty()) {
-                    $activeCombSubjects = $assignedCombSubjects->filter(fn ($s) => in_array((int) $s->id, $classMarkedSubjectIds, true));
-                    $subjects = $subjects->concat($activeCombSubjects);
-                }
-            } elseif ($assignedCombSubjects->isNotEmpty()) {
-                // If student has no marks yet, prioritize combination subjects active in class marks, or use combination
-                $activeComb = $assignedCombSubjects->filter(fn ($s) => in_array((int) $s->id, $classMarkedSubjectIds, true));
-                $subjects = $activeComb->isNotEmpty() ? $activeComb : $assignedCombSubjects;
             } elseif (!empty($classMarkedSubjectIds)) {
-                // No combination, but class has marks
+                // Fallback: No combination, but class has marks
                 $subjects = $classAcademicSubjects->filter(fn ($s) => in_array((int) $s->id, $classMarkedSubjectIds, true));
                 if ($subjects->isEmpty()) {
                     $subjects = $classAcademicSubjects;
@@ -410,7 +406,11 @@ class ConsolidatedMarksheetController extends Controller
     private function assignmentAppliesToStudent($studentsDetails, int $studentId): bool
     {
         if ($studentsDetails === null || $studentsDetails === '') {
-            return true;
+            return false;
+        }
+
+        if (is_numeric($studentsDetails)) {
+            return (int) $studentsDetails === $studentId;
         }
 
         if (is_array($studentsDetails)) {
@@ -434,20 +434,27 @@ class ConsolidatedMarksheetController extends Controller
             return collect();
         }
 
-        return SubjectAssignStudent::query()
-            ->where('class_name', $class->class_name)
-            ->when(Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete'), function ($query) {
-                $query->where(function ($inner) {
-                    $inner->where('is_delete', 0)->orWhereNull('is_delete');
-                });
+        $norm = \App\Academic\AcademicHelper::normalizeClassIdentifier($class->class_name);
+        $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+
+        $query = SubjectAssignStudent::query()
+            ->where(function ($q) use ($class, $norm) {
+                $q->where('class_name', $class->class_name)
+                  ->orWhere('class_name', $norm)
+                  ->orWhere('class_name', ltrim($class->class_name, '0'));
             })
             ->where(function ($query) use ($class) {
                 $query->whereNull('section_name')->orWhere('section_name', '');
                 if ($class->section_name) {
                     $query->orWhere('section_name', $class->section_name);
                 }
-            })
-            ->get();
+            });
+
+        if ($hasIsDelete) {
+            $query->orderByRaw('CASE WHEN is_delete = 0 OR is_delete IS NULL THEN 0 ELSE 1 END ASC');
+        }
+
+        return $query->orderByDesc('id')->get();
     }
 
     private function subjectsByCombination(array $combinationIds)
@@ -472,18 +479,6 @@ class ConsolidatedMarksheetController extends Controller
             })
             ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'subject_name'), function ($query) {
                 $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
-            })
-            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area'), function ($query) {
-                $query->where(function ($inner) {
-                    $inner->where('s.do_not_print_in_main_scholastic_area', 0)
-                        ->orWhereNull('s.do_not_print_in_main_scholastic_area');
-                });
-            })
-            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting'), function ($query) {
-                $query->where(function ($inner) {
-                    $inner->where('s.special_subject_formatting', 0)
-                        ->orWhereNull('s.special_subject_formatting');
-                });
             })
             ->orderBy('cs.subject_order')
             ->orderBy('s.subject_name')
@@ -523,18 +518,6 @@ class ConsolidatedMarksheetController extends Controller
             })
             ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'subject_name'), function ($query) {
                 $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
-            })
-            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area'), function ($query) {
-                $query->where(function ($inner) {
-                    $inner->where('s.do_not_print_in_main_scholastic_area', 0)
-                        ->orWhereNull('s.do_not_print_in_main_scholastic_area');
-                });
-            })
-            ->when(Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting'), function ($query) {
-                $query->where(function ($inner) {
-                    $inner->where('s.special_subject_formatting', 0)
-                        ->orWhereNull('s.special_subject_formatting');
-                });
             })
             ->orderBy('s.subject_name')
             ->select('s.id', 's.subject_name', 's.subject_type')
@@ -677,18 +660,10 @@ class ConsolidatedMarksheetController extends Controller
             $query->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy']);
         }
 
-        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')) {
-            $query->where(function ($inner) {
-                $inner->where('s.do_not_print_in_main_scholastic_area', 0)
-                    ->orWhereNull('s.do_not_print_in_main_scholastic_area');
-            });
-        }
-
-        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_subject_formatting')) {
-            $query->where(function ($inner) {
-                $inner->where('s.special_subject_formatting', 0)
-                    ->orWhereNull('s.special_subject_formatting');
-            });
+        $classModel = Classes::find($classId);
+        $specialIds = $this->specialSubjectIds($classId, $classModel?->class_name);
+        if (!empty($specialIds)) {
+            $query->whereNotIn('s.id', $specialIds);
         }
 
         return $query
@@ -1053,8 +1028,8 @@ class ConsolidatedMarksheetController extends Controller
             'class' => $class,
             'session_year' => $this->resolveDynamicSessionYear($request) ?: '2025_2026',
             'exam_title' => $request->integer('exam_id')
-                ? (Exam::query()->find($request->integer('exam_id'))?->exam_name ?: 'Term - II (Annual) Examination')
-                : 'Term - II (Annual) Examination',
+                ? (Exam::query()->find($request->integer('exam_id'))?->exam_name ?: 'Consolidated Annual Examination')
+                : 'Consolidated Annual Examination',
             'class_teacher' => 'Meenal Gupta',
             'students' => $studentRows,
         ]]);
@@ -1160,7 +1135,7 @@ class ConsolidatedMarksheetController extends Controller
         return $exam;
     }
 
-    private function specialSubjectIds(): array
+    private function specialSubjectIds(?int $classId = null, ?string $className = null): array
     {
         if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
             return [];
@@ -1173,7 +1148,7 @@ class ConsolidatedMarksheetController extends Controller
             return [];
         }
 
-        return DB::connection('dynamic')
+        $subjects = DB::connection('dynamic')
             ->table('subjectmaster')
             ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
                 if ($hasDoNotPrint) {
@@ -1183,12 +1158,14 @@ class ConsolidatedMarksheetController extends Controller
                     $q->orWhere('special_subject_formatting', 1);
                 }
             })
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+            ->get();
+
+        return $subjects->filter(function ($sub) use ($classId, $className) {
+            return \App\Academic\AcademicHelper::isSpecialFormattingForClass($sub, $classId, $className);
+        })->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 
-    private function specialSubjectNames(): array
+    private function specialSubjectNames(?int $classId = null, ?string $className = null): array
     {
         if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
             return [];
@@ -1201,7 +1178,7 @@ class ConsolidatedMarksheetController extends Controller
             return [];
         }
 
-        return DB::connection('dynamic')
+        $subjects = DB::connection('dynamic')
             ->table('subjectmaster')
             ->where(function ($q) use ($hasDoNotPrint, $hasSpecialFormatting) {
                 if ($hasDoNotPrint) {
@@ -1211,10 +1188,11 @@ class ConsolidatedMarksheetController extends Controller
                     $q->orWhere('special_subject_formatting', 1);
                 }
             })
-            ->pluck('subject_name')
-            ->map(fn ($n) => strtolower(trim((string) $n)))
-            ->filter()
-            ->all();
+            ->get();
+
+        return $subjects->filter(function ($sub) use ($classId, $className) {
+            return \App\Academic\AcademicHelper::isSpecialFormattingForClass($sub, $classId, $className);
+        })->pluck('subject_name')->map(fn ($n) => strtolower(trim((string) $n)))->filter()->all();
     }
 
     private function sessionYearVariants(?string $sessionYear): array

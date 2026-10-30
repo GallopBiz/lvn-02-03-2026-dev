@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Academic;
 
+use App\Academic\AcademicHelper;
 use App\Http\Controllers\Controller;
 use App\Models\Academic\Exam;
 use App\Models\Academic\Marksheet;
@@ -558,6 +559,69 @@ class MarksheetController extends Controller
         }
         $printData['date'] = $formattedDate;
 
+        // Ensure only subjects belonging to the student's assigned combination are displayed
+        if ($marksheet->student_id && $marksheet->class_id) {
+            $combSubjects = $this->subjectsFor((int) $marksheet->class_id, (int) $marksheet->student_id);
+            if ($combSubjects->isNotEmpty()) {
+                $allowedSubjectIds = $combSubjects->pluck('id')->map(fn ($id) => (int) $id)->all();
+                $allowedSubjectNames = $combSubjects->pluck('subject_name')->map(fn ($n) => strtolower(trim((string) $n)))->all();
+                $categoryOf = function ($name) {
+                    $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
+                    if ($n === 'discipline') return 'discipline';
+                    if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) return 'work_education';
+                    if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) return 'art_education';
+                    if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') return 'health_pe';
+                    return $n;
+                };
+
+                // Filter snapshot rows if they have extra subjects
+                if (!empty($printData['rows'])) {
+                    $printData['rows'] = array_values(array_filter($printData['rows'], function ($r) use ($allowedSubjectIds) {
+                        $sid = isset($r['subject_id']) ? (int) $r['subject_id'] : null;
+                        return $sid && in_array($sid, $allowedSubjectIds, true);
+                    }));
+                }
+
+                // Check co-scholastic subjects in student's combination
+                $combCoScholasticSubs = $combSubjects->filter(function ($s) use ($categoryOf) {
+                    $subType = strtolower(trim((string) ($s->subject_type ?? '')));
+                    $isSkilled = in_array($subType, ['skilled', 'skill', 'skill-based', 'skill based'], true) || str_contains($subType, 'skill');
+                    $isNonAcademic = (bool) preg_match('/non[\s-]*academic/i', $subType);
+                    $cat = $categoryOf($s->subject_name ?? '');
+                    return $isSkilled || $isNonAcademic || in_array($cat, ['discipline', 'work_education', 'art_education', 'health_pe'], true);
+                });
+
+                if ($combCoScholasticSubs->isEmpty()) {
+                    $printData['layout']['co_scholastic_sections'] = [];
+                } else {
+                    $allowedCoNames = $combCoScholasticSubs->pluck('subject_name')->map(fn ($n) => strtolower(trim((string) $n)))->all();
+                    $allowedCoCats = $combCoScholasticSubs->map(fn ($s) => $categoryOf($s->subject_name))->all();
+
+                    if (!empty($printData['layout']['co_scholastic_sections'])) {
+                        foreach ($printData['layout']['co_scholastic_sections'] as &$sec) {
+                            if (!empty($sec['items'])) {
+                                $sec['items'] = array_values(array_filter($sec['items'], function ($item) use ($categoryOf, $allowedCoCats, $allowedCoNames) {
+                                    $cat = $categoryOf($item);
+                                    if (in_array($cat, $allowedCoCats, true)) {
+                                        return true;
+                                    }
+                                    $normItem = strtolower(trim((string) $item));
+                                    return in_array($normItem, $allowedCoNames, true)
+                                        || collect($allowedCoNames)->contains(fn ($n) => str_contains($normItem, $n) || str_contains($n, $normItem));
+                                }));
+                            }
+                        }
+                        unset($sec);
+
+                        $hasAnyItem = collect($printData['layout']['co_scholastic_sections'])->sum(fn ($s) => count($s['items'] ?? [])) > 0;
+                        if (!$hasAnyItem) {
+                            $printData['layout']['co_scholastic_sections'] = [];
+                        }
+                    }
+                }
+            }
+        }
+
         if (empty($printData['is_blank'])) {
             $term2Pct = $this->calculateTerm2Percentage($printData);
             if ($term2Pct !== null) {
@@ -642,6 +706,19 @@ class MarksheetController extends Controller
         $examMap = $this->marksheetExamMap($classId, $layout, $exam);
         $rollNo = $this->rollNoFor($studentId, $classId, $examId);
 
+        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($class?->class_name);
+        $isClass10Or12 = in_array($normClass, ['10', '12'], true);
+
+        if ($isClass10Or12) {
+            $layout['title'] = 'Pre Board Examination Report Card';
+            foreach ($layout['scholastic_terms'] as &$tCfg) {
+                if (($tCfg['key'] ?? '') === 'term_2') {
+                    $tCfg['label'] = 'Pre Board';
+                }
+            }
+            unset($tCfg);
+        }
+
         $hasEnteredMarks = $studentId && $marks->isNotEmpty() && $marks->contains(function ($item) {
             return ($item->mark_theory !== null && $item->mark_theory !== '')
                 || ($item->total_marks !== null && $item->total_marks !== '')
@@ -659,7 +736,7 @@ class MarksheetController extends Controller
             $tKey = strtolower((string) ($tCfg['key'] ?? ''));
             $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
             $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
-            if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+            if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || str_contains($tLabel, 'annual') || str_contains($tLabel, 'pre board') || $tExamType === 'term 2') {
                 $term2Index = $tIdx;
                 break;
             }
@@ -670,6 +747,23 @@ class MarksheetController extends Controller
 
         $term2GrandTotal = 0.0;
         $term2MaxTotal = 0.0;
+
+        $categoryOf = function ($name) {
+            $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
+            if ($n === 'discipline') {
+                return 'discipline';
+            }
+            if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) {
+                return 'work_education';
+            }
+            if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) {
+                return 'art_education';
+            }
+            if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') {
+                return 'health_pe';
+            }
+            return $n;
+        };
 
         $disciplineSubjects = [];
 
@@ -686,7 +780,9 @@ class MarksheetController extends Controller
             $isSkilled = in_array($subType, ['skilled', 'skill', 'skill-based', 'skill based'], true)
                 || str_contains($subType, 'skill');
             $isNonAcademic = (bool) preg_match('/non[\s-]*academic/i', $subType);
-            $isDisciplineSubject = $isSkilled || $isNonAcademic;
+            $cat = $categoryOf($subjectName);
+            $isCoScholasticCat = in_array($cat, ['discipline', 'work_education', 'art_education', 'health_pe'], true);
+            $isDisciplineSubject = $isSkilled || $isNonAcademic || $isCoScholasticCat;
 
             if ($isDisciplineSubject) {
                 $termGrades = [];
@@ -732,7 +828,7 @@ class MarksheetController extends Controller
             $row = [
                 'subject_id' => $subjectId,
                 'subject' => $subjectName,
-                'special_subject_formatting' => !empty($subject->do_not_print_in_main_scholastic_area),
+                'special_subject_formatting' => \App\Academic\AcademicHelper::isSpecialFormattingForClass($subject, $classId, $class?->class_name),
                 'is_non_academic' => false,
                 'terms' => [],
                 'grand_total' => '',
@@ -844,7 +940,7 @@ class MarksheetController extends Controller
                     $tKey = strtolower((string) ($tCfg['key'] ?? ''));
                     $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
                     $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
-                    if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                    if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || str_contains($tLabel, 'annual') || str_contains($tLabel, 'pre board') || $tExamType === 'term 2') {
                         $term2Index = $tIdx;
                         break;
                     }
@@ -888,23 +984,6 @@ class MarksheetController extends Controller
             ? DB::connection('dynamic')->table('subjectmaster')->pluck('subject_name', 'id')
             : collect();
 
-        $categoryOf = function ($name) {
-            $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
-            if ($n === 'discipline') {
-                return 'discipline';
-            }
-            if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) {
-                return 'work_education';
-            }
-            if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) {
-                return 'art_education';
-            }
-            if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') {
-                return 'health_pe';
-            }
-            return $n;
-        };
-
         $standardCategories = ['discipline', 'work_education', 'art_education', 'health_pe'];
 
         $assignedStandard = [];
@@ -923,103 +1002,104 @@ class MarksheetController extends Controller
             }
         }
 
-        $coSections = [];
-        foreach (($layout['co_scholastic_sections'] ?? []) as $section) {
-            $secTitle = strtolower((string) ($section['title'] ?? ''));
-            $isTerm2 = (bool) preg_match('/\bterm[\s-]*(?:ii|2)\b/i', $secTitle);
-            $isTerm1 = !$isTerm2 && (bool) preg_match('/\bterm[\s-]*(?:i|1)\b/i', $secTitle);
+        // If no co-scholastic or discipline subjects are assigned, hide the co-scholastic sections completely!
+        if (empty($disciplineSubjects)) {
+            $layout['co_scholastic_sections'] = [];
+        } else {
+            $coSections = [];
+            foreach (($layout['co_scholastic_sections'] ?? []) as $section) {
+                $secTitle = strtolower((string) ($section['title'] ?? ''));
+                $isTerm2 = (bool) preg_match('/\bterm[\s-]*(?:ii|2)\b/i', $secTitle);
+                $isTerm1 = !$isTerm2 && (bool) preg_match('/\bterm[\s-]*(?:i|1)\b/i', $secTitle);
 
-            $targetTermIndex = $isTerm2 ? 1 : ($isTerm1 ? 0 : 0);
-            $targetExam = null;
-            if ($targetTermIndex !== null && isset($layout['scholastic_terms'][$targetTermIndex])) {
-                $targetExam = $this->examForTerm($layout['scholastic_terms'][$targetTermIndex], $targetTermIndex, $examMap, $exam);
-            }
-
-            $items = [];
-            $seenCategories = [];
-
-            foreach (($section['items'] ?? []) as $it) {
-                $cat = $categoryOf($it);
-                $displayName = $it;
-
-                if (!isset($seenCategories[$cat])) {
-                    $seenCategories[$cat] = true;
-                    $items[] = $displayName;
+                $targetTermIndex = $isTerm2 ? 1 : ($isTerm1 ? 0 : 0);
+                $targetExam = null;
+                if ($targetTermIndex !== null && isset($layout['scholastic_terms'][$targetTermIndex])) {
+                    $targetExam = $this->examForTerm($layout['scholastic_terms'][$targetTermIndex], $targetTermIndex, $examMap, $exam);
                 }
 
-                // Insert extra custom discipline subjects (like Food, Block Print) right after Discipline
-                if ($cat === 'discipline') {
-                    foreach ($extraCustom as $eCat => $eTitle) {
-                        if (!isset($seenCategories[$eCat])) {
-                            $seenCategories[$eCat] = true;
-                            $items[] = ucwords(strtolower($eTitle));
+                $items = [];
+                $seenCategories = [];
+
+                // 1. Only include standard items that are actually assigned in the student's combination!
+                foreach (($section['items'] ?? []) as $it) {
+                    $cat = $categoryOf($it);
+                    if (isset($assignedStandard[$cat])) {
+                        if (!isset($seenCategories[$cat])) {
+                            $seenCategories[$cat] = true;
+                            $items[] = $assignedStandard[$cat];
                         }
                     }
                 }
-            }
 
-            foreach ($extraCustom as $eCat => $eTitle) {
-                if (!isset($seenCategories[$eCat])) {
-                    $seenCategories[$eCat] = true;
-                    $items[] = ucwords(strtolower($eTitle));
-                }
-            }
-
-            $grades = [];
-            foreach ($items as $item) {
-                $itemCat = $categoryOf($item);
-                $itemName = strtolower(trim((string) $item));
-                $foundGrade = null;
-
-                // 1. Check if this item is an assigned discipline subject
-                $matchedDiscipline = collect($disciplineSubjects)->first(function ($ds) use ($itemCat, $itemName, $categoryOf) {
-                    if ($categoryOf($ds['title']) === $itemCat) {
-                        return true;
+                // 2. Add extra custom discipline/skill subjects (like Food, Block Print)
+                foreach ($extraCustom as $eCat => $eTitle) {
+                    if (!isset($seenCategories[$eCat])) {
+                        $seenCategories[$eCat] = true;
+                        $items[] = ucwords(strtolower($eTitle));
                     }
-                    $dName = strtolower(trim($ds['title']));
-                    return $dName === $itemName || str_contains($dName, $itemName) || str_contains($itemName, $dName);
-                });
-
-                if ($matchedDiscipline && isset($matchedDiscipline['term_grades'][$targetTermIndex])) {
-                    $foundGrade = $matchedDiscipline['term_grades'][$targetTermIndex];
                 }
 
-                // 2. Lookup in saved marks
-                if (!$foundGrade) {
-                    foreach ($allNonAcademicMarks as $m) {
-                        $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
-                        $sCat = $categoryOf($sRaw);
-                        $sName = strtolower(trim($sRaw));
-                        if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
-                            if ($targetExam && (int) $m->exam_id === (int) $targetExam->id) {
-                                $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
-                                break;
-                            } elseif (!$targetExam && empty($foundGrade)) {
-                                $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                if (empty($items)) {
+                    continue;
+                }
+
+                $grades = [];
+                foreach ($items as $item) {
+                    $itemCat = $categoryOf($item);
+                    $itemName = strtolower(trim((string) $item));
+                    $foundGrade = null;
+
+                    // 1. Check if this item is an assigned discipline subject
+                    $matchedDiscipline = collect($disciplineSubjects)->first(function ($ds) use ($itemCat, $itemName, $categoryOf) {
+                        if ($categoryOf($ds['title']) === $itemCat) {
+                            return true;
+                        }
+                        $dName = strtolower(trim($ds['title']));
+                        return $dName === $itemName || str_contains($dName, $itemName) || str_contains($itemName, $dName);
+                    });
+
+                    if ($matchedDiscipline && isset($matchedDiscipline['term_grades'][$targetTermIndex])) {
+                        $foundGrade = $matchedDiscipline['term_grades'][$targetTermIndex];
+                    }
+
+                    // 2. Lookup in saved marks
+                    if (!$foundGrade) {
+                        foreach ($allNonAcademicMarks as $m) {
+                            $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
+                            $sCat = $categoryOf($sRaw);
+                            $sName = strtolower(trim($sRaw));
+                            if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
+                                if ($targetExam && (int) $m->exam_id === (int) $targetExam->id) {
+                                    $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                                    break;
+                                } elseif (!$targetExam && empty($foundGrade)) {
+                                    $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                                }
                             }
                         }
                     }
-                }
 
-                if (!$foundGrade) {
-                    foreach ($allNonAcademicMarks as $m) {
-                        $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
-                        $sCat = $categoryOf($sRaw);
-                        $sName = strtolower(trim($sRaw));
-                        if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
-                            $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
-                            break;
+                    if (!$foundGrade) {
+                        foreach ($allNonAcademicMarks as $m) {
+                            $sRaw = (string) ($subjectsMap[$m->subject_id] ?? '');
+                            $sCat = $categoryOf($sRaw);
+                            $sName = strtolower(trim($sRaw));
+                            if ($sCat === $itemCat || $sName === $itemName || str_contains($sName, $itemName) || str_contains($itemName, $sName)) {
+                                $foundGrade = $this->normalizeToThreePointGrade($m->grade ?: $m->overall_grade);
+                                break;
+                            }
                         }
                     }
-                }
 
-                $grades[$item] = $foundGrade ?: ($grading['co_scholastic_default_grade'] ?? 'A');
+                    $grades[$item] = $foundGrade ?: ($grading['co_scholastic_default_grade'] ?? 'A');
+                }
+                $section['items'] = $items;
+                $section['grades'] = $grades;
+                $coSections[] = $section;
             }
-            $section['items'] = $items;
-            $section['grades'] = $grades;
-            $coSections[] = $section;
+            $layout['co_scholastic_sections'] = $coSections;
         }
-        $layout['co_scholastic_sections'] = $coSections;
 
         if (!$hasEnteredMarks) {
             $grandTotal = null;
@@ -1161,7 +1241,7 @@ class MarksheetController extends Controller
     {
         return [
             'paper' => 'a4-landscape',
-            'title' => 'Term - II (Annual) Examination Report Card',
+            'title' => 'Annual Examination Report Card',
             'student_fields' => ['student_name', 'mother_name', 'father_name', 'scholar_no', 'roll_no', 'date_of_birth', 'class_section'],
             'optional_fields' => ['percentage', 'attendance'],
             'separate_subject_ids' => collect(Config::get('global.marksheet_separate_subject_ids', [14, 5]))
@@ -1172,7 +1252,7 @@ class MarksheetController extends Controller
             'scholastic_terms' => [
                 [
                     'key' => 'term_1',
-                    'label' => 'Term I',
+                    'label' => 'Half Yearly Exam',
                     'exam_type' => 'Term 1',
                     'pt_exam_type' => 'PT 1',
                     'columns' => [
@@ -1186,7 +1266,7 @@ class MarksheetController extends Controller
                 ],
                 [
                     'key' => 'term_2',
-                    'label' => 'Term II',
+                    'label' => 'Annual Exam',
                     'exam_type' => 'Term 2',
                     'pt_exam_type' => 'PT 2',
                     'columns' => [
@@ -1341,55 +1421,88 @@ class MarksheetController extends Controller
         $subjectColumns = $this->marksheetSubjectColumns();
         $assigned = collect();
 
+        // 1. Check student-specific assignment
         if ($studentId && Schema::connection('dynamic')->hasTable('subject_assign_student') && Schema::connection('dynamic')->hasTable('combination_subject')) {
-            $assigned = DB::connection('dynamic')
-                ->table('subject_assign_student as sas')
-                ->join('combination_subject as cs', 'cs.subject_combination_id', '=', 'sas.assign_this_combtoall')
-                ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
-                ->where(function ($q) use ($studentId) {
-                    $q->where('sas.students_details', (string) $studentId)
-                        ->orWhere('sas.students_details', $studentId)
-                        ->orWhereJsonContains('sas.students_details', (string) $studentId)
-                        ->orWhereJsonContains('sas.students_details', $studentId);
-                })
-                ->when($class && !empty($class->class_name), fn ($q) => $q->where('sas.class_name', $class->class_name))
-                ->where(function ($q) {
-                    $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
-                })
-                ->select($subjectColumns)
-                ->distinct()
-                ->orderBy('cs.subject_order')
-                ->orderBy('s.subject_name')
-                ->get()
-                ->unique('id')
-                ->values();
+            $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+            $query = DB::connection('dynamic')->table('subject_assign_student as sas');
+            if ($class && !empty($class->class_name)) {
+                $norm = AcademicHelper::normalizeClassIdentifier($class->class_name);
+                $query->where(function ($q) use ($class, $norm) {
+                    $q->where('sas.class_name', $class->class_name)
+                      ->orWhere('sas.class_name', $norm)
+                      ->orWhere('sas.class_name', ltrim($class->class_name, '0'));
+                });
+            }
+            if ($hasIsDelete) {
+                $query->orderByRaw('CASE WHEN sas.is_delete = 0 OR sas.is_delete IS NULL THEN 0 ELSE 1 END ASC');
+            }
+            $assignments = $query->orderByDesc('sas.id')->get();
 
-            // Continue to merge class-level skilled/non-academic subjects and marked subjects below
-        }
+            $matchedCombId = null;
+            foreach ($assignments as $a) {
+                $raw = $a->students_details;
+                $ids = [];
+                if (is_numeric($raw)) {
+                    $ids[] = (int) $raw;
+                } elseif (is_string($raw) && str_starts_with(trim($raw), '[')) {
+                    $decoded = json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $d) {
+                            if (is_numeric($d)) $ids[] = (int) $d;
+                        }
+                    }
+                } elseif (is_string($raw) && str_contains($raw, ',')) {
+                    foreach (explode(',', $raw) as $d) {
+                        if (is_numeric(trim($d))) $ids[] = (int) trim($d);
+                    }
+                } elseif (!empty($raw) && is_numeric(trim($raw))) {
+                    $ids[] = (int) trim($raw);
+                }
 
-        if ($assigned->isNotEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
-            $classSkilledSubjects = DB::connection('dynamic')
-                ->table('academic_class_subject as acs')
-                ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
-                ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
-                ->where(function ($q) {
-                    $q->whereIn(DB::raw('LOWER(TRIM(s.subject_type))'), ['skilled', 'skill', 'non academic'])
-                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%skill%')
-                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%non%academic%');
-                })
-                ->select($subjectColumns)
-                ->get();
+                if (in_array((int) $studentId, $ids, true)) {
+                    $matchedCombId = (int) $a->assign_this_combtoall;
+                    break;
+                }
+            }
 
-            if ($classSkilledSubjects->isNotEmpty()) {
-                $assigned = $assigned->concat($classSkilledSubjects)->unique('id')->values();
+            if ($matchedCombId) {
+                $assigned = DB::connection('dynamic')
+                    ->table('combination_subject as cs')
+                    ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
+                    ->where('cs.subject_combination_id', $matchedCombId)
+                    ->where(function ($q) {
+                        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                            $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                        }
+                    })
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
+                    ->select($subjectColumns)
+                    ->orderBy('cs.subject_order')
+                    ->orderBy('s.subject_name')
+                    ->get()
+                    ->unique('id')
+                    ->values();
             }
         }
 
-        if ($assigned->isEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
+        // If combination subjects found, return ONLY those assigned subjects!
+        // Strictly do NOT merge class-level skilled subjects or extra marked subjects
+        if ($assigned->isNotEmpty()) {
+            return $assigned;
+        }
+
+        // 2. Fallback: Check class-level assigned subjects (only when student has no assigned combination)
+        if ($classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
             $assigned = DB::connection('dynamic')
                 ->table('academic_class_subject as acs')
                 ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
                 ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                        $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                    }
+                })
+                ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                 ->select($subjectColumns)
                 ->orderBy('s.subject_name')
                 ->get()
@@ -1397,7 +1510,7 @@ class MarksheetController extends Controller
                 ->values();
         }
 
-        // Include any subjects where marks have been entered for this student
+        // 3. Fallback: Include any subjects where marks have been entered for this student (only when student has no assigned combination)
         if ($studentId && Schema::connection('dynamic')->hasTable('academic_students_marks') && Schema::connection('dynamic')->hasTable('previosly_saved_marks_entry')) {
             $markedSubjectIds = DB::connection('dynamic')
                 ->table('academic_students_marks as sm')
@@ -1415,6 +1528,7 @@ class MarksheetController extends Controller
                 $extraSubjects = DB::connection('dynamic')
                     ->table('subjectmaster as s')
                     ->whereIn('s.id', $missingIds)
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                     ->select($subjectColumns)
                     ->get();
                 $assigned = $assigned->concat($extraSubjects)->unique('id')->values();
@@ -1439,7 +1553,10 @@ class MarksheetController extends Controller
                     'subject_type',
                     Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
                         ? 'do_not_print_in_main_scholastic_area'
-                        : DB::raw('0 as do_not_print_in_main_scholastic_area')
+                        : DB::raw('0 as do_not_print_in_main_scholastic_area'),
+                    Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_formatting_classes')
+                        ? 'special_formatting_classes'
+                        : DB::raw('NULL as special_formatting_classes')
                 )
                 ->orderBy('subject_name')
                 ->get();
@@ -1455,6 +1572,10 @@ class MarksheetController extends Controller
         $columns[] = Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
             ? 's.do_not_print_in_main_scholastic_area'
             : DB::raw('0 as do_not_print_in_main_scholastic_area');
+
+        $columns[] = Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_formatting_classes')
+            ? 's.special_formatting_classes'
+            : DB::raw('NULL as special_formatting_classes');
 
         return $columns;
     }
@@ -1680,16 +1801,18 @@ class MarksheetController extends Controller
             return 'term1';
         }
 
-        // 4. Term 2 / Term II / Annual / Final / Yearly
+        // 4. Term 2 / Term II / Annual / Final / Yearly / Pre Board
         if (
             preg_match('/\bterm[\s_-]*(2|ii)\b/i', $raw) ||
             preg_match('/annual/i', $raw) ||
+            preg_match('/pre[\s_-]*board/i', $raw) ||
             preg_match('/(?<!half[\s_-])yearly/i', $raw) ||
             preg_match('/final/i', $raw) ||
-            in_array($clean, ['term2', 'termii', 'annual', 'yearly', 'final'], true) ||
+            in_array($clean, ['term2', 'termii', 'annual', 'yearly', 'final', 'preboard'], true) ||
             str_starts_with($clean, 'term2') ||
             str_starts_with($clean, 'termii') ||
-            str_starts_with($clean, 'annual')
+            str_starts_with($clean, 'annual') ||
+            str_starts_with($clean, 'preboard')
         ) {
             return 'term2';
         }

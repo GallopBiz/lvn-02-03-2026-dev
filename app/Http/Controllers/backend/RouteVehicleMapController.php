@@ -12,8 +12,11 @@ class RouteVehicleMapController extends Controller
 {
     public function index(Request $request)
     {
-        // ✅ Use selected database based on cookie
-        $db_name = $_COOKIE['selectedYear'] ?? '2024_2025';
+        // ✅ Use selected database based on cookie, session, or current dynamic connection
+        $db_name = $request->cookie('selectedYear')
+            ?: ($request->hasSession() ? ($request->session()->get('selectedYear') ?: $request->session()->get('db_names')) : null)
+            ?: Config::get('database.connections.dynamic.database')
+            ?: '2025_2026';
 
         $dynamicConfig = Config::get('database.connections.dynamic');
         $dynamicConfig['database'] = $db_name;

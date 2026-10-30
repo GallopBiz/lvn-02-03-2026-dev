@@ -107,11 +107,26 @@
     @forelse($reports as $report)
         <div class="card mb-4 shadow-sm">
             <div class="card-body">
+                @php
+                    $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier(optional($report['class'] ?? null)->class_name ?? '');
+                    $isClass12 = ($normClass === '12');
+
+                    $term1Heading = 'Half Yearly Exam';
+                    $term2Heading = $isClass12 ? 'Pre Board' : 'Annual Exam';
+
+                    $rawExamTitle = $report['exam_title'] ?? (!empty($report['show_term_2']) ? ($isClass12 ? 'Consolidated Pre Board Examination' : 'Consolidated Annual Examination') : 'Consolidated Half Yearly Examination');
+                    $examTitleDisplay = $rawExamTitle;
+                    if (preg_match('/\bterm[\s_-]*(?:2|ii)\b/i', $examTitleDisplay) || str_contains(strtolower($examTitleDisplay), 'annual')) {
+                        $examTitleDisplay = $isClass12 ? 'Consolidated Pre Board Examination' : 'Consolidated Annual Examination';
+                    } elseif (preg_match('/\bterm[\s_-]*(?:1|i)\b/i', $examTitleDisplay)) {
+                        $examTitleDisplay = 'Consolidated Half Yearly Examination';
+                    }
+                @endphp
                 <div class="border-bottom pb-3 mb-3">
                     <div class="text-center mb-2">
                         <h4 class="font-weight-bold mb-1" style="letter-spacing: 0.5px;">Lokmanya Vidya Niketan</h4>
                         <h5 class="text-primary font-weight-bold mb-1">
-                            {{ $report['exam_title'] ?? (!empty($report['show_term_2']) ? 'Consolidated Term - II (Annual) Examination' : 'Consolidated Term - I Examination') }}
+                            {{ $examTitleDisplay }}
                         </h5>
                         <div class="text-muted font-weight-500">Session : {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
                     </div>
@@ -161,9 +176,9 @@
                                         <th rowspan="2" style="min-width: 85px;">Sch. No<br>Att.</th>
                                         <th rowspan="2" style="min-width: 110px;">Optional<br>Subject</th>
                                         <th rowspan="2" class="text-left" style="min-width: 130px;">Subject</th>
-                                        <th colspan="5">Term - I</th>
+                                        <th colspan="5">{{ $term1Heading }}</th>
                                         @if(!empty($report['show_term_2']))
-                                            <th colspan="5">Term - II</th>
+                                            <th colspan="5">{{ $term2Heading }}</th>
                                         @endif
                                         <th rowspan="2" style="width: 55px;">Perc%</th>
                                         <th rowspan="2" style="width: 60px;">Division</th>

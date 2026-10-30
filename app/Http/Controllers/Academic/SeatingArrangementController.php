@@ -664,6 +664,9 @@ class SeatingArrangementController extends Controller
         }
 
         $combMap = $this->getStudentCombinationMap();
+        $dbSubjectsMap = $this->getAllCombinationSubjectsMap();
+        $masterCategories = $this->getSubjectMasterCategories();
+        $optionalMasterNames = $masterCategories['optional'] ?? [];
 
         foreach ($students as $student) {
             $combInfo = $combMap[$student->id] ?? null;
@@ -686,34 +689,53 @@ class SeatingArrangementController extends Controller
                 }
             }
 
+            $resolved = $this->resolveMainAcademicAndOptional(
+                $streamName,
+                $combName,
+                $combId,
+                $dbSubjectsMap,
+                $optionalMasterNames
+            );
+
             $student->combination_id = $combId;
             $student->combination_name = !empty($combName) ? trim((string) $combName) : '';
-            $student->stream_name = !empty($streamName) ? trim((string) $streamName) : '';
+            $student->academic_stream = $resolved['academic_stream'];
+            $student->optional_subject = $resolved['optional_subject'];
+            $student->stream_name = $resolved['academic_stream'];
         }
 
         return $students->sort(function ($a, $b) {
-            // 1. Group by category: PCM first, PCB second, other combinations third, unassigned last
-            $pA = $this->getCombinationCategoryPriority($a->combination_name);
-            $pB = $this->getCombinationCategoryPriority($b->combination_name);
-            if ($pA !== $pB) {
-                return $pA <=> $pB;
+            // 1. Group by Main Academic Stream (PCM -> PCB -> PCMB -> SCIENCE -> COMMERCE -> HUMANITIES -> Other -> Unassigned)
+            $streamPriorityA = $this->getAcademicStreamPriority($a->academic_stream);
+            $streamPriorityB = $this->getAcademicStreamPriority($b->academic_stream);
+            if ($streamPriorityA !== $streamPriorityB) {
+                return $streamPriorityA <=> $streamPriorityB;
             }
 
-            // 2. Alphabetical order based on subject combination
-            $normA = $this->normalizeCombinationForSort($a->combination_name);
-            $normB = $this->normalizeCombinationForSort($b->combination_name);
-            $normCmp = strnatcasecmp($normA, $normB);
-            if ($normCmp !== 0) {
-                return $normCmp;
+            if ($streamPriorityA === 7) {
+                $streamCmp = strnatcasecmp((string) $a->academic_stream, (string) $b->academic_stream);
+                if ($streamCmp !== 0) {
+                    return $streamCmp;
+                }
             }
 
-            // Raw combination name comparison to ensure identical combinations group strictly together
-            $rawCmp = strnatcasecmp(trim((string) $a->combination_name), trim((string) $b->combination_name));
-            if ($rawCmp !== 0) {
-                return $rawCmp;
+            // 2. Group by Optional Subject (e.g. CS, DANCE, IP, MUSIC, PE, PSYCHOLOGY)
+            $optA = trim((string) ($a->optional_subject ?? ''));
+            $optB = trim((string) ($b->optional_subject ?? ''));
+
+            if ($optA === '' && $optB !== '') {
+                return 1;
+            }
+            if ($optA !== '' && $optB === '') {
+                return -1;
             }
 
-            // 3. Within each combination group, sort students alphabetically by name
+            $optCmp = strnatcasecmp($optA, $optB);
+            if ($optCmp !== 0) {
+                return $optCmp;
+            }
+
+            // 3. Within each (Main Academic + Optional Subject) group, arrange all students alphabetically by their names
             $nameA = trim((string) ($a->student_name ?? ''));
             $nameB = trim((string) ($b->student_name ?? ''));
             $nameCmp = strnatcasecmp($nameA, $nameB);
@@ -721,7 +743,7 @@ class SeatingArrangementController extends Controller
                 return $nameCmp;
             }
 
-            // Tie-breaker on scholar_no or ID
+            // 4. Secondary tie-breaker by scholar_no or ID
             $schA = trim((string) ($a->scholar_no ?? ''));
             $schB = trim((string) ($b->scholar_no ?? ''));
             if ($schA !== '' && $schB !== '' && $schA !== $schB) {
@@ -805,38 +827,203 @@ class SeatingArrangementController extends Controller
         return $activeMap + $fallbackMap;
     }
 
-    private function getCombinationCategoryPriority(?string $combName): int
-    {
-        if (empty($combName) || trim($combName) === '' || strcasecmp(trim($combName), 'General Combination') === 0) {
-            return 99; // Unassigned / fallback at the end
+    private function resolveMainAcademicAndOptional(
+        ?string $rawStream,
+        ?string $combName,
+        ?int $combId,
+        array $dbSubjectsMap,
+        array $optionalMasterNames
+    ): array {
+        $combName = trim((string) $combName);
+        $rawStream = trim((string) $rawStream);
+
+        // 1. Resolve Main Academic Stream/Subject (PCM, PCB, PCMB, COMMERCE, HUMANITIES)
+        $academicStream = '';
+        if (preg_match('/\bPCMB\b/i', $combName)) {
+            $academicStream = 'PCMB';
+        } elseif (preg_match('/\bPCB\b/i', $combName)) {
+            $academicStream = 'PCB';
+        } elseif (preg_match('/\bPCM\b/i', $combName)) {
+            $academicStream = 'PCM';
+        } elseif (preg_match('/\bCOMMERCE\b/i', $combName)) {
+            $academicStream = 'COMMERCE';
+        } elseif (preg_match('/\b(HUMANITIES|ARTS)\b/i', $combName)) {
+            $academicStream = 'HUMANITIES';
+        } elseif (!empty($rawStream)) {
+            $academicStream = strtoupper($rawStream);
         }
 
-        $c = strtoupper(trim($combName));
-
-        // 1. PCM combinations (e.g. PCM, PCM 11+ PE, PCM+CS, but not PCMB)
-        if (preg_match('/\bPCM\b/i', $c) && !preg_match('/\bPCMB\b/i', $c)) {
-            return 1;
+        // 2. Resolve Optional Subject (Academic subjects with subject_type = 'Optional' in Subject Master)
+        $optionalSubject = '';
+        if (str_contains($combName, '+')) {
+            $parts = explode('+', $combName);
+            array_shift($parts); // Remove main stream/core prefix (e.g. PCM 11, COMMERCE 12)
+            foreach ($parts as $p) {
+                $p = trim($p);
+                if ($p === '') {
+                    continue;
+                }
+                $norm = $this->normalizeOptionalSubjectToken($p);
+                if ($this->isOptionalSubject($norm, $optionalMasterNames)) {
+                    $optionalSubject = $norm;
+                    break;
+                }
+            }
         }
 
-        // 2. PCB / PCMB combinations
-        if (preg_match('/\bPCB\b/i', $c) || preg_match('/\bPCMB\b/i', $c)) {
-            return 2;
+        // Fallback to combination_subject master records if not parsed from name
+        if (empty($optionalSubject) && !empty($combId) && isset($dbSubjectsMap[$combId])) {
+            foreach ($dbSubjectsMap[$combId] as $s) {
+                if ($s['type'] === 'optional') {
+                    $optionalSubject = $this->normalizeOptionalSubjectToken($s['name']);
+                    break;
+                }
+            }
         }
 
-        // 3. Other combinations (Commerce, Humanities, etc.)
-        return 3;
+        return [
+            'academic_stream' => $academicStream,
+            'optional_subject' => $optionalSubject,
+        ];
     }
 
-    private function normalizeCombinationForSort(?string $combName): string
+    private function isOptionalSubject(string $canonicalName, array $optionalMasterNames): bool
     {
-        if (empty($combName)) {
-            return '';
+        if (in_array($canonicalName, $optionalMasterNames, true)) {
+            return true;
         }
 
-        // Strip class numbers like 11, 12, XI, XII to compare subjects cleanly (e.g. "PCM 11+ PE" vs "PCM+CS")
-        $s = preg_replace('/\b(11|12|XI|XII)\b/i', '', $combName);
-        $s = preg_replace('/[\s+]+/', ' ', trim($s));
+        foreach ($optionalMasterNames as $opt) {
+            if (str_contains($canonicalName, $opt) || str_contains($opt, $canonicalName)) {
+                return true;
+            }
+        }
 
-        return strtoupper($s);
+        return false;
+    }
+
+    private function getAcademicStreamPriority(?string $stream): int
+    {
+        if (empty($stream)) {
+            return 99; // Unassigned / no stream at the end
+        }
+
+        $s = strtoupper(trim($stream));
+        if ($s === 'PCM') {
+            return 1;
+        }
+        if ($s === 'PCB') {
+            return 2;
+        }
+        if ($s === 'PCMB') {
+            return 3;
+        }
+        if ($s === 'SCIENCE') {
+            return 4;
+        }
+        if ($s === 'COMMERCE') {
+            return 5;
+        }
+        if ($s === 'HUMANITIES' || $s === 'ARTS') {
+            return 6;
+        }
+
+        return 7; // Other defined streams
+    }
+
+    private function normalizeOptionalSubjectToken(string $raw): string
+    {
+        $t = strtoupper(trim($raw));
+        $map = [
+            'PE' => 'PHYSICAL EDUCATION',
+            'P.E.' => 'PHYSICAL EDUCATION',
+            'PHY EDU' => 'PHYSICAL EDUCATION',
+            'PHY. EDU.' => 'PHYSICAL EDUCATION',
+            'PHYSICAL EDUCATION' => 'PHYSICAL EDUCATION',
+            'CS' => 'COMPUTER SCIENCE',
+            'C.S.' => 'COMPUTER SCIENCE',
+            'COMP SC' => 'COMPUTER SCIENCE',
+            'COMPUTER SCIENCE' => 'COMPUTER SCIENCE',
+            'IP' => 'INFORMATICS PRACTICES',
+            'I.P.' => 'INFORMATICS PRACTICES',
+            'INFORMATICS PRACTICES' => 'INFORMATICS PRACTICES',
+            'INFROMATICS PRACTICES' => 'INFORMATICS PRACTICES',
+            'MARK' => 'MARKETING',
+            'MKT' => 'MARKETING',
+            'MARKETING' => 'MARKETING',
+            'OFFICE' => 'OFFICE PROCEDURES & PRACTICES',
+            'OFFICE PROCEDURES' => 'OFFICE PROCEDURES & PRACTICES',
+            'OFFICE PROCEDURES & PRACTICES' => 'OFFICE PROCEDURES & PRACTICES',
+            'DANCE' => 'DANCE',
+            'MUSIC' => 'MUSIC',
+            'PSY' => 'PSYCHOLOGY',
+            'PSYCHOLOGY' => 'PSYCHOLOGY',
+            'HINDI' => 'HINDI (11-12)',
+            'HINDI (11-12)' => 'HINDI (11-12)',
+            'APPLIED MATH' => 'APPLIED MATHEMATICS',
+            'APP MATH' => 'APPLIED MATHEMATICS',
+            'APPLIED MATHEMATICS' => 'APPLIED MATHEMATICS',
+            'ESHIP' => 'ENTREPRENEURSHIP',
+            'ENTREPRENEURSHIP' => 'ENTREPRENEURSHIP',
+            'AI' => 'ARTIFICIAL INTELLIGENCE',
+            'ARTIFICIAL INTELLIGENCE' => 'ARTIFICIAL INTELLIGENCE',
+            'MATH' => 'MATHEMATICS',
+            'MATHS' => 'MATHEMATICS',
+            'MATHEMATICS' => 'MATHEMATICS',
+            'BIO' => 'BIOLOGY',
+            'BIOLOGY' => 'BIOLOGY',
+        ];
+
+        return $map[$t] ?? $t;
+    }
+
+    private function getAllCombinationSubjectsMap(): array
+    {
+        if (!Schema::connection('dynamic')->hasTable('combination_subject') || !Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return [];
+        }
+
+        $records = DB::connection('dynamic')->table('combination_subject as cs')
+            ->join('subjectmaster as sm', 'sm.id', '=', 'cs.subject_id')
+            ->select('cs.subject_combination_id', 'sm.subject_name', 'sm.subject_type')
+            ->get();
+
+        $map = [];
+        foreach ($records as $r) {
+            $map[$r->subject_combination_id][] = [
+                'name' => $r->subject_name,
+                'type' => strtolower(trim((string) $r->subject_type)),
+            ];
+        }
+
+        return $map;
+    }
+
+    private function getSubjectMasterCategories(): array
+    {
+        if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return ['optional' => [], 'skilled' => []];
+        }
+
+        $records = DB::connection('dynamic')->table('subjectmaster')
+            ->where(function ($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            })
+            ->select('id', 'subject_name', 'subject_type')
+            ->get();
+
+        $optional = [];
+        $skilled = [];
+        foreach ($records as $r) {
+            $type = strtolower(trim((string) $r->subject_type));
+            $name = strtoupper(trim((string) $r->subject_name));
+            if ($type === 'optional') {
+                $optional[] = $name;
+            } elseif ($type === 'skilled') {
+                $skilled[] = $name;
+            }
+        }
+
+        return ['optional' => $optional, 'skilled' => $skilled];
     }
 }

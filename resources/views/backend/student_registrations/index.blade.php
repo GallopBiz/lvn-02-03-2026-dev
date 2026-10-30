@@ -115,9 +115,14 @@ font-size: 0.813rem;
               <div class="card text-start">
                 <div class="card-body">
                   
-                  <h4 class="card-title mb-3 text-end"><a href="{{url('add-student-registrations')}}"><button class="btn btn-outline-primary" type="button">Create Registration</button></a>
+                  <h4 class="card-title mb-3 text-end">
+                  @if(can_action('add', 'student-registrations'))
+                  <a href="{{url('add-student-registrations')}}"><button class="btn btn-outline-primary" type="button">Create Registration</button></a>
+                  @endif
                   <a href="{{url('curren-year-student-registrations')}}"><button class="btn btn-outline-primary" type="button">Current Year Registration</button></a>
+                  @if(can_action('delete', 'student-registrations'))
                   <a href="{{route('archived-students')}}"><button class="btn btn-outline-secondary" type="button">Archived Students</button></a>
+                  @endif
                   <form method="POST" action="{{ route('export_registrations.csv') }}">
 						@csrf
 						<input type="hidden" name="form_number" value="{{ $jsonArr['form_number'] ?? '' }}">
@@ -190,14 +195,20 @@ font-size: 0.813rem;
                               <button class="btn btn-primary dropdown-toggle" id="dropdownMenuButton" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                 Actions
                               </button>
-                              <div class="dropdown-menu btn btn-danger " aria-labelledby="dropdownMenuButton"> <a class="dropdown-item " href="{{ route('registrationviewlist',$each_inq->id) }}">View</a>
+                              <div class="dropdown-menu btn btn-danger " aria-labelledby="dropdownMenuButton"> 
+                                 @if(can_action('view', 'student-registrations'))
+                                 <a class="dropdown-item " href="{{ route('registrationviewlist',$each_inq->id) }}">View</a>
+                                 @endif
+                                 @if(can_action('edit', 'student-registrations'))
                                  <a class="dropdown-item" href="{{ route('registrationeditlist',$each_inq->id) }}">Edit</a>
+                                 @endif
+                                 @if(can_action('delete', 'student-registrations'))
                                  <form method="POST" action="{{ route('archive-student', $each_inq->id) }}" onsubmit="return confirm('Are you sure you want to archive this student? This student will no longer appear in the active ERP records.');">
                                     @csrf
                                     <button type="submit" class="dropdown-item">Archive Student</button>
                                  </form>
-                              <!-- <div class="dropdown-menu" aria-labelledby="dropdownMenuButton"><a class="dropdown-item" href="{{url('inquiry-edit')}}/{{$each_inq->id}}">Edit</a>
-                              </div> -->
+                                 @endif
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -279,6 +290,4 @@ font-size: 0.813rem;
     });
 </script>
 
-
-@endsection 
-
+@endsection

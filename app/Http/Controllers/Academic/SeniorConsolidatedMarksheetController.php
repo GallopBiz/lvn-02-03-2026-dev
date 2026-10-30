@@ -386,10 +386,16 @@ class SeniorConsolidatedMarksheetController extends Controller
 
         $groups = array_values($groupedData);
 
+        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($class?->class_name);
+        $isClass12 = ($normClass === '12');
+        $defaultSeniorExamTitle = !empty($showTerm2)
+            ? ($isClass12 ? 'Pre Board Examination' : 'Annual Examination')
+            : 'Half Yearly Examination';
+
         return [
             'class' => $class,
             'exam' => $activeExam,
-            'exam_title' => $activeExam ? ($activeExam->exam_title ?: $activeExam->exam_name) : (!empty($showTerm2) ? 'Term - II (Annual) Examination' : 'Term - I Examination'),
+            'exam_title' => $activeExam ? ($activeExam->exam_title ?: $activeExam->exam_name) : $defaultSeniorExamTitle,
             'session_year' => $sessionYear,
             'class_teacher' => $this->classTeacherName($class),
             'students' => $studentRows,
@@ -595,16 +601,14 @@ class SeniorConsolidatedMarksheetController extends Controller
             return [];
         }
 
-        $assignments = DB::connection('dynamic')
+        $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+
+        $query = DB::connection('dynamic')
             ->table('subject_assign_student as sas')
             ->leftJoin('subject_combinations as sc', 'sc.id', '=', 'sas.assign_this_combtoall')
             ->leftJoin('streams as str', 'str.id', '=', 'sc.streams')
-            ->where(function ($q) {
-                if (Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete')) {
-                    $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
-                }
-            })
             ->select(
+                'sas.id',
                 'sas.students_details',
                 'sas.class_name',
                 'sas.section_name',
@@ -612,10 +616,16 @@ class SeniorConsolidatedMarksheetController extends Controller
                 'sc.combination_name',
                 'str.id as stream_id',
                 'str.streams as stream_name'
-            )
-            ->get();
+            );
 
-        $map = [];
+        if ($hasIsDelete) {
+            $query->addSelect('sas.is_delete');
+        }
+
+        $assignments = $query->orderBy('sas.id', 'asc')->get();
+
+        $activeMap = [];
+        $fallbackMap = [];
         foreach ($assignments as $a) {
             $raw = $a->students_details;
             $ids = [];
@@ -636,22 +646,31 @@ class SeniorConsolidatedMarksheetController extends Controller
                 $ids[] = (int) trim($raw);
             }
 
+            $combInfo = [
+                'combination_id' => $a->combination_id ?: 9999,
+                'combination_name' => $a->combination_name ?: 'General Combination',
+                'stream_id' => $a->stream_id ?: 9999,
+                'stream_name' => $a->stream_name ?: 'General Stream',
+            ];
+
+            $isDeleted = $hasIsDelete && !empty($a->is_delete) && (int) $a->is_delete === 1;
+
             foreach ($ids as $sId) {
-                $map[$sId] = [
-                    'combination_id' => $a->combination_id ?: 9999,
-                    'combination_name' => $a->combination_name ?: 'General Combination',
-                    'stream_id' => $a->stream_id ?: 9999,
-                    'stream_name' => $a->stream_name ?: 'General Stream',
-                ];
+                if (!$isDeleted) {
+                    $activeMap[$sId] = $combInfo;
+                } else {
+                    $fallbackMap[$sId] = $combInfo;
+                }
             }
         }
 
-        return $map;
+        // Active assignments take priority over fallback assignments
+        return $activeMap + $fallbackMap;
     }
 
     private function assignedSubjectsForStudents($students, $class, $marks, array $combAssignments)
     {
-        $subjectColumns = ['id', 'subject_name', 'subject_type', 'evaluation', 'practical', 'do_not_print_in_main_scholastic_area'];
+        $subjectColumns = ['id', 'subject_name', 'subject_type', 'evaluation', 'practical', 'do_not_print_in_main_scholastic_area', 'special_formatting_classes'];
         $actualColumns = [];
         foreach ($subjectColumns as $col) {
             if (Schema::connection('dynamic')->hasColumn('subjectmaster', $col)) {
@@ -699,7 +718,7 @@ class SeniorConsolidatedMarksheetController extends Controller
                 ->get();
         }
 
-        return $students->mapWithKeys(function ($student) use ($combAssignments, $combSubjects, $classAssignedSubjects, $marks) {
+        return $students->mapWithKeys(function ($student) use ($combAssignments, $combSubjects, $classAssignedSubjects, $marks, $class) {
             $studentId = (int) $student->id;
             $combId = $combAssignments[$studentId]['combination_id'] ?? null;
 
@@ -709,8 +728,8 @@ class SeniorConsolidatedMarksheetController extends Controller
             }
 
             // Exclude Non Academic co-scholastic subjects, test subjects, and practical duplicate subjects (... P)
-            $filterCleanScholastic = function ($collection) {
-                return $collection->filter(function ($s) {
+            $filterCleanScholastic = function ($collection) use ($class) {
+                return $collection->filter(function ($s) use ($class) {
                     $name = trim((string) ($s->subject_name ?? ''));
                     if (preg_match('/\b(test|te4st|dummy)\b/i', $name)) {
                         return false;
@@ -719,37 +738,40 @@ class SeniorConsolidatedMarksheetController extends Controller
                         return false;
                     }
                     $sType = strtolower(trim((string) ($s->subject_type ?? '')));
-                    return !preg_match('/non[\s-]*academic/i', $sType) && empty($s->do_not_print_in_main_scholastic_area);
+                    return !preg_match('/non[\s-]*academic/i', $sType) && !AcademicHelper::isSpecialFormattingForClass($s, $class->id, $class->class_name);
                 });
             };
 
             $assigned = $filterCleanScholastic($assigned);
 
-            // Append any subjects with marks for this student
-            $studentMarks = $marks->filter(fn ($m) => (int) $m->student_id === $studentId);
-            if ($studentMarks->isNotEmpty()) {
-                $markedSubIds = $studentMarks->pluck('subject_id')->map(fn ($id) => (int) $id)->unique()->all();
-                $existingIds = $assigned->pluck('id')->map(fn ($id) => (int) $id)->all();
-                $missingIds = array_diff($markedSubIds, $existingIds);
-                if (!empty($missingIds)) {
-                    $extra = DB::connection('dynamic')
-                        ->table('subjectmaster as s')
-                        ->whereIn('s.id', $missingIds)
-                        ->select(['id', 'subject_name', 'subject_type'])
-                        ->get();
-                    $assigned = $assigned->concat($filterCleanScholastic($extra));
+            // ONLY if student does NOT have assigned combination subjects, check marks or class subjects as fallback
+            if ($assigned->isEmpty()) {
+                // Append any subjects with marks for this student
+                $studentMarks = $marks->filter(fn ($m) => (int) $m->student_id === $studentId);
+                if ($studentMarks->isNotEmpty()) {
+                    $markedSubIds = $studentMarks->pluck('subject_id')->map(fn ($id) => (int) $id)->unique()->all();
+                    $existingIds = $assigned->pluck('id')->map(fn ($id) => (int) $id)->all();
+                    $missingIds = array_diff($markedSubIds, $existingIds);
+                    if (!empty($missingIds)) {
+                        $extra = DB::connection('dynamic')
+                            ->table('subjectmaster as s')
+                            ->whereIn('s.id', $missingIds)
+                            ->select(['id', 'subject_name', 'subject_type'])
+                            ->get();
+                        $assigned = $assigned->concat($filterCleanScholastic($extra));
+                    }
                 }
-            }
 
-            if ($assigned->isEmpty() && $classAssignedSubjects->isNotEmpty()) {
-                $cleanClassSubs = $filterCleanScholastic($classAssignedSubjects)->unique('id')->values();
-                // If class has marked subjects, only keep those marked in class
-                $classMarkedSubIds = $marks->pluck('subject_id')->map(fn ($id) => (int) $id)->unique()->all();
-                if (!empty($classMarkedSubIds)) {
-                    $activeClassSubs = $cleanClassSubs->filter(fn ($s) => in_array((int) $s->id, $classMarkedSubIds, true));
-                    $assigned = $activeClassSubs->isNotEmpty() ? $activeClassSubs : $cleanClassSubs->take(5);
-                } else {
-                    $assigned = $cleanClassSubs->take(5);
+                if ($assigned->isEmpty() && $classAssignedSubjects->isNotEmpty()) {
+                    $cleanClassSubs = $filterCleanScholastic($classAssignedSubjects)->unique('id')->values();
+                    // If class has marked subjects, only keep those marked in class
+                    $classMarkedSubIds = $marks->pluck('subject_id')->map(fn ($id) => (int) $id)->unique()->all();
+                    if (!empty($classMarkedSubIds)) {
+                        $activeClassSubs = $cleanClassSubs->filter(fn ($s) => in_array((int) $s->id, $classMarkedSubIds, true));
+                        $assigned = $activeClassSubs->isNotEmpty() ? $activeClassSubs : $cleanClassSubs->take(5);
+                    } else {
+                        $assigned = $cleanClassSubs->take(5);
+                    }
                 }
             }
 

@@ -11,7 +11,7 @@
     </div>
 </div>
 @if (count($errors) > 0)
-    <div class="alert alert-danger">
+    <div class="alert alert-danger mt-2">
         <strong>Whoops!</strong> There were some problems with your input.<br><br>
         <ul>
         @foreach ($errors->all() as $error)
@@ -23,37 +23,24 @@
 {!! Form::model($role, ['method' => 'PATCH','route' => ['roles.update', $role->id]]) !!}
 <div class="row">
     <div class="col-xs-12 col-sm-12 col-md-12">
-        <div class="form-group">
-            <strong>Name:</strong>
-            {!! Form::text('name', null, array('placeholder' => 'Name','class' => 'form-control')) !!}
+        <div class="form-group mb-3">
+            <strong>Role Name:</strong>
+            {!! Form::text('name', null, array('placeholder' => 'Role Name','class' => 'form-control')) !!}
         </div>
     </div>
-    <div class="col-xs-12 col-sm-12 col-md-12 row">
-    
-        <!-- Sidebar Menu Permissions -->
-        <div class="form-group col-md-12 mt-4">
-            <strong>Sidebar Menu Permissions</strong>
+
+    <!-- Sidebar Menu & Action Permissions -->
+    <div class="col-xs-12 col-sm-12 col-md-12">
+        <div class="form-group col-md-12 mt-2">
+            <h4 class="mb-3 text-primary fw-bold">Menu & Action Permissions (View, Add, Edit, Delete)</h4>
             @include('backend.layouts.menu_columns_checkboxes', [
                 'selectedMenus' => $selectedMenu
             ])
         </div>
     </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.check-all').forEach(function(checkAll) {
-                checkAll.addEventListener('change', function() {
-                    var targetClass = this.getAttribute('data-target');
-                    var checkboxes = document.querySelectorAll('.' + targetClass);
-                    checkboxes.forEach(function(box) {
-                        box.checked = checkAll.checked;
-                    });
-                });
-            });
-        });
-    </script>
-    </div>
-    <div class="col-xs-12 col-sm-12 col-md-12 text-center">
-        <button type="submit" class="btn btn-primary">Submit</button>
+
+    <div class="col-xs-12 col-sm-12 col-md-12 text-center my-4">
+        <button type="submit" class="btn btn-primary px-5 py-2 fw-bold fs-6">Update Role</button>
     </div>
 </div>
 {!! Form::close() !!}

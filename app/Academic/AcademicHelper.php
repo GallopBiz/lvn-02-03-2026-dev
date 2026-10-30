@@ -2,6 +2,11 @@
 
 namespace App\Academic;
 
+use App\Models\Classes;
+use App\Models\Classname;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
 class AcademicHelper
 {
     /**
@@ -49,6 +54,8 @@ class AcademicHelper
         'kgii' => 'KG-II',
         'nursery' => 'Nursery',
     ];
+
+    private static ?array $classNameCache = null;
 
     /**
      * Convert a class string or number to Roman numeral format for printed documents.
@@ -172,5 +179,173 @@ class AcademicHelper
 
         return $reverseMap[$clean] ?? null;
     }
-}
 
+    /**
+     * Clear cached class names.
+     */
+    public static function clearClassNameCache(): void
+    {
+        self::$classNameCache = null;
+    }
+
+    /**
+     * Normalize a class string or number to a canonical comparable key (e.g. '01', '1', 'Class 1' -> '1').
+     *
+     * @param string|null $value
+     * @return string
+     */
+    public static function normalizeClassIdentifier(?string $value): string
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return '';
+        }
+
+        // Strip section if present (e.g. '01 - Kautilya' -> '01')
+        if (preg_match('/^(.*?)\s*-\s*[a-zA-Z0-9]+$/', $raw, $m)) {
+            $raw = trim($m[1]);
+        }
+
+        $clean = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $raw));
+        $clean = preg_replace('/^(class|grade|std|standard)/i', '', $clean);
+        $clean = trim($clean);
+
+        // Try from Roman
+        $fromRom = self::fromRoman($clean);
+        if ($fromRom !== null) {
+            return (string) ((int) $fromRom);
+        }
+
+        // Numeric leading zero strip (e.g. '01' -> '1')
+        if (is_numeric($clean)) {
+            return (string) ((int) $clean);
+        }
+
+        // Kindergarten normalization
+        if (in_array($clean, ['kg1', 'kg01', 'kgi', 'kg-1', 'kg-i'], true)) {
+            return 'kg1';
+        }
+        if (in_array($clean, ['kg2', 'kg02', 'kgii', 'kg-2', 'kg-ii'], true)) {
+            return 'kg2';
+        }
+        if ($clean === 'nursery') {
+            return 'nursery';
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Check whether Special Subject Formatting is applicable for a subject for a given class.
+     *
+     * Rules:
+     * 1. If do_not_print_in_main_scholastic_area is false/0, returns false.
+     * 2. If no classes are selected in special_formatting_classes, returns false (appears in main table for all classes).
+     * 3. If classes are selected, returns true ONLY if the given class matches one of the selected classes.
+     *
+     * @param mixed $subject
+     * @param int|string|null $classId
+     * @param string|null $className
+     * @return bool
+     */
+    public static function isSpecialFormattingForClass(mixed $subject, int|string|null $classId = null, ?string $className = null): bool
+    {
+        if (empty($subject)) {
+            return false;
+        }
+
+        $doNotPrint = false;
+        $classesConfig = null;
+
+        if (is_object($subject)) {
+            $doNotPrint = !empty($subject->do_not_print_in_main_scholastic_area);
+            $classesConfig = $subject->special_formatting_classes ?? null;
+        } elseif (is_array($subject)) {
+            $doNotPrint = !empty($subject['do_not_print_in_main_scholastic_area']);
+            $classesConfig = $subject['special_formatting_classes'] ?? null;
+        }
+
+        if (!$doNotPrint) {
+            return false;
+        }
+
+        // Decode configured classes
+        $selectedClasses = [];
+        if (is_array($classesConfig)) {
+            $selectedClasses = $classesConfig;
+        } elseif (is_string($classesConfig) && trim($classesConfig) !== '') {
+            $decoded = json_decode($classesConfig, true);
+            if (is_array($decoded)) {
+                $selectedClasses = $decoded;
+            } else {
+                $selectedClasses = array_filter(array_map('trim', explode(',', $classesConfig)));
+            }
+        }
+
+        // Rule 4: If no class is selected, the subject should appear in the main marks table for all classes.
+        if (empty($selectedClasses)) {
+            return false;
+        }
+
+        // Resolve target class name if not provided
+        if (empty($className) && !empty($classId)) {
+            try {
+                $foundClass = Classes::find($classId) ?: Classname::find($classId);
+                if ($foundClass) {
+                    $className = $foundClass->class_name;
+                }
+            } catch (\Throwable $e) {
+                // Ignore DB lookup error
+            }
+        }
+
+        // Load class_name master for ID-to-name lookup
+        if (self::$classNameCache === null) {
+            try {
+                if (Schema::connection('dynamic')->hasTable('class_name')) {
+                    self::$classNameCache = DB::connection('dynamic')
+                        ->table('class_name')
+                        ->where('is_delete', 0)
+                        ->pluck('class_name', 'id')
+                        ->all();
+                } else {
+                    self::$classNameCache = [];
+                }
+            } catch (\Throwable $e) {
+                self::$classNameCache = [];
+            }
+        }
+
+        $targetNormalizedName = self::normalizeClassIdentifier($className);
+        $targetIdStr = $classId !== null ? (string) $classId : null;
+
+        foreach ($selectedClasses as $sel) {
+            $selStr = trim((string) $sel);
+            if ($selStr === '') {
+                continue;
+            }
+
+            // If selStr matches class_name ID in cache (where form options come from)
+            if (isset(self::$classNameCache[$selStr])) {
+                if ($targetIdStr !== null && $selStr === $targetIdStr) {
+                    return true;
+                }
+                $selName = self::$classNameCache[$selStr];
+                if ($targetNormalizedName !== '' && $targetNormalizedName === self::normalizeClassIdentifier($selName)) {
+                    return true;
+                }
+            } else {
+                // Non-cached or direct class name string (e.g. "01", "KG1", "Nursery")
+                if ($targetIdStr !== null && $selStr === $targetIdStr) {
+                    return true;
+                }
+                $normalizedSel = self::normalizeClassIdentifier($selStr);
+                if ($targetNormalizedName !== '' && $targetNormalizedName === $normalizedSel) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+}

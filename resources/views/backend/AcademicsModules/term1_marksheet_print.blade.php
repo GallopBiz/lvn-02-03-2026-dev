@@ -632,7 +632,9 @@
                     @endif
 
                     <!-- Co-Scholastic and Discipline Side-by-Side -->
-                    <div class="t1-co-grid">
+                    @if(!empty($coScholastic) || !empty($discipline))
+                    <div class="t1-co-grid" style="{{ (empty($coScholastic) || empty($discipline)) ? 'grid-template-columns: 1fr;' : '' }}">
+                        @if(!empty($coScholastic))
                         <div>
                             <div class="t1-sub-heading">CO-SCHOLASTIC AREAS</div>
                             <table class="t1-co-subtable">
@@ -652,7 +654,9 @@
                                 </tbody>
                             </table>
                         </div>
+                        @endif
 
+                        @if(!empty($discipline))
                         <div>
                             <div class="t1-sub-heading">DISCIPLINE</div>
                             <table class="t1-co-subtable">
@@ -672,7 +676,9 @@
                                 </tbody>
                             </table>
                         </div>
+                        @endif
                     </div>
+                    @endif
 
                     <!-- Class Teacher's Remarks -->
                     <div class="t1-remarks-wrap">

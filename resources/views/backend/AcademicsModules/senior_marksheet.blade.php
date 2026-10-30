@@ -184,7 +184,15 @@
                                     <td>{{ $snapshot['student_name'] ?? ('Student #'.$marksheet->student_id) }}</td>
                                     <td>{{ $snapshot['scholar_no'] ?? ($studentMeta['scholar_no'] ?? '-') }}</td>
                                     <td>{{ \App\Academic\AcademicHelper::toRoman($snapshot['class_name'] ?? ('Class #'.$marksheet->class_id)) }}</td>
-                                    <td>{{ $snapshot['exam_name'] ?? 'Annual Examination' }}</td>
+                                    @php
+                                        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($snapshot['class_name'] ?? null);
+                                        $isClass12 = ($normClass === '12');
+                                        $displayExam = $snapshot['exam_name'] ?? ($isClass12 ? 'Pre Board Examination' : 'Annual Examination');
+                                        if ($isClass12 && str_contains(strtolower($displayExam), 'annual')) {
+                                            $displayExam = 'Pre Board Examination';
+                                        }
+                                    @endphp
+                                    <td>{{ $displayExam }}</td>
                                     <td>{{ $marksheet->session_year ?: '-' }}</td>
                                     <td>{{ optional($marksheet->created_at)->format('d M Y h:i A') }}</td>
                                     <td>{{ $snapshot['print_date'] ?? ($printData['date'] ?? '-') }}</td>

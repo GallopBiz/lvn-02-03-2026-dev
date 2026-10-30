@@ -70,12 +70,14 @@
                             <div class="form-group mb-3">
                                 <label for="teacher_name">Teacher:</label>
                                 <select required name="teacher_name" class="form-control" id="teacher_name" @if (!empty($stream_master) || !empty($isStaffMarksUser)) disabled @endif>
-                                    <option value="">-- Please select --</option>
+                                    @if(empty($stream_master) && empty($isStaffMarksUser) && count($teacherlist) != 1)
+                                        <option value="">-- Please select --</option>
+                                    @endif
                                     @if (!empty($stream_master))
                                         {{ $c_stream = $stream_master->teacher_id }}
                                     @endif
-                                    @foreach ($teacherlist as $teacherlist)
-                                        <option {{( (!empty($c_stream)) && ($c_stream==$teacherlist->Teacher->id)) || (!empty($staffEmployeeId) && $staffEmployeeId==$teacherlist->Teacher->id) ? 'selected' : '' }} value="{{ $teacherlist->Teacher->id }}">{{ $teacherlist->Teacher->first_name }} {{ $teacherlist->Teacher->last_name }} - {{ $teacherlist->Teacher->biometricDetails->ess_emp_code?? '' }}</option>
+                                    @foreach ($teacherlist as $tItem)
+                                        <option {{( (!empty($c_stream)) && ($c_stream==$tItem->Teacher->id)) || (!empty($staffEmployeeId) && $staffEmployeeId==$tItem->Teacher->id) || (count($teacherlist) == 1) ? 'selected' : '' }} value="{{ $tItem->Teacher->id }}">{{ $tItem->Teacher->first_name }} {{ $tItem->Teacher->last_name }} - {{ $tItem->Teacher->biometricDetails->ess_emp_code?? '' }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -83,13 +85,17 @@
                             <div class="form-group mb-3">
                                 <label for="class_name">Class:</label>
                                 <select required id="class_name" class="form-control" name="class_name" autocomplete="" @if (!empty($stream_master)) disabled @endif>
-                                    <option value="">-- Please select --</option>
                                     @if (!empty($stream_master))
-                                        <option {{( ($classlist->id == $stream_master->class_id)) ? 'selected' : '' }} value="{{ $classlist->id }}">{{ $classlist->class_name }}</option>
-                                    @else
+                                        <option value="{{ $classlist->id }}" selected>{{ $classlist->class_name }}</option>
+                                    @elseif(!empty($isStaffMarksUser))
+                                        @if(count($classlist) != 1)
+                                            <option value="">-- Please select --</option>
+                                        @endif
                                         @foreach ($classlist as $class)
-                                            <option value="{{ $class->id }}">{{ $class->class_name }}</option>
+                                            <option value="{{ $class->id }}" {{ count($classlist) == 1 ? 'selected' : '' }}>{{ $class->class_name }}</option>
                                         @endforeach
+                                    @else
+                                        <option value="">-- Please select teacher first --</option>
                                     @endif
                                 </select>
                             </div>
@@ -97,9 +103,10 @@
                             <div class="form-group mb-3">
                                 <label for="section_name">Section:</label>
                                 <select required name="section_name" class="form-control" id="section_name" @if (!empty($stream_master)) disabled @endif>
-                                    <option value=""> -- Please select -- </option>
                                     @if (!empty($stream_master))
                                         <option selected value="{{$stream_master->section_name}}">{{$stream_master->section_name}}</option>
+                                    @else
+                                        <option value="">-- Please select class first --</option>
                                     @endif
                                 </select>
                             </div>
@@ -120,10 +127,7 @@
                                     @if (!empty($stream_master))
                                         <option selected value="{{ $stream_master->subject_id }}" data-subject-type="{{ $stream_master->Subject->subject_type ?? '' }}">{{ $stream_master->Subject->subject_name }}</option>
                                     @else
-                                        <option value="">-- Please select --</option>
-                                        @foreach ($subjectlist as $subjectItem)
-                                            <option value="{{ $subjectItem->id }}" data-subject-type="{{ $subjectItem->subject_type ?? '' }}">{{ $subjectItem->subject_name }}</option>
-                                        @endforeach
+                                        <option value="">-- Please select class first --</option>
                                     @endif
                                 </select>
                             </div>
@@ -131,13 +135,14 @@
                             <div class="form-group mb-3">
                                 <label for="exam_name">Term/Exam:</label>
                                 <select required name="exam_name" class="form-control" id="exam_name" @if (!empty($stream_master)) disabled @endif>
-                                    <option value="">-- Please select --</option>
                                     @if (!empty($stream_master))
                                         @foreach ($examslist as $exam)
                                             @if ($exam->id == $stream_master->exam_id)
                                                 <option selected value="{{ $exam->id }}">{{ $exam->exam_name }}</option>
                                             @endif
                                         @endforeach
+                                    @else
+                                        <option value="">-- Please select class first --</option>
                                     @endif
                                 </select>
                             </div>
@@ -718,6 +723,13 @@
         if (selectedOption.length && selectedType && normalizeSubjectType(selectedOption.data('subject-type')) !== selectedType && selectedOption.val() !== '') {
             $('#subject_name').val('');
         }
+
+        const visibleNonEmpty = $('#subject_name option').filter(function () {
+            return $(this).val() !== '' && $(this).css('display') !== 'none';
+        });
+        if (visibleNonEmpty.length === 1 && !$('#subject_name').val()) {
+            $('#subject_name').val(visibleNonEmpty.first().val());
+        }
     }
 
     function gradeFromMaster(totalMarks) {
@@ -1047,6 +1059,9 @@
         const elm = e.target.parentElement.parentElement;
         elm.remove();
     }
+        let currentClassAssignments = [];
+        let isSyncingDropdowns = false;
+
         document.getElementById("teacher_name").addEventListener("change", (e) => {
             let teacher = e.target.value;
             let teacherText = $("#teacher_name option:selected").text().trim();
@@ -1064,9 +1079,11 @@
                 isTeacherFilterBypassed = false;
                 filterSavedMarksEntries();
 
-                $('#class_name').html('<option value=""> -- Select All -- </option>');
-                $('#subject_name').html('<option value=""> -- Select All -- </option>');
-                $('#section_name').html('<option value=""> -- Select All -- </option>');
+                $('#class_name').html('<option value="">-- Please select teacher first --</option>');
+                $('#subject_name').html('<option value="">-- Please select class first --</option>');
+                $('#section_name').html('<option value="">-- Please select class first --</option>');
+                $('#exam_name').html('<option value="">-- Please select class first --</option>');
+                currentClassAssignments = [];
                 return;
             }
 
@@ -1090,52 +1107,63 @@
                 method: "POST",
                 dataType: 'json',
                 success: function(data) {
-                    currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.class_id); });
-                    currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.subject_id); });
+                    currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.id || c.class_id); });
+                    currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.id || s.subject_id); });
                     currentTeacherFilter.assignments = data['assignments'] || [];
                     filterSavedMarksEntries();
 
-                    // Handle classes dropdown
-                    $('#class_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['classes'].length; i++) {
-                        var className = data['classes'][i].class.class_name;
-                        var class_id = data['classes'][i].class_id;
-                        $('#class_name').append('<option value="' + class_id + '">' + className + '</option>');
-                    }
+                    // Handle classes dropdown - display ONLY assigned classes
+                    const classes = data['classes'] || [];
+                    $('#class_name').html('');
 
-                    // Handle subjects dropdown
-                    $('#subject_name').html('<option value=""> -- Select All -- </option>');
-                    for (var i = 0; i < data['subjects'].length; i++) {
-                        var subjectName = data['subjects'][i].subject.subject_name;
-                        var subject_id = data['subjects'][i].subject_id;
-                        var subjectType = data['subjects'][i].subject.subject_type || '';
-                        $('#subject_name').append('<option value="' + subject_id + '" data-subject-type="' + subjectType + '">' + subjectName + '</option>');
+                    if (classes.length === 1) {
+                        const singleClass = classes[0];
+                        const classId = singleClass.id || singleClass.class_id;
+                        const className = singleClass.class_name || (singleClass.class ? singleClass.class.class_name : '');
+                        $('#class_name').append('<option value="' + classId + '" selected>' + className + '</option>');
+                        // Auto-select single valid class option and trigger cascade
+                        $('#class_name').val(classId).trigger('change');
+                    } else if (classes.length > 1) {
+                        $('#class_name').append('<option value="">-- Please select --</option>');
+                        for (let i = 0; i < classes.length; i++) {
+                            const cls = classes[i];
+                            const classId = cls.id || cls.class_id;
+                            const className = cls.class_name || (cls.class ? cls.class.class_name : '');
+                            $('#class_name').append('<option value="' + classId + '">' + className + '</option>');
+                        }
+                        $('#section_name').html('<option value="">-- Please select class first --</option>');
+                        $('#subject_name').html('<option value="">-- Please select class first --</option>');
+                        $('#exam_name').html('<option value="">-- Please select class first --</option>');
+                    } else {
+                        $('#class_name').html('<option value="">-- No classes assigned --</option>');
+                        $('#section_name').html('<option value="">-- No classes assigned --</option>');
+                        $('#subject_name').html('<option value="">-- No classes assigned --</option>');
+                        $('#exam_name').html('<option value="">-- No classes assigned --</option>');
                     }
-                    filterSubjectDropdownByType();
-                    $('#section_name').html('<option value=""> -- Select All -- </option>');
                 },
                 error: function(xhr, status, error) {
                     console.error(error);
                 }
             });
         });
-        function loadTeacherClassAssignments(classId, subjectId = '') {
+
+        function loadTeacherClassAssignments(classId, preferredSection = '', preferredSubject = '') {
             const teacher = $("#teacher_name").val();
-            const currentSection = $("#section_name").val();
             let token = document.getElementsByName("_token")[0].value;
 
-            $('#subject_name').html('<option value=""> -- Select All -- </option>');
-            $('#section_name').html('<option value=""> -- Select All -- </option>');
+            $('#subject_name').html('<option value="">-- Loading subjects... --</option>');
+            $('#section_name').html('<option value="">-- Loading sections... --</option>');
 
             if (!teacher || !classId) {
+                $('#section_name').html('<option value="">-- Please select class first --</option>');
+                $('#subject_name').html('<option value="">-- Please select class first --</option>');
                 return;
             }
 
             $.ajax({
                 data: {
                     teacher: teacher,
-                    class_name: classId,
-                    subject_id: subjectId
+                    class_name: classId
                 },
                 url: "{{ url($marksUrlPrefix . 'getteachersandsubject') }}",
                 headers: {
@@ -1144,32 +1172,155 @@
                 method: "POST",
                 dataType: 'json',
                 success: function(data) {
-                    for (var i = 0; i < data['sections'].length; i++) {
-                        var sectionName = data['sections'][i];
-                        $('#section_name').append('<option value="' + sectionName + '">' + sectionName + '</option>');
-                    }
+                    currentClassAssignments = data.assignments || [];
+                    const sections = data.sections || [];
+                    const subjects = data.subjects || [];
 
-                    if (currentSection) {
-                        $('#section_name').val(currentSection);
-                    }
-
-                    for (var i = 0; i < data['subjects'].length; i++) {
-                        if (!data['subjects'][i].subject) {
-                            continue;
+                    // Populate Section dropdown - only assigned sections
+                    $('#section_name').html('');
+                    if (sections.length === 1) {
+                        $('#section_name').append('<option value="' + sections[0] + '" selected>' + sections[0] + '</option>');
+                    } else if (sections.length > 1) {
+                        $('#section_name').append('<option value="">-- Please select --</option>');
+                        for (let i = 0; i < sections.length; i++) {
+                            const sec = sections[i];
+                            const isSel = (preferredSection && preferredSection === sec) ? ' selected' : '';
+                            $('#section_name').append('<option value="' + sec + '"' + isSel + '>' + sec + '</option>');
                         }
-                        var subjectName = data['subjects'][i].subject.subject_name;
-                        var subjectId = data['subjects'][i].subject_id;
-                        var subjectType = data['subjects'][i].subject.subject_type || '';
-                        var selected = subjectId == $("#subject_name").data('selected-subject') ? ' selected' : '';
-                        $('#subject_name').append('<option value="' + subjectId + '" data-subject-type="' + subjectType + '"' + selected + '>' + subjectName + '</option>');
+                    } else {
+                        $('#section_name').html('<option value="">-- No sections assigned --</option>');
                     }
+
+                    // Populate Subject dropdown - only assigned subjects for this class
+                    $('#subject_name').html('');
+                    if (subjects.length === 1) {
+                        const sObj = subjects[0].subject || subjects[0];
+                        const sId = subjects[0].subject_id || sObj.id;
+                        const sName = capitalizeFirstLetter(sObj.subject_name);
+                        const sType = sObj.subject_type || '';
+                        $('#subject_name').append('<option value="' + sId + '" data-subject-type="' + sType + '" selected>' + sName + '</option>');
+                    } else if (subjects.length > 1) {
+                        $('#subject_name').append('<option value="">-- Please select --</option>');
+                        for (let i = 0; i < subjects.length; i++) {
+                            const sub = subjects[i];
+                            const sObj = sub.subject || sub;
+                            const sId = sub.subject_id || sObj.id;
+                            const sName = capitalizeFirstLetter(sObj.subject_name);
+                            const sType = sObj.subject_type || '';
+                            const isSel = (preferredSubject && String(preferredSubject) === String(sId)) ? ' selected' : '';
+                            $('#subject_name').append('<option value="' + sId + '" data-subject-type="' + sType + '"' + isSel + '>' + sName + '</option>');
+                        }
+                    } else {
+                        $('#subject_name').html('<option value="">-- No subjects assigned --</option>');
+                    }
+
+                    // Interdependent auto-filtering:
+                    // If section is already auto-selected (single section), filter subjects for that section
+                    if ($('#section_name').val()) {
+                        filterSubjectsByCurrentSection();
+                    } else if ($('#subject_name').val()) {
+                        // If subject is already auto-selected (single subject), filter sections for that subject
+                        filterSectionsByCurrentSubject();
+                    }
+
                     filterSubjectDropdownByType();
+                    updateNonAcademicUiState();
+                    if (!isNonAcademicSelected() && $('#exam_name').val()) {
+                        setExamMaxMarks($('#exam_name').val());
+                    }
+                    checkMarksEntryStatus();
                 },
                 error: function(xhr, status, error) {
                     console.error(error);
                 }
             });
         }
+
+        function filterSubjectsByCurrentSection() {
+            if (isSyncingDropdowns) return;
+            isSyncingDropdowns = true;
+
+            try {
+                const selectedSection = $('#section_name').val();
+                const classId = $('#class_name').val();
+                const currentSub = $('#subject_name').val();
+
+                if (!classId || !currentClassAssignments.length) return;
+
+                let validAssignments = currentClassAssignments;
+                if (selectedSection) {
+                    validAssignments = validAssignments.filter(function(a) {
+                        return String(a.class_id) === String(classId) && (a.section_name === selectedSection || a.section_name === 'All');
+                    });
+                }
+
+                const subMap = {};
+                validAssignments.forEach(function(a) {
+                    subMap[a.subject_id] = { id: a.subject_id, subject_name: a.subject_name, subject_type: a.subject_type };
+                });
+                const validSubs = Object.values(subMap);
+
+                $('#subject_name').html('');
+                if (validSubs.length === 1) {
+                    $('#subject_name').append('<option value="' + validSubs[0].id + '" data-subject-type="' + validSubs[0].subject_type + '" selected>' + capitalizeFirstLetter(validSubs[0].subject_name) + '</option>');
+                } else if (validSubs.length > 1) {
+                    $('#subject_name').append('<option value="">-- Please select --</option>');
+                    validSubs.forEach(function(s) {
+                        const sel = (currentSub && String(currentSub) === String(s.id)) ? ' selected' : '';
+                        $('#subject_name').append('<option value="' + s.id + '" data-subject-type="' + s.subject_type + '"' + sel + '>' + capitalizeFirstLetter(s.subject_name) + '</option>');
+                    });
+                } else {
+                    $('#subject_name').html('<option value="">-- No subjects assigned for this section --</option>');
+                }
+
+                filterSubjectDropdownByType();
+                updateNonAcademicUiState();
+            } finally {
+                isSyncingDropdowns = false;
+            }
+        }
+
+        function filterSectionsByCurrentSubject() {
+            if (isSyncingDropdowns) return;
+            isSyncingDropdowns = true;
+
+            try {
+                const selectedSubject = $('#subject_name').val();
+                const classId = $('#class_name').val();
+                const currentSec = $('#section_name').val();
+
+                if (!classId || !currentClassAssignments.length) return;
+
+                let validAssignments = currentClassAssignments;
+                if (selectedSubject) {
+                    validAssignments = validAssignments.filter(function(a) {
+                        return String(a.class_id) === String(classId) && String(a.subject_id) === String(selectedSubject);
+                    });
+                }
+
+                const secMap = {};
+                validAssignments.forEach(function(a) {
+                    secMap[a.section_name] = true;
+                });
+                const validSecs = Object.keys(secMap);
+
+                $('#section_name').html('');
+                if (validSecs.length === 1) {
+                    $('#section_name').append('<option value="' + validSecs[0] + '" selected>' + validSecs[0] + '</option>');
+                } else if (validSecs.length > 1) {
+                    $('#section_name').append('<option value="">-- Please select --</option>');
+                    validSecs.forEach(function(sec) {
+                        const sel = (currentSec && currentSec === sec) ? ' selected' : '';
+                        $('#section_name').append('<option value="' + sec + '"' + sel + '>' + sec + '</option>');
+                    });
+                } else {
+                    $('#section_name').html('<option value="">-- No sections assigned for this subject --</option>');
+                }
+            } finally {
+                isSyncingDropdowns = false;
+            }
+        }
+
         $(document).ready(function() {
             @if(!empty($stream_master) && !empty($stream_master->teacher_id))
                 const editTeacherId = "{{ $stream_master->teacher_id }}";
@@ -1194,17 +1345,21 @@
                     method: "POST",
                     dataType: 'json',
                     success: function(data) {
-                        currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.class_id); });
-                        currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.subject_id); });
+                        currentTeacherFilter.assignedClassIds = (data['classes'] || []).map(function(c) { return String(c.id || c.class_id); });
+                        currentTeacherFilter.assignedSubjectIds = (data['subjects'] || []).map(function(s) { return String(s.id || s.subject_id); });
                         currentTeacherFilter.assignments = data['assignments'] || [];
                         filterSavedMarksEntries();
                     }
                 });
-            @elseif(!empty($isStaffMarksUser) && !empty($staffEmployeeId))
-                document.getElementById("teacher_name").dispatchEvent(new Event("change"));
             @else
-                const preselectedTeacher = $("#teacher_name").val();
-                if (preselectedTeacher) {
+                // Auto-select Teacher if only 1 valid teacher option exists
+                const teacherSelect = $("#teacher_name");
+                const validTeacherOpts = teacherSelect.find("option").filter(function() { return $(this).val() !== ""; });
+                if (validTeacherOpts.length === 1 && !teacherSelect.val()) {
+                    teacherSelect.val(validTeacherOpts.first().val());
+                }
+
+                if (teacherSelect.val()) {
                     document.getElementById("teacher_name").dispatchEvent(new Event("change"));
                 } else {
                     filterSavedMarksEntries();
@@ -1375,41 +1530,83 @@
             var classId = $(this).val();
             const examDropdown = document.getElementById('exam_name');
 
-                // Clear previous options
+            // Clear previous options
+            examDropdown.innerHTML = '<option value="">-- Please select --</option>';
+            resetExamMaxMarks();
+            resetMarksEntryStatus();
+            $("#subject_name").removeData('selected-subject');
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
+            $("#studentdatatable").html('<tr><td colspan="12" class="text-center">No Data Found</td></tr>');
+
+            if (!classId) {
+                $('#exam_name').html('<option value="">-- Please select class first --</option>');
+                $('#section_name').html('<option value="">-- Please select class first --</option>');
+                $('#subject_name').html('<option value="">-- Please select class first --</option>');
+                return;
+            }
+
+            // Filter exams based on selected class ID
+            const filteredExams = allExams.filter(exam => String(exam.marks_class_id) === String(classId) || String(exam.class_id) === String(classId));
+            const uniqueExams = [];
+            const seenExamIds = new Set();
+            filteredExams.forEach(exam => {
+                if (!seenExamIds.has(String(exam.id))) {
+                    seenExamIds.add(String(exam.id));
+                    uniqueExams.push(exam);
+                }
+            });
+
+            // Populate the exam dropdown - auto-select if single valid option exists
+            examDropdown.innerHTML = '';
+            if (uniqueExams.length === 1) {
+                const option = document.createElement('option');
+                option.value = uniqueExams[0].id;
+                option.textContent = capitalizeFirstLetter(uniqueExams[0].exam_name);
+                option.selected = true;
+                examDropdown.appendChild(option);
+                setExamMaxMarks(uniqueExams[0].id);
+            } else if (uniqueExams.length > 1) {
                 examDropdown.innerHTML = '<option value="">-- Please select --</option>';
-                resetExamMaxMarks();
-                resetMarksEntryStatus();
-                $("#subject_name").removeData('selected-subject');
-                loadTeacherClassAssignments(classId);
-                $('.student-row').each(function () {
-                    recalculateStudentTotal($(this));
-                });
-                $("#studentdatatable").html('<tr><td colspan="12" class="text-center">No Data Found</td></tr>');
-
-                if (!classId) return;
-
-                // Filter exams based on selected class ID
-                const filteredExams = allExams.filter(exam => exam.marks_class_id == classId || exam.class_id == classId);
-                const uniqueExams = [];
-                const seenExamIds = new Set();
-                filteredExams.forEach(exam => {
-                    if (!seenExamIds.has(exam.id)) {
-                        seenExamIds.add(exam.id);
-                        uniqueExams.push(exam);
-                    }
-                });
-                // Populate the exam dropdown
                 uniqueExams.forEach(exam => {
                     const option = document.createElement('option');
                     option.value = exam.id;
-                    option.textContent = exam.exam_name;
+                    option.textContent = capitalizeFirstLetter(exam.exam_name);
                     examDropdown.appendChild(option);
                 });
+            } else {
+                examDropdown.innerHTML = '<option value="">-- No exams found --</option>';
+            }
+
+            // Load sections and subjects for this class
+            loadTeacherClassAssignments(classId);
         });
+
+        $('#section_name').on('change', function() {
+            filterSubjectsByCurrentSection();
+            checkMarksEntryStatus();
+        });
+
+        $('#subject_name').on('change', function() {
+            const subjectId = $(this).val();
+            $("#subject_name").data('selected-subject', subjectId);
+            filterSectionsByCurrentSubject();
+            updateNonAcademicUiState();
+            if (!isNonAcademicSelected()) {
+                setExamMaxMarks($("#exam_name").val());
+            }
+            $('.student-row').each(function () {
+                recalculateStudentTotal($(this));
+            });
+            checkMarksEntryStatus();
+        });
+
         $('#exam_name').on('change', function() {
             setExamMaxMarks($(this).val());
             checkMarksEntryStatus();
         });
+
         @if(!empty($stream_master))
             setExamMaxMarks("{{ $stream_master->exam_id }}");
             $('.student-row').each(function () {
@@ -1433,19 +1630,13 @@
                 recalculateStudentTotal($(this));
             });
         });
-        $('#subject_name').on('change', function() {
-            const subjectId = $(this).val();
-            $("#subject_name").data('selected-subject', subjectId);
-            $('.student-row').each(function () {
-                recalculateStudentTotal($(this));
-            });
-            checkMarksEntryStatus();
-        });
-        $('#teacher_name, #section_name').on('change', checkMarksEntryStatus);
+
         $('#subject_type').on('change', function () {
             filterSubjectDropdownByType();
+            updateNonAcademicUiState();
             checkMarksEntryStatus();
         });
+
         $('#internal_assessment_toggle').on('change', toggleInternalAssessmentColumns);
         $('#practical_marks_toggle').on('change', togglePracticalColumns);
         toggleInternalAssessmentColumns();
@@ -1456,16 +1647,6 @@
         @if(!empty($stream_master))
             $('#subject_name').val('{{ $stream_master->subject_id }}');
         @endif
-        $('#subject_name').on('change', function () {
-            updateNonAcademicUiState();
-            if (!isNonAcademicSelected()) {
-                setExamMaxMarks($("#exam_name").val());
-            }
-        });
-        $('#subject_type').on('change', function () {
-            filterSubjectDropdownByType();
-            updateNonAcademicUiState();
-        });
         $('#show_students_btn').on('click', () => {
              showStudentData();
         })

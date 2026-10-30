@@ -74,21 +74,32 @@ $staffUser = Auth::guard('staff')->user();
 			if (!function_exists('filterMenuByAllowed')) {
 				function filterMenuByAllowed($menu, $allowed, $prefix = '') {
 					$filtered = [];
+					$isAssoc = is_array($allowed) && !isset($allowed[0]);
+
 					foreach ($menu as $item) {
-						$key = $prefix . $item['title'];
-						if (in_array($key, $allowed)) {
-							$filteredItem = $item;
-							if (!empty($item['children'])) {
-								$filteredItem['children'] = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
+						$key = $prefix ? $prefix . ' > ' . $item['title'] : $item['title'];
+
+						$hasView = false;
+						if ($isAssoc) {
+							if (isset($allowed[$key])) {
+								$val = $allowed[$key];
+								$hasView = is_array($val) ? !empty($val['view']) : (bool)$val;
 							}
-							$filtered[] = $filteredItem;
-						} elseif (!empty($item['children'])) {
-							$children = filterMenuByAllowed($item['children'], $allowed, $key . ' > ');
-							if ($children) {
+						} else {
+							$hasView = in_array($key, (array)$allowed);
+						}
+
+						if (!empty($item['children'])) {
+							$children = filterMenuByAllowed($item['children'], $allowed, $key);
+							if (!empty($children)) {
 								$filteredItem = $item;
 								$filteredItem['children'] = $children;
 								$filtered[] = $filteredItem;
+							} elseif ($hasView) {
+								$filtered[] = $item;
 							}
+						} elseif ($hasView) {
+							$filtered[] = $item;
 						}
 					}
 					return $filtered;

@@ -158,13 +158,25 @@
                     } ?>>
                     <label for="special_subject_formatting"> Yes</label><br>
                 </div>
+                <div class="col-md-4 form-group mb-3" id="special_formatting_classes_container" style="{{ !empty($subject_s[0]['do_not_print_in_main_scholastic_area']) ? '' : 'display: none;' }}">
+                    <label for="special_formatting_classes">Select Classes for Special Subject Formatting</label>
+                    <select name="special_formatting_classes[]" multiple class="form-control select2" id="special_formatting_classes" style="width: 100%;">
+                        @foreach ($studentclasses as $studentclass)
+                            <option value="{{ $studentclass->id }}"
+                                {{ (isset($selectedSpecialClasses) && (in_array((string)$studentclass->id, array_map('strval', (array)$selectedSpecialClasses)) || in_array($studentclass->class_name, (array)$selectedSpecialClasses))) ? 'selected' : '' }}>
+                                {{ $studentclass->class_name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <small class="text-muted d-block mt-1">Appears below the main table for selected classes only. If no class is selected, it appears in the main table for all classes.</small>
+                </div>
                 <div class="col-md-12">
                     <button class="btn btn-primary">Submit</button>
                     <button type="button" id="reset" class="btn btn-primary" name="btn"
                         value="Reset Form">Reset</button>
 
 
-                    @if (request()->route()->getName() !== 'subjectmaster')
+                    @if (!request()->routeIs('subjectmaster'))
                         <a href="{{ url('subjectmaster') }}" class="btn btn-primary">Add New</a>
                     @endif
 
@@ -240,6 +252,9 @@
                                 </thead>
                                 <tbody><?php $i = 1; ?>
                                     @if (!empty($datas))
+                                        @php
+                                            $classMap = $studentclasses->pluck('class_name', 'id')->all();
+                                        @endphp
                                         @foreach ($datas as $data)
                                             <tr>
                                                 <td>{{ $i }}</td>
@@ -252,17 +267,33 @@
                                                 @endforeach</td>
                                                 <td>{{ $data->subject_type }}</td>
                                                 <td>{{ $data->practical }}</td>
-                                                <td>{{ !empty($data->do_not_print_in_main_scholastic_area) ? 'Yes' : 'No' }}</td>
+                                                <td>
+                                                    @if (!empty($data->do_not_print_in_main_scholastic_area))
+                                                        @php
+                                                            $rawClasses = $data->special_formatting_classes;
+                                                            $spClasses = is_array($rawClasses) ? $rawClasses : (json_decode($rawClasses ?? '[]', true) ?: []);
+                                                            $spNames = collect($spClasses)->map(fn ($id) => $classMap[$id] ?? $id)->filter()->all();
+                                                        @endphp
+                                                        <span class="badge bg-warning text-dark">Yes</span>
+                                                        @if (!empty($spNames))
+                                                            <br><small class="text-muted">Below main: {{ implode(', ', $spNames) }}</small>
+                                                        @else
+                                                            <br><small class="text-muted">No class selected (Main table for all)</small>
+                                                        @endif
+                                                    @else
+                                                        <span class="badge bg-secondary">No</span>
+                                                    @endif
+                                                </td>
                                                 <td>{{ $data->evaluation }}</td>
                                                 <td>
                                                     <a class="btn btn-primary m-1"
                                                         href="{{ url('view-subject') . '/' . $data->id }}">Edit</a>
                                                     <!-- <form id="deleteForm" method="post" action="{{ url('delete-subject') }}">
-                                      @csrf
-                                      <input type="hidden" name="table_name" value="natureofwork">
-                                      <input type="hidden" name="delete_id" value="{{ $data->id }}">
-                                      <button type="submit" class="btn btn-danger " onclick="confirmDelete(event)">Delete</button>
-                                  </form> -->
+                                       @csrf
+                                       <input type="hidden" name="table_name" value="natureofwork">
+                                       <input type="hidden" name="delete_id" value="{{ $data->id }}">
+                                       <button type="submit" class="btn btn-danger " onclick="confirmDelete(event)">Delete</button>
+                                   </form> -->
                                                     <?php $a = 'subjectmaster' . '-' . $data->id; ?>
                                                     <a class="btn btn-raised ripple btn-danger m-1"
                                                         href="{{ url('delete-subject') . '/' . $a }}"
@@ -316,17 +347,39 @@
             });
         }
 
-
         document.addEventListener('DOMContentLoaded', function() {
+            function toggleSpecialFormattingClasses() {
+                var isChecked = $('#special_subject_formatting').is(':checked');
+                if (isChecked) {
+                    $('#special_formatting_classes_container').stop(true, true).slideDown(200, function() {
+                        if ($.fn.select2) {
+                            $('#special_formatting_classes').select2({ width: '100%' });
+                        }
+                    });
+                } else {
+                    $('#special_formatting_classes_container').stop(true, true).slideUp(200);
+                }
+            }
+
+            $('#special_subject_formatting').on('change', function() {
+                toggleSpecialFormattingClasses();
+            });
+
+            if ($('#special_subject_formatting').is(':checked')) {
+                if ($.fn.select2) {
+                    $('#special_formatting_classes').select2({ width: '100%' });
+                }
+            }
+
             $("#reset").on("click", function() {
                 $("#subject_name").val("");
                 $("input[type='checkbox']").prop('checked', false);
                 $("input[type='radio']").prop('checked', false);
                 $("#classes").val(null).trigger('change');
+                $("#stream").val(null).trigger('change');
+                $("#special_formatting_classes").val(null).trigger('change');
+                $("#special_formatting_classes_container").hide();
             });
-
-        })
+        });
     </script>
-
-
 @endsection

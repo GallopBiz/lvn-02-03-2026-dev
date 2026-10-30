@@ -132,11 +132,26 @@
                     $globalSerialCounter = 1;
                 @endphp
                 @foreach($studentPages as $studentsPage)
+                    @php
+                        $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($report['class']->class_name ?? '');
+                        $isClass10Or12 = in_array($normClass, ['10', '12'], true);
+
+                        $term1Heading = 'Half Yearly Exam';
+                        $term2Heading = $isClass10Or12 ? 'Pre Board' : 'Annual Exam';
+
+                        $rawExamTitle = $report['exam_title'] ?? (!empty($report['show_term_2']) ? ($isClass10Or12 ? 'Pre Board Examination' : 'Annual Examination') : 'Half Yearly Examination');
+                        $examTitleDisplay = $rawExamTitle;
+                        if (preg_match('/\bterm[\s_-]*(?:2|ii)\b/i', $examTitleDisplay) || str_contains(strtolower($examTitleDisplay), 'annual')) {
+                            $examTitleDisplay = $isClass10Or12 ? 'Pre Board Examination' : 'Annual Examination';
+                        } elseif (preg_match('/\bterm[\s_-]*(?:1|i)\b/i', $examTitleDisplay)) {
+                            $examTitleDisplay = 'Half Yearly Examination';
+                        }
+                    @endphp
                     <main class="sheet {{ empty($report['show_term_2']) ? 'term1-mode' : '' }}">
                 <div class="title">
                     <h2>Lokmanya Vidya Niketan</h2>
                     <h3>Consolidated Marksheet</h3>
-                    <div class="exam-line">Exam Name : {{ $report['exam_title'] ?? (!empty($report['show_term_2']) ? 'Term - II (Annual) Examination' : 'Term - I Examination') }}</div>
+                    <div class="exam-line">Exam Name : {{ $examTitleDisplay }}</div>
                     <div class="exam-line">Academic Session : {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
                 </div>
 
@@ -152,9 +167,9 @@
                             <th class="name" rowspan="2">Student Name</th>
                             <th class="scholar" rowspan="2">Sch. No<br>Att.</th>
                             <th class="subject" rowspan="2">Subject</th>
-                            <th colspan="7">Term - I</th>
+                            <th colspan="7">{{ $term1Heading }}</th>
                             @if(!empty($report['show_term_2']))
-                                <th colspan="7">Term - II</th>
+                                <th colspan="7">{{ $term2Heading }}</th>
                             @endif
                             <th class="percent" rowspan="2">Perc%</th>
                             <th class="division" rowspan="2">Division</th>
@@ -187,17 +202,17 @@
                             $specialNames = $report['special_subject_names'] ?? [];
                             $classOneSubjects = $isClassOne
                                 ? collect(['Computer', 'Sanskrit'])
-                                    ->reject(fn ($subject) => in_array(strtolower(trim((string) $subject)), $specialNames, true) || $hasSubject($existingSubjects, $subject))
-                                    ->map(fn ($subject) => [
-                                        'subject' => $subject,
-                                        'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
-                                        'term_2' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
-                                        'percentage' => null,
-                                        'division' => '',
-                                        'result' => '',
-                                        'result_short' => '',
-                                    ])
-                                    ->values()
+                                ->reject(fn ($subject) => in_array(strtolower(trim((string) $subject)), $specialNames, true) || $hasSubject($existingSubjects, $subject))
+                                ->map(fn ($subject) => [
+                                    'subject' => $subject,
+                                    'term_1' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                    'term_2' => ['pt' => '', 'mas' => '', 'pf' => '', 'sea' => '', 'theory' => '', 'total' => '', 'grade' => ''],
+                                    'percentage' => null,
+                                    'division' => '',
+                                    'result' => '',
+                                    'result_short' => '',
+                                ])
+                                ->values()
                                 : collect();
                             $displaySubjects = $subjectRows
                                 ->reject(fn ($s) => in_array(strtolower(trim((string) ($s['subject'] ?? ''))), $specialNames, true))

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Academic;
 
+use App\Academic\AcademicHelper;
 use App\Http\Controllers\Controller;
 use App\Models\Academic\Exam;
 use App\Models\Academic\Marksheet;
@@ -588,6 +589,15 @@ class Term1MarksheetController extends Controller
             ->values()
             ->all();
 
+        $categoryOf = function ($name) {
+            $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
+            if ($n === 'discipline') return 'discipline';
+            if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) return 'work_education';
+            if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) return 'art_education';
+            if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') return 'health_pe';
+            return $n;
+        };
+
         $disciplineSubjects = [];
 
         foreach ($subjects as $subject) {
@@ -603,7 +613,9 @@ class Term1MarksheetController extends Controller
             $isSkilled = in_array($subType, ['skilled', 'skill', 'skill-based', 'skill based'], true)
                 || Str::contains($subType, 'skill');
             $isNonAcademic = (bool) preg_match('/non[\s-]*academic/i', $subType);
-            $isDisciplineSubject = $isSkilled || $isNonAcademic;
+            $cat = $categoryOf($subjectName);
+            $isCoScholasticCat = in_array($cat, ['discipline', 'work_education', 'art_education', 'health_pe'], true);
+            $isDisciplineSubject = $isSkilled || $isNonAcademic || $isCoScholasticCat;
 
             $mark = $marks->first(function ($item) use ($subjectId, $termExamId) {
                 return (int) ($item->subject_id ?? 0) === $subjectId
@@ -667,11 +679,10 @@ class Term1MarksheetController extends Controller
                 continue;
             }
 
-            $isExplicitSpecial = !empty($subject->do_not_print_in_main_scholastic_area);
+            $isExplicitSpecial = \App\Academic\AcademicHelper::isSpecialFormattingForClass($subject, $classId, $class?->class_name);
             $isSeparateSubject = in_array($subjectId, $separateSubjectIds, true)
                 || $isExplicitSpecial
-                || in_array($subType, ['optional'], true)
-                || Str::contains(Str::lower($subjectName), ['computer']);
+                || in_array($subType, ['optional'], true);
 
             $subjectGrade = $this->gradeFor($obtainedTotal, 100, $grading, $class->class_name ?? null, $subject->subject_type ?? null);
             $termFailed = $this->isBelowFailPercent($obtainedTotal, 100, $termExam);
@@ -775,48 +786,47 @@ class Term1MarksheetController extends Controller
         });
         $workEduGrade = ($workEduMark ? ($workEduMark->grade ?: $workEduMark->overall_grade) : null) ?: 'B';
 
-        $categoryOf = function ($name) {
-            $n = preg_replace('/[^a-z0-9]/', '', strtolower((string) $name));
-            if ($n === 'discipline') return 'discipline';
-            if (str_contains($n, 'workedu') || str_contains($n, 'workexp')) return 'work_education';
-            if (str_contains($n, 'artedu') || $n === 'art' || $n === 'arts' || str_contains($n, 'fineart') || str_contains($n, 'drawing')) return 'art_education';
-            if (str_contains($n, 'health') || str_contains($n, 'physicaledu') || str_contains($n, 'pewellbeing') || str_contains($n, 'wellbeing') || $n === 'pe') return 'health_pe';
-            return $n;
-        };
+        $standardCategories = ['discipline', 'work_education', 'art_education', 'health_pe'];
 
-        // If Art Education or Health & PE is assigned in disciplineSubjects, use that grade for co-scholastic
-        $artSub = collect($disciplineSubjects)->first(fn($d) => $categoryOf($d['title']) === 'art_education');
-        $artGrade = $artSub['grade'] ?? 'A';
+        $assignedStandard = [];
+        $extraCustom = [];
 
-        $healthSub = collect($disciplineSubjects)->first(fn($d) => $categoryOf($d['title']) === 'health_pe');
-        $healthGrade = $healthSub['grade'] ?? 'A';
-
-        $workSub = collect($disciplineSubjects)->first(fn($d) => $categoryOf($d['title']) === 'work_education');
-        if ($workSub && !empty($workSub['grade'])) {
-            $workEduGrade = $workSub['grade'];
+        foreach ($disciplineSubjects as $ds) {
+            $cat = $categoryOf($ds['title']);
+            if (in_array($cat, $standardCategories, true)) {
+                if (!isset($assignedStandard[$cat])) {
+                    $assignedStandard[$cat] = $ds;
+                }
+            } else {
+                if (!isset($extraCustom[$cat])) {
+                    $extraCustom[$cat] = $ds;
+                }
+            }
         }
 
-        $coScholastic = [
-            ['title' => 'Work Education', 'grade' => $workEduGrade],
-            ['title' => 'Art Education', 'grade' => $artGrade],
-            ['title' => 'Health And Physical Education', 'grade' => $healthGrade],
-        ];
+        $coScholastic = [];
+        $discipline = [];
 
-        $discSub = collect($disciplineSubjects)->first(fn($d) => $categoryOf($d['title']) === 'discipline');
-        $discGrade = $discSub['grade'] ?? 'B';
+        if (!empty($disciplineSubjects)) {
+            if (isset($assignedStandard['work_education'])) {
+                $coScholastic[] = ['title' => 'Work Education', 'grade' => $assignedStandard['work_education']['grade'] ?? 'B'];
+            } elseif ($workEduMark) {
+                $coScholastic[] = ['title' => 'Work Education', 'grade' => $workEduGrade];
+            }
+            if (isset($assignedStandard['art_education'])) {
+                $coScholastic[] = ['title' => 'Art Education', 'grade' => $assignedStandard['art_education']['grade'] ?? 'A'];
+            }
+            if (isset($assignedStandard['health_pe'])) {
+                $coScholastic[] = ['title' => 'Health And Physical Education', 'grade' => $assignedStandard['health_pe']['grade'] ?? 'A'];
+            }
+            if (isset($assignedStandard['discipline'])) {
+                $discipline[] = ['title' => 'Discipline', 'grade' => $assignedStandard['discipline']['grade'] ?? 'B'];
+            }
 
-        $discipline = [
-            ['title' => 'Discipline', 'grade' => $discGrade],
-        ];
-
-        $seenCategories = ['discipline' => true, 'work_education' => true, 'art_education' => true, 'health_pe' => true];
-        foreach ($disciplineSubjects as $dSub) {
-            $dCat = $categoryOf($dSub['title']);
-            if (!isset($seenCategories[$dCat])) {
-                $seenCategories[$dCat] = true;
+            foreach ($extraCustom as $eCat => $eSub) {
                 $discipline[] = [
-                    'title' => ucwords(strtolower($dSub['title'])),
-                    'grade' => $dSub['grade'],
+                    'title' => ucwords(strtolower($eSub['title'])),
+                    'grade' => $eSub['grade'] ?? 'A',
                 ];
             }
         }
@@ -1174,82 +1184,102 @@ class Term1MarksheetController extends Controller
         $subjectColumns[] = Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
             ? 's.do_not_print_in_main_scholastic_area'
             : DB::raw('0 as do_not_print_in_main_scholastic_area');
+        $subjectColumns[] = Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_formatting_classes')
+            ? 's.special_formatting_classes'
+            : DB::raw('NULL as special_formatting_classes');
 
         $assigned = collect();
 
+        // 1. Check student-specific assignment
         if ($studentId && Schema::connection('dynamic')->hasTable('subject_assign_student') && Schema::connection('dynamic')->hasTable('combination_subject')) {
+            $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+            $query = DB::connection('dynamic')->table('subject_assign_student as sas');
+            if ($class && !empty($class->class_name)) {
+                $norm = AcademicHelper::normalizeClassIdentifier($class->class_name);
+                $query->where(function ($q) use ($class, $norm) {
+                    $q->where('sas.class_name', $class->class_name)
+                      ->orWhere('sas.class_name', $norm)
+                      ->orWhere('sas.class_name', ltrim($class->class_name, '0'));
+                });
+            }
+            if ($hasIsDelete) {
+                $query->orderByRaw('CASE WHEN sas.is_delete = 0 OR sas.is_delete IS NULL THEN 0 ELSE 1 END ASC');
+            }
+            $assignments = $query->orderByDesc('sas.id')->get();
+
+            $matchedCombId = null;
+            foreach ($assignments as $a) {
+                $raw = $a->students_details;
+                $ids = [];
+                if (is_numeric($raw)) {
+                    $ids[] = (int) $raw;
+                } elseif (is_string($raw) && str_starts_with(trim($raw), '[')) {
+                    $decoded = json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $d) {
+                            if (is_numeric($d)) $ids[] = (int) $d;
+                        }
+                    }
+                } elseif (is_string($raw) && str_contains($raw, ',')) {
+                    foreach (explode(',', $raw) as $d) {
+                        if (is_numeric(trim($d))) $ids[] = (int) trim($d);
+                    }
+                } elseif (!empty($raw) && is_numeric(trim($raw))) {
+                    $ids[] = (int) trim($raw);
+                }
+
+                if (in_array((int) $studentId, $ids, true)) {
+                    $matchedCombId = (int) $a->assign_this_combtoall;
+                    break;
+                }
+            }
+
+            if ($matchedCombId) {
+                $assigned = DB::connection('dynamic')
+                    ->table('combination_subject as cs')
+                    ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
+                    ->where('cs.subject_combination_id', $matchedCombId)
+                    ->where(function ($q) {
+                        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                            $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                        }
+                    })
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
+                    ->select($subjectColumns)
+                    ->orderBy('cs.subject_order')
+                    ->orderBy('s.subject_name')
+                    ->get()
+                    ->unique('id')
+                    ->values();
+            }
+        }
+
+        // If combination subjects found, return ONLY those assigned subjects!
+        // Strictly do NOT merge class-level skilled subjects or extra marked subjects
+        if ($assigned->isNotEmpty()) {
+            return $assigned;
+        }
+
+        // 2. Fallback: Check class-level assigned subjects (only when student has no assigned combination)
+        if ($classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
             $assigned = DB::connection('dynamic')
-                ->table('subject_assign_student as sas')
-                ->join('combination_subject as cs', 'cs.subject_combination_id', '=', 'sas.assign_this_combtoall')
-                ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
-                ->where(function ($q) use ($studentId) {
-                    $q->where('sas.students_details', (string) $studentId)
-                        ->orWhere('sas.students_details', $studentId)
-                        ->orWhereJsonContains('sas.students_details', (string) $studentId)
-                        ->orWhereJsonContains('sas.students_details', $studentId);
-                })
-                ->when($class && !empty($class->class_name), fn ($q) => $q->where('sas.class_name', $class->class_name))
+                ->table('academic_class_subject as acs')
+                ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
+                ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
                 ->where(function ($q) {
-                    $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
+                    if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                        $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                    }
                 })
+                ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                 ->select($subjectColumns)
-                ->distinct()
-                ->orderBy('cs.subject_order')
                 ->orderBy('s.subject_name')
                 ->get()
                 ->unique('id')
                 ->values();
         }
 
-        if ($assigned->isNotEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
-            $classSkilledSubjects = DB::connection('dynamic')
-                ->table('academic_class_subject as acs')
-                ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
-                ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
-                ->where(function ($q) {
-                    $q->whereIn(DB::raw('LOWER(TRIM(s.subject_type))'), ['skilled', 'skill', 'non academic'])
-                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%skill%')
-                        ->orWhere(DB::raw('LOWER(s.subject_type)'), 'like', '%non%academic%');
-                })
-                ->select($subjectColumns)
-                ->get();
-
-            if ($classSkilledSubjects->isNotEmpty()) {
-                $assigned = $assigned->concat($classSkilledSubjects)->unique('id')->values();
-            }
-        }
-
-        if ($assigned->isEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
-            $assigned = DB::connection('dynamic')
-                ->table('academic_class_subject as acs')
-                ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
-                ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
-                ->select($subjectColumns)
-                ->orderBy('s.subject_name')
-                ->get();
-        }
-
-        if ($assigned->isEmpty() && Schema::connection('dynamic')->hasTable('subjectmaster')) {
-            $assigned = DB::connection('dynamic')
-                ->table('subjectmaster')
-                ->where(function ($q) {
-                    if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
-                        $q->where('is_delete', 0)->orWhereNull('is_delete');
-                    }
-                })
-                ->select(
-                    'id',
-                    'subject_name',
-                    'subject_type',
-                    Schema::connection('dynamic')->hasColumn('subjectmaster', 'do_not_print_in_main_scholastic_area')
-                        ? 'do_not_print_in_main_scholastic_area'
-                        : DB::raw('0 as do_not_print_in_main_scholastic_area')
-                )
-                ->orderBy('subject_name')
-                ->get();
-        }
-
-        // Include any subjects where marks have been entered for this student (e.g. Social Science)
+        // 3. Fallback: Include any subjects where marks have been entered for this student (only when student has no assigned combination)
         if ($studentId && Schema::connection('dynamic')->hasTable('academic_students_marks') && Schema::connection('dynamic')->hasTable('previosly_saved_marks_entry')) {
             $markedSubjectIds = DB::connection('dynamic')
                 ->table('academic_students_marks as sm')
@@ -1267,10 +1297,29 @@ class Term1MarksheetController extends Controller
                 $extraSubjects = DB::connection('dynamic')
                     ->table('subjectmaster as s')
                     ->whereIn('s.id', $missingIds)
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                     ->select($subjectColumns)
                     ->get();
                 $assigned = $assigned->concat($extraSubjects)->unique('id')->values();
             }
+        }
+
+        if ($assigned->isNotEmpty()) {
+            return $assigned;
+        }
+
+        if (Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return DB::connection('dynamic')
+                ->table('subjectmaster as s')
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                        $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                    }
+                })
+                ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
+                ->select($subjectColumns)
+                ->orderBy('s.subject_name')
+                ->get();
         }
 
         return $assigned;

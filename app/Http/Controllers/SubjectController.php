@@ -12,22 +12,27 @@ use App\Models\ClassSubject;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 
 
 class SubjectController extends Controller
 {
     public function index(Request $request){
+        $this->ensureSpecialFormattingColumn();
         $datas = $this->filteredSubjects($request)->get();
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $streams = Stream::where('is_delete',0)->get();
         $filters = $request->only(['subject_type', 'evaluation', 'practical']);
+        $selectedSpecialClasses = old('special_formatting_classes', []);
 
-        return view('backend.AcademicsModules.createsubject',compact('datas','studentclasses', 'streams', 'filters'));
+        return view('backend.AcademicsModules.createsubject',compact('datas','studentclasses', 'streams', 'filters', 'selectedSpecialClasses'));
     }
 
     public function exportExcel(Request $request)
     {
+        $this->ensureSpecialFormattingColumn();
         $subjects = $this->filteredSubjects($request)->get();
+        $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->get()->pluck('class_name', 'id')->all();
         $rows = [];
         $rows[] = [
             'Sr.',
@@ -40,13 +45,26 @@ class SubjectController extends Controller
         ];
 
         foreach ($subjects as $index => $subject) {
+            $specialFormatted = 'No';
+            if (!empty($subject->do_not_print_in_main_scholastic_area)) {
+                $spClasses = is_array($subject->special_formatting_classes)
+                    ? $subject->special_formatting_classes
+                    : (json_decode($subject->special_formatting_classes ?? '[]', true) ?: []);
+                if (!empty($spClasses)) {
+                    $classLabels = array_map(fn ($id) => $studentclasses[$id] ?? $id, $spClasses);
+                    $specialFormatted = 'Yes (' . implode(', ', $classLabels) . ')';
+                } else {
+                    $specialFormatted = 'Yes (None)';
+                }
+            }
+
             $rows[] = [
                 $index + 1,
                 $subject->subject_name,
                 $this->formatSubjectClasses($subject),
                 $subject->subject_type,
                 $subject->practical,
-                !empty($subject->do_not_print_in_main_scholastic_area) ? 'Yes' : 'No',
+                $specialFormatted,
                 $subject->evaluation,
             ];
         }
@@ -106,31 +124,33 @@ class SubjectController extends Controller
         })->implode(', ');
     }
 
-    // public function create(Request $request){
-    //     Subject::create($request->post());
-    //     return redirect()->route('subjectmaster')->with('success',' has been created successfully.');
-    // }
     public function create(Request $request)
     {
-        //dd($request);
-        // Get subject name from the form
+        $this->ensureSpecialFormattingColumn();
         $subjectName = $request->input('subject_name');
 
         // Check if the subject already exists
-        $existingSubject = Subject::where('subject_name', $subjectName)->where('is_delete',0)->first();
+        $existingSubject = Subject::where('subject_name', $subjectName)->where('is_delete', 0)->first();
 
         if ($existingSubject) {
             // Subject already exists, display an error message
             return redirect()->route('subjectmaster')->with('error', 'Subject already exists!');
         } else {
+            $isSpecial = $request->boolean('special_subject_formatting');
+            $specialClasses = $isSpecial
+                ? array_values(array_filter((array) $request->input('special_formatting_classes', [])))
+                : [];
+
             // Subject does not exist, proceed with insertion
             $subject = Subject::create([
                 "subject_name" => $request->input('subject_name'),
                 "subject_type" => $request->input('subject_type'),
                 "evaluation" => $request->input('evaluation'),
                 "practical" => $request->input('practical'),
-                "do_not_print_in_main_scholastic_area" => $request->boolean('special_subject_formatting'),
+                "do_not_print_in_main_scholastic_area" => $isSpecial,
+                "special_formatting_classes" => !empty($specialClasses) ? json_encode($specialClasses) : null,
             ]);
+
             $classes = $request->input('classes', []);
             if (!empty($classes)) {
                 foreach ($classes as $classId) {
@@ -154,6 +174,7 @@ class SubjectController extends Controller
     }
 
     public function view($id){
+        $this->ensureSpecialFormattingColumn();
         $subject_s = Subject::with('Classname')->whereId($id)->get();
         $datas = Subject::with('Classname')->orderBy('id','desc')->paginate(5);
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
@@ -161,16 +182,34 @@ class SubjectController extends Controller
         $streams = Stream::where('is_delete',0)->get();
         $selectedStreams = $subject_s[0]->Classname->pluck('pivot.stream_id')->filter()->unique()->toArray();
 
-        return view('backend.AcademicsModules.createsubject',compact('subject_s','datas','studentclasses','selectedClasses','streams','selectedStreams'));
+        $selectedSpecialClasses = [];
+        if (!empty($subject_s[0])) {
+            $rawSpecial = $subject_s[0]->special_formatting_classes;
+            if (is_array($rawSpecial)) {
+                $selectedSpecialClasses = $rawSpecial;
+            } elseif (is_string($rawSpecial) && trim($rawSpecial) !== '') {
+                $decoded = json_decode($rawSpecial, true);
+                $selectedSpecialClasses = is_array($decoded) ? $decoded : array_filter(array_map('trim', explode(',', $rawSpecial)));
+            }
+        }
+
+        return view('backend.AcademicsModules.createsubject',compact('subject_s','datas','studentclasses','selectedClasses','streams','selectedStreams','selectedSpecialClasses'));
     }
 
     public function store(Request $request){
+        $this->ensureSpecialFormattingColumn();
+        $isSpecial = $request->boolean('special_subject_formatting');
+        $specialClasses = $isSpecial
+            ? array_values(array_filter((array) $request->input('special_formatting_classes', [])))
+            : [];
+
         $data = [
             'subject_name' => $request->subject_name,
             'subject_type' => $request->subject_type,
             'evaluation' => $request->evaluation,
             'practical' => $request->practical,
-            'do_not_print_in_main_scholastic_area' => $request->boolean('special_subject_formatting'),
+            'do_not_print_in_main_scholastic_area' => $isSpecial,
+            'special_formatting_classes' => !empty($specialClasses) ? json_encode($specialClasses) : null,
         ];
         $subject = Subject::findOrFail($request->id);
         $subject->update($data);
@@ -205,7 +244,7 @@ class SubjectController extends Controller
             }
         }
 
-        // Optional cleanup: delete removed combinations
+        // Cleanup: delete removed combinations
         ClassSubject::where('subject_id', $subject->id)
             ->whereNotIn('id', $updatedIds)
             ->delete();
@@ -213,8 +252,6 @@ class SubjectController extends Controller
     }
 
     public function subjects_delete($id){
-        // echo $id;
-        // exit;
         $a = explode('-',$id);
         $b = $a[1];
         $c = $a[0];
@@ -223,6 +260,19 @@ class SubjectController extends Controller
             return redirect()->back()->with('success', 'Record successfully removed');
         }elseif($delete_resp=='FALSE'){
             return redirect()->back()->with('error', 'Record not removed');
+        }
+    }
+
+    private function ensureSpecialFormattingColumn(): void
+    {
+        try {
+            if (Schema::connection('dynamic')->hasTable('subjectmaster') && !Schema::connection('dynamic')->hasColumn('subjectmaster', 'special_formatting_classes')) {
+                \Illuminate\Support\Facades\DB::connection('dynamic')->statement(
+                    "ALTER TABLE `subjectmaster` ADD COLUMN `special_formatting_classes` TEXT NULL AFTER `do_not_print_in_main_scholastic_area`"
+                );
+            }
+        } catch (\Throwable $e) {
+            // Ignore if column already exists or table issue
         }
     }
 }

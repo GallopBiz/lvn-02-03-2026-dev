@@ -23,6 +23,19 @@ class SetDynamicDatabaseConnectionFromCookie
     {
         [$selectedDatabase, $source] = $this->resolveDatabaseSelection($request);
 
+        // If user is a student, ensure they remain in their authorized session
+        $user = Auth::guard('web')->user() ?: $request->user();
+        if ($user && isset($user->type) && strtolower(trim((string)$user->type)) !== 'a') {
+            $studentSession = !empty($user->session_name)
+                ? str_replace('-', '_', trim((string)$user->session_name))
+                : ($request->hasSession() ? ($request->session()->get('selectedYear') ?: $request->session()->get('db_names')) : null);
+
+            if ($studentSession && $selectedDatabase !== $studentSession) {
+                $selectedDatabase = $studentSession;
+                $source = 'student_assigned_session';
+            }
+        }
+
         if ($selectedDatabase !== null) {
             // A dynamic academic session was requested via cookie or session.
             // Strictly validate format, verify physical existence, and authorize user before switching.
@@ -46,9 +59,10 @@ class SetDynamicDatabaseConnectionFromCookie
 
     /**
      * Resolve the database name and source based on application priority:
-     * 1. Laravel request cookie 'selectedYear'
-     * 2. Session value 'selectedYear'
-     * 3. Session value 'db_names'
+     * 1. Request input 'year' or 'session' (e.g. login form submission)
+     * 2. Laravel request cookie 'selectedYear'
+     * 3. Session value 'selectedYear'
+     * 4. Session value 'db_names'
      *
      * Issue 3: Raw $_COOKIE access has been removed to preserve Laravel's cookie handling & encryption.
      *
@@ -57,13 +71,19 @@ class SetDynamicDatabaseConnectionFromCookie
      */
     protected function resolveDatabaseSelection(Request $request): array
     {
-        // 1. Laravel request cookie 'selectedYear'
+        // 1. Request input 'year' or 'session' (e.g. login form submission or academic year switcher)
+        $inputYear = $request->input('year') ?: $request->input('session') ?: $request->input('session_name');
+        if (is_string($inputYear) && trim($inputYear) !== '') {
+            return [trim($inputYear), 'request_input:year'];
+        }
+
+        // 2. Laravel request cookie 'selectedYear'
         $cookie = $request->cookie('selectedYear');
         if (is_string($cookie) && trim($cookie) !== '') {
             return [trim($cookie), 'request_cookie:selectedYear'];
         }
 
-        // 2. Session value 'selectedYear'
+        // 3. Session value 'selectedYear'
         if ($request->hasSession()) {
             $sessionYear = $request->session()->get('selectedYear');
             if (is_string($sessionYear) && trim($sessionYear) !== '') {
@@ -71,7 +91,7 @@ class SetDynamicDatabaseConnectionFromCookie
             }
         }
 
-        // 3. Session value 'db_names'
+        // 4. Session value 'db_names'
         if ($request->hasSession()) {
             $sessionDbNames = $request->session()->get('db_names');
             if (is_string($sessionDbNames) && trim($sessionDbNames) !== '') {
@@ -223,7 +243,7 @@ class SetDynamicDatabaseConnectionFromCookie
      */
     protected function isUserAuthorizedForDatabase(Request $request, string $databaseName): bool
     {
-        $user = $request->user();
+        $user = Auth::guard('web')->user() ?: Auth::guard('staff')->user() ?: $request->user();
         if (!$user) {
             // Unauthenticated requests (e.g. login pages) select database to authenticate against
             return true;
@@ -234,15 +254,32 @@ class SetDynamicDatabaseConnectionFromCookie
             return (bool) $user->canAccessAcademicSession($databaseName);
         }
 
-        // 2. Administrative / Academic staff have system-wide access to all valid sessions
+        // 2. Staff members and Admin users have system-wide access to valid sessions
+        if (Auth::guard('staff')->check() || !empty($user->employee_id) || !empty($user->role)) {
+            return true;
+        }
+
         if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['Admin', 'Academic', 'super-admin', 'admin'])) {
+            return true;
+        }
+
+        if (isset($user->type) && strtolower(trim((string)$user->type)) === 'a') {
             return true;
         }
 
         // 3. User with assigned session (e.g. Students in student_registration table)
         if (!empty($user->session_name)) {
             $userSession = str_replace('-', '_', trim((string) $user->session_name));
-            return $userSession === $databaseName;
+            if ($userSession === $databaseName) {
+                return true;
+            }
+        }
+
+        if ($request->hasSession()) {
+            $sessionYear = $request->session()->get('selectedYear') ?: $request->session()->get('db_names');
+            if ($sessionYear && str_replace('-', '_', trim((string)$sessionYear)) === $databaseName) {
+                return true;
+            }
         }
 
         // 4. Configuration-based user permissions if defined
@@ -277,12 +314,14 @@ class SetDynamicDatabaseConnectionFromCookie
             }
         }
 
-        // Apply new configuration
+        // Apply new configuration to both dynamic and default connections
         Config::set('database.connections.dynamic.database', $targetDatabase);
+        Config::set('database.connections.mysql.database', $targetDatabase);
         Config::set('database.default', 'dynamic');
 
         try {
             DB::purge('dynamic');
+            DB::purge('mysql');
             DB::reconnect('dynamic');
 
             // Verify connection works
@@ -296,8 +335,10 @@ class SetDynamicDatabaseConnectionFromCookie
         } catch (Throwable $e) {
             // Roll back BOTH database name AND database.default setting
             Config::set('database.connections.dynamic.database', $previousDatabase);
+            Config::set('database.connections.mysql.database', $previousDatabase);
             Config::set('database.default', $previousDefault);
             DB::purge('dynamic');
+            DB::purge('mysql');
 
             try {
                 DB::reconnect('dynamic');

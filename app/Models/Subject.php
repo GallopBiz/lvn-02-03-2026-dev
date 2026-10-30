@@ -17,8 +17,14 @@ class Subject extends Model
         'evaluation',
         'practical',
         'do_not_print_in_main_scholastic_area',
+        'special_formatting_classes',
         'is_delete',
     ];
+
+    public function isSpecialFormattingForClass($classId = null, $className = null): bool
+    {
+        return \App\Academic\AcademicHelper::isSpecialFormattingForClass($this, $classId, $className);
+    }
 
     public function Classname()
     {

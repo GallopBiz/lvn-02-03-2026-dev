@@ -86,6 +86,10 @@
         margin: 0.5mm 0 1.5mm;
     }
 
+    .title .session-text {
+        font-size: 18px;
+    }
+
     .student-box {
         border: 1px solid #333;
         display: grid;
@@ -386,8 +390,8 @@
                     || str_contains($sub, 'office procedures');
             };
             $isSpecialSubject = function ($row) use ($isPrimaryClass, $isPrimaryAdditionalSubject) {
-                if (!empty($row['special_subject_formatting'])) {
-                    return true;
+                if (isset($row['special_subject_formatting'])) {
+                    return !empty($row['special_subject_formatting']);
                 }
                 if ($isPrimaryClass && $isPrimaryAdditionalSubject($row['subject'] ?? '')) {
                     return true;
@@ -405,7 +409,15 @@
                 ->values();
 
             if ($isPrimaryClass) {
-                $primaryAdditionalSubjects = collect(['Computer Science', 'Sanskrit'])->map(function ($subject) use ($specialSubjectRows, $hasSubject, $printData) {
+                $primaryAdditionalSubjects = collect(['Computer Science', 'Sanskrit'])->filter(function ($subject) use ($specialSubjectRows, $scholasticRows, $hasSubject, $printData) {
+                    if ($scholasticRows->contains(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject))) {
+                        return false;
+                    }
+                    if ($specialSubjectRows->contains(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject))) {
+                        return true;
+                    }
+                    return !empty($printData['is_blank']);
+                })->map(function ($subject) use ($specialSubjectRows, $hasSubject, $printData) {
                     $matchedRow = $specialSubjectRows->first(fn ($row) => $hasSubject([$row['subject'] ?? ''], $subject));
 
                     return $matchedRow ?: [
@@ -430,9 +442,20 @@
                 </div>
                 <div class="date">Date : {{ $printData['date'] }}</div>
 
+                @php
+                    $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier(optional($printData['class'] ?? null)->class_name ?? ($printData['class_section'] ?? ''));
+                    $isClass10Or12 = in_array($normClass, ['10', '12'], true);
+
+                    $rawTitle = $printData['layout']['title'] ?? '';
+                    if (preg_match('/term\s*[-_]?\s*(ii|2)\s*(\(([^)]+)\))?\s*/i', $rawTitle) || str_contains(strtolower($rawTitle), 'annual') || str_contains(strtolower($rawTitle), 'pre board')) {
+                        $displayTitle = $isClass10Or12 ? 'Pre Board Examination Report Card' : 'Annual Examination Report Card';
+                    } else {
+                        $displayTitle = $rawTitle;
+                    }
+                @endphp
                 <div class="title">
-                    <div>Academic Session : {{ str_replace('_', '-', $printData['session_year'] ?? '') }}</div>
-                    <div>{{ $printData['layout']['title'] ?? '' }}</div>
+                    <div class="session-text">Academic Session : {{ str_replace('_', '-', $printData['session_year'] ?? '') }}</div>
+                    <div>{{ $displayTitle }}</div>
                 </div>
 
                 <section class="student-box">
@@ -485,7 +508,18 @@
                         <tr>
                             <th class="section scholastic-area">Scholastic Areas</th>
                             @foreach($printData['layout']['scholastic_terms'] as $term)
-                            <th class="section" colspan="{{ count($term['columns'] ?? []) }}">{{ $term['label'] ?? '' }}</th>
+                            @php
+                                $termLabel = $term['label'] ?? '';
+                                $tKey = strtolower((string) ($term['key'] ?? ''));
+                                if ($tKey === 'term_1' || preg_match('/\bterm[\s_-]*(?:1|i)\b/i', $termLabel) || strcasecmp($termLabel, 'half yearly exam') === 0 || strcasecmp($termLabel, 'half yearly') === 0) {
+                                    $displayHeading = 'Half Yearly Exam';
+                                } elseif ($tKey === 'term_2' || preg_match('/\bterm[\s_-]*(?:2|ii)\b/i', $termLabel) || strcasecmp($termLabel, 'annual exam') === 0 || strcasecmp($termLabel, 'annual') === 0 || strcasecmp($termLabel, 'pre board') === 0) {
+                                    $displayHeading = $isClass10Or12 ? 'Pre Board' : 'Annual Exam';
+                                } else {
+                                    $displayHeading = $termLabel;
+                                }
+                            @endphp
+                            <th class="section" colspan="{{ count($term['columns'] ?? []) }}">{{ $displayHeading }}</th>
                             @endforeach
                             <th class="section" rowspan="2">Grade</th>
                             <th class="section" rowspan="2">Grand<br>Total</th>
@@ -619,8 +653,20 @@
                         </tbody>
                 </table>
 
+                @php
+                $hasCoScholasticSections = false;
+                foreach ($printData['layout']['co_scholastic_sections'] ?? [] as $section) {
+                    if (!empty($section['items']) && count($section['items']) > 0) {
+                        $hasCoScholasticSections = true;
+                        break;
+                    }
+                }
+                @endphp
+
+                @if($hasCoScholasticSections)
                 <section class="co-grid">
                     @foreach($printData['layout']['co_scholastic_sections'] ?? [] as $section)
+                    @if(!empty($section['items']) && count($section['items']) > 0)
                     <table class="co-table">
                         <tr>
                             <th class="co-title">{{ $section['title'] ?? 'Co-Scholastic Area' }}</th>
@@ -678,8 +724,10 @@
                         </tr>
                         @endforeach
                     </table>
+                    @endif
                     @endforeach
                 </section>
+                @endif
 
                 <section class="summary">
                     <div class="remarks">Class Teacher's remarks : {{ $printData['remarks'] ?? '' }}</div>
@@ -693,7 +741,7 @@
                                 $tKey = strtolower((string) ($tCfg['key'] ?? ''));
                                 $tLabel = strtolower((string) ($tCfg['label'] ?? ''));
                                 $tExamType = strtolower((string) ($tCfg['exam_type'] ?? ''));
-                                if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || $tExamType === 'term 2') {
+                                if ($tKey === 'term_2' || str_contains($tLabel, 'term ii') || str_contains($tLabel, 'term 2') || str_contains($tLabel, 'annual') || str_contains($tLabel, 'pre board') || $tExamType === 'term 2') {
                                     $term2Index = $tIdx;
                                     break;
                                 }

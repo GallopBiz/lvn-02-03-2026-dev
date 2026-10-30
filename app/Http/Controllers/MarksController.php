@@ -38,25 +38,18 @@ class MarksController extends Controller
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         $examslist = $this->accessibleAcademicExams();
         if ($this->isStaffMarksUser()) {
-            $classlist = $this->accessibleTeacherSubjects()
-                ->with('Class')
-                ->groupBy('class_id')
-                ->get()
-                ->pluck('Class')
-                ->filter()
-                ->values();
-            $subjectlist = $this->accessibleTeacherSubjects()
-                ->with('Subject')
-                ->groupBy('subject_id')
-                ->get()
-                ->pluck('Subject')
-                ->filter()
-                ->values();
+            $teacherSubjects = $this->accessibleTeacherSubjects()
+                ->with(['Class', 'Subject', 'Teacher.biometricDetails'])
+                ->get();
+
+            $classlist = $teacherSubjects->pluck('Class')->filter()->unique('id')->values();
+            $subjectlist = $teacherSubjects->pluck('Subject')->filter()->unique('id')->values();
+            $teacherlist = $teacherSubjects->unique('teacher_id')->values();
         } else {
             $classlist = Classname::select('id', 'class_name')->where('is_delete', 0)->get();
             $subjectlist = Subject::select('id', 'subject_name', 'subject_type')->where('is_delete', 0)->get();
+            $teacherlist = TeacherSubject::where('is_delete', 0)->with('Teacher.biometricDetails')->get()->unique('teacher_id')->values();
         }
-        $teacherlist = $this->accessibleTeacherSubjects()->with('Teacher.biometricDetails')->groupBy('teacher_id')->get();
         $isStaffMarksUser = $this->isStaffMarksUser();
         $internalAssessments = $this->activeInternalAssessments();
         $gradeRanges = $this->activeGradeRanges();

@@ -108,13 +108,26 @@
         <?php
             $className = (string) ($report['class']->class_name ?? '');
             $isClassOne = preg_match('/(^|\D)(1|i|one|first)(\D|$)/i', $className);
+            $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier($report['class']->class_name ?? '');
+            $isClass10Or12 = in_array($normClass, ['10', '12'], true);
+
+            $term1Heading = 'Half Yearly Exam';
+            $term2Heading = $isClass10Or12 ? 'Pre Board' : 'Annual Exam';
+
+            $rawExamTitle = $report['exam_title'] ?? (!empty($report['show_term_2']) ? ($isClass10Or12 ? 'Consolidated Pre Board Examination' : 'Consolidated Annual Examination') : 'Consolidated Half Yearly Examination');
+            $examTitleDisplay = $rawExamTitle;
+            if (preg_match('/\bterm[\s_-]*(?:2|ii)\b/i', $examTitleDisplay) || str_contains(strtolower($examTitleDisplay), 'annual')) {
+                $examTitleDisplay = $isClass10Or12 ? 'Consolidated Pre Board Examination' : 'Consolidated Annual Examination';
+            } elseif (preg_match('/\bterm[\s_-]*(?:1|i)\b/i', $examTitleDisplay)) {
+                $examTitleDisplay = 'Consolidated Half Yearly Examination';
+            }
         ?>
         <div class="card mb-4 shadow-sm">
             <div class="card-body">
                 <div class="consolidated-header-box">
                     <div class="text-center mb-2">
                         <h4 class="font-weight-bold mb-1" style="letter-spacing: 0.5px;">Lokmanya Vidya Niketan</h4>
-                        <h5 class="text-primary font-weight-bold mb-1">{{ $report['exam_title'] ?? 'Consolidated Term - II (Annual) Examination' }}</h5>
+                        <h5 class="text-primary font-weight-bold mb-1">{{ $examTitleDisplay }}</h5>
                         <div class="text-muted font-weight-500">Session : {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
                     </div>
                     <div class="d-flex justify-content-between align-items-center font-weight-bold text-dark px-1">
@@ -148,9 +161,9 @@
                                 <th rowspan="2" class="text-left" style="min-width: 140px;">Student Name</th>
                                 <th rowspan="2" style="min-width: 85px;">Sch. No<br>Att.</th>
                                 <th rowspan="2" class="text-left" style="min-width: 130px;">Subject</th>
-                                <th colspan="7">Term - I</th>
+                                <th colspan="7">{{ $term1Heading }}</th>
                                 @if(!empty($report['show_term_2']))
-                                    <th colspan="7">Term - II</th>
+                                    <th colspan="7">{{ $term2Heading }}</th>
                                 @endif
                                 <th rowspan="2" style="width: 55px;">Perc%</th>
                                 <th rowspan="2" style="width: 50px;">Division</th>

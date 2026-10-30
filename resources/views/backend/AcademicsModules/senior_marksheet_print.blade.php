@@ -87,7 +87,7 @@
     }
 
     .header-title .session-text {
-        font-size: 15px;
+        font-size: 18px;
         font-weight: bold;
         letter-spacing: 0.5px;
     }
@@ -194,7 +194,7 @@
     }
 
     .footer-signatures {
-        margin-top: 7mm;
+        margin-top: 12mm;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
@@ -332,11 +332,14 @@
                 </div>
 
                 @php
-                    $rawTitle = $data['title'] ?? 'Annual Examination Report Card';
+                    $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier(optional($data['class'] ?? null)->class_name ?? ($data['student_meta']['class'] ?? ($data['class_section'] ?? '')));
+                    $isClass12 = ($normClass === '12');
+
+                    $rawTitle = $data['title'] ?? ($isClass12 ? 'Pre Board Examination Report Card' : 'Annual Examination Report Card');
                     $cleanedTitle = preg_replace('/term\s*[-_]?\s*(ii|i|1|2)\s*(\(([^)]+)\))?\s*/i', '$3 ', $rawTitle);
                     $cleanedTitle = preg_replace('/\s+/', ' ', trim($cleanedTitle));
-                    if (empty($cleanedTitle)) {
-                        $cleanedTitle = 'Annual Examination Report Card';
+                    if (empty($cleanedTitle) || ($isClass12 && str_contains(strtolower($cleanedTitle), 'annual'))) {
+                        $cleanedTitle = $isClass12 ? 'Pre Board Examination Report Card' : 'Annual Examination Report Card';
                     }
                 @endphp
                 {{-- Header Title --}}
@@ -428,7 +431,7 @@
                             <th rowspan="3" class="col-total-140">Grand<br>Total<br>(140)</th>
 
                             <th rowspan="3" class="col-pt">PT - II<br>(5)</th>
-                            <th colspan="4">Annual Exam</th>
+                            <th colspan="4">{{ !empty($isClass12) ? 'Pre Board' : 'Annual Exam' }}</th>
                             <th rowspan="3" class="col-obt-100">Marks<br>Obtained<br>(100)</th>
                             <th rowspan="3" class="col-total-140">Total<br>(140)</th>
                             <th rowspan="3" class="col-grand-280">Grand<br>Total<br>(280)</th>
@@ -458,18 +461,18 @@
                             <td class="subject-name">{{ $row['subject_name'] ?? '' }}</td>
                             {{-- Term I (Half Yearly) --}}
                             <td>{{ $row['pt1'] !== '' ? $row['pt1'] : '' }}</td>
-                            <td>{{ $row['hy_theory_obt'] !== '' ? $row['hy_theory_obt'] : '' }}</td>
                             <td>{{ $row['hy_theory_mm'] ?? '' }}</td>
-                            <td>{{ $row['hy_practical_obt'] !== '' ? $row['hy_practical_obt'] : '' }}</td>
+                            <td>{{ $row['hy_theory_obt'] !== '' ? $row['hy_theory_obt'] : '' }}</td>
                             <td>{{ $row['hy_practical_mm'] ?? '' }}</td>
+                            <td>{{ $row['hy_practical_obt'] !== '' ? $row['hy_practical_obt'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['hy_obtained'] !== '' ? $row['hy_obtained'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['hy_grand_total'] !== '' ? $row['hy_grand_total'] : '' }}</td>
                             {{-- Term II (Annual) --}}
                             <td>{{ $row['pt2'] !== '' ? $row['pt2'] : '' }}</td>
-                            <td>{{ $row['annual_theory_obt'] !== '' ? $row['annual_theory_obt'] : '' }}</td>
                             <td>{{ $row['annual_theory_mm'] ?? '' }}</td>
-                            <td>{{ $row['annual_practical_obt'] !== '' ? $row['annual_practical_obt'] : '' }}</td>
+                            <td>{{ $row['annual_theory_obt'] !== '' ? $row['annual_theory_obt'] : '' }}</td>
                             <td>{{ $row['annual_practical_mm'] ?? '' }}</td>
+                            <td>{{ $row['annual_practical_obt'] !== '' ? $row['annual_practical_obt'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['annual_obtained'] !== '' ? $row['annual_obtained'] : '' }}</td>
                             <td style="font-weight: 500;">{{ $row['annual_total'] !== '' ? $row['annual_total'] : '' }}</td>
                             <td style="font-weight: bold;">{{ $row['combined_grand_total'] !== '' ? $row['combined_grand_total'] : '' }}</td>
@@ -558,13 +561,10 @@
                             <td></td>
                         </tr>
 
-                        {{-- Remarks and Attendance Row --}}
+                        {{-- Remarks Row --}}
                         <tr class="remark-att-row">
-                            <td colspan="11" style="text-align: left; padding: 5px 8px;">
+                            <td colspan="16" style="text-align: left; padding: 5px 8px;">
                                 <strong>Class Teacher Remark : </strong> &nbsp; {{ $data['remarks'] ?? 'Passed and promoted to next class.' }}
-                            </td>
-                            <td colspan="5" style="text-align: right; padding: 5px 8px; white-space: nowrap;">
-                                <strong>Attendance : </strong> &nbsp; {{ $attendanceDisplay }}
                             </td>
                         </tr>
                     </tbody>

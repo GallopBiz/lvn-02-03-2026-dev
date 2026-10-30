@@ -1,13 +1,13 @@
 <?php
 
 namespace App\Http\Controllers;
+
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use DB;
 
-    
 class RoleController extends Controller
 {
     // Module Functions Arrays (must be inside class)
@@ -154,6 +154,7 @@ class RoleController extends Controller
         ['label' => 'leaverequests_delete','functionname' => 'hrms-leaverequests_delete'],
         ['label' => 'delete(leaverequests)','functionname' => 'hrms-delete-leaverequests'],
     ];
+
     /**
      * Display a listing of the resource.
      *
@@ -174,9 +175,9 @@ class RoleController extends Controller
      */
     public function index(Request $request)
     {
-        $roles = Role::orderBy('id','DESC')->paginate(5);
+        $roles = Role::orderBy('id','DESC')->paginate(10);
         return view('roles.index',compact('roles'))
-            ->with('i', ($request->input('page', 1) - 1) * 5);
+            ->with('i', ($request->input('page', 1) - 1) * 10);
     }
     
     /**
@@ -195,13 +196,18 @@ class RoleController extends Controller
         $Academic_functions = self::$Academic_functions;
         $hrms_functions = self::$hrms_functions;
 
+        $menu = config('sidebar');
+        $selectedMenu = [];
+
         return view('roles.create', compact(
             'permission',
             'Scholars_functions',
             'Fees_functions',
             'Transport_functions',
             'Academic_functions',
-            'hrms_functions'
+            'hrms_functions',
+            'menu',
+            'selectedMenu'
         ));
     }
     
@@ -215,15 +221,45 @@ class RoleController extends Controller
     {
         $this->validate($request, [
             'name' => 'required|unique:roles,name',
-            'permission' => 'required',
+            'permission' => 'nullable|array',
         ]);
     
         $role = Role::create(['name' => $request->input('name')]);
-        $role->syncPermissions($request->input('permission'));
+        if ($request->filled('permission')) {
+            $role->syncPermissions($request->input('permission'));
+        }
+
+        // Save menu permissions
+        $menuPermissions = $request->input('menu_permissions', []);
+        $cleanPermissions = [];
+        if (!empty($menuPermissions)) {
+            foreach ($menuPermissions as $key => $actions) {
+                if (!empty($actions['view']) || !empty($actions['add']) || !empty($actions['edit']) || !empty($actions['delete'])) {
+                    $cleanPermissions[trim($key)] = [
+                        'view'   => !empty($actions['view']),
+                        'add'    => !empty($actions['add']),
+                        'edit'   => !empty($actions['edit']),
+                        'delete' => !empty($actions['delete']),
+                    ];
+                }
+            }
+        } elseif ($request->filled('menu')) {
+            foreach ($request->input('menu', []) as $m) {
+                $cleanPermissions[trim($m)] = [
+                    'view' => true, 'add' => true, 'edit' => true, 'delete' => true
+                ];
+            }
+        }
+
+        \App\Models\RoleMenu::updateOrCreate(
+            ['role_id' => $role->id],
+            ['menu' => json_encode($cleanPermissions)]
+        );
     
         return redirect()->route('roles.index')
                         ->with('success','Role created successfully');
     }
+
     /**
      * Display the specified resource.
      *
@@ -293,63 +329,43 @@ class RoleController extends Controller
         $role->name = $request->input('name');
         $role->save();
 
-        // Debug: log received permissions
-        \Log::info('Role update permissions:', [
-            'role_id' => $id,
-            'permissions' => $request->input('permission', [])
-        ]);
-
-        // Debug: log role guard_name
-        \Log::info('Role guard_name:', [
-            'role_id' => $id,
-            'guard_name' => $role->guard_name
-        ]);
-
-        // Debug: log permissions guard_name
         $permissionNames = $request->input('permission', []);
-        $permissions = \Spatie\Permission\Models\Permission::whereIn('name', $permissionNames)->get();
-        $permissionGuardNames = $permissions->pluck('guard_name')->unique()->toArray();
-        \Log::info('Permissions guard_names:', [
-            'permission_names' => $permissionNames,
-            'guard_names' => $permissionGuardNames
-        ]);
-
-
-        // Extra debug: log permission IDs and SQL errors
-        try {
-            $permissionIds = $permissions->pluck('id')->toArray();
-            \Log::info('Permission IDs to sync:', [
-                'role_id' => $id,
-                'permission_ids' => $permissionIds,
-                'permission_names' => $permissionNames
-            ]);
-            // Always sync permissions, even if empty
+        if (is_array($permissionNames)) {
             $role->syncPermissions($permissionNames);
-        } catch (\Exception $e) {
-            \Log::error('Error syncing permissions:', [
-                'role_id' => $id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
         }
 
-        // Debug: log permissions in DB after update
-        $dbPermissions = $role->permissions()->pluck('name')->toArray();
-        \Log::info('Role DB permissions after update:', [
-            'role_id' => $id,
-            'db_permissions' => $dbPermissions
-        ]);
+        // Save sidebar menu selection with action-level permissions
+        $menuPermissions = $request->input('menu_permissions', []);
+        $cleanPermissions = [];
 
-        // Save sidebar menu selection as JSON in role_menus table
-        $menuSelection = $request->input('menu', []);
+        if (!empty($menuPermissions)) {
+            foreach ($menuPermissions as $key => $actions) {
+                if (!empty($actions['view']) || !empty($actions['add']) || !empty($actions['edit']) || !empty($actions['delete'])) {
+                    $cleanPermissions[trim($key)] = [
+                        'view'   => !empty($actions['view']),
+                        'add'    => !empty($actions['add']),
+                        'edit'   => !empty($actions['edit']),
+                        'delete' => !empty($actions['delete']),
+                    ];
+                }
+            }
+        } elseif ($request->filled('menu')) {
+            foreach ($request->input('menu', []) as $m) {
+                $cleanPermissions[trim($m)] = [
+                    'view' => true, 'add' => true, 'edit' => true, 'delete' => true
+                ];
+            }
+        }
+
         \App\Models\RoleMenu::updateOrCreate(
             ['role_id' => $id],
-            ['menu' => json_encode($menuSelection)]
+            ['menu' => json_encode($cleanPermissions)]
         );
 
         return redirect()->route('roles.index')
                         ->with('success','Role updated successfully');
     }
+
     /**
      * Remove the specified resource from storage.
      *

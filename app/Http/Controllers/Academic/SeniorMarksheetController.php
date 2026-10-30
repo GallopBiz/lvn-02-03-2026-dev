@@ -326,7 +326,7 @@ class SeniorMarksheetController extends Controller
                         'student_name' => $printData['student_meta']['student_name'],
                         'scholar_no' => $printData['student_meta']['scholar_no'],
                         'class_name' => optional($printData['class'])->class_name,
-                        'exam_name' => optional($printData['exam'])->exam_name ?: 'Annual Examination',
+                        'exam_name' => optional($printData['exam'])->exam_name ?: ((\App\Academic\AcademicHelper::normalizeClassIdentifier(optional($printData['class'])->class_name) === '12') ? 'Pre Board Examination' : 'Annual Examination'),
                         'print_date' => $printData['date'],
                         'print_data' => $snapshotPrintData,
                     ],
@@ -518,6 +518,28 @@ class SeniorMarksheetController extends Controller
         $printData['student'] = $this->studentById($studentId);
         $printData['class'] = $classId ? Classes::find($classId) : null;
 
+        // Ensure only subjects belonging to the student's assigned combination are displayed
+        if ($studentId && $classId) {
+            $combSubjects = $this->subjectsFor($classId, $studentId);
+            if ($combSubjects->isNotEmpty()) {
+                $allowedSubjectIds = $combSubjects->pluck('id')->map(fn ($id) => (int) $id)->all();
+                $existingRowSubjectIds = array_map(fn ($r) => (int) ($r['subject_id'] ?? 0), $printData['rows'] ?? []);
+                $hasExtraSubjects = !empty(array_diff($existingRowSubjectIds, $allowedSubjectIds));
+
+                if ($hasExtraSubjects) {
+                    $livePrintData = $this->buildPrintData($classId, $examId, $studentId, $request);
+                    if (!empty($livePrintData['rows'])) {
+                        $printData = $livePrintData;
+                    } else {
+                        $printData['rows'] = array_values(array_filter($printData['rows'] ?? [], function ($r) use ($allowedSubjectIds) {
+                            $sid = isset($r['subject_id']) ? (int) $r['subject_id'] : null;
+                            return $sid && in_array($sid, $allowedSubjectIds, true);
+                        }));
+                    }
+                }
+            }
+        }
+
         if ($request->filled('print_date')) {
             $printData['date'] = $this->formatSeniorDate($request->input('print_date'));
         }
@@ -680,7 +702,7 @@ class SeniorMarksheetController extends Controller
 
             // Exclude Non-Academic or Skill subjects if marked as do_not_print or purely non-academic
             $subType = strtolower(trim((string) ($subject->subject_type ?? '')));
-            if (preg_match('/non[\s-]*academic/i', $subType) || !empty($subject->do_not_print_in_main_scholastic_area)) {
+            if (preg_match('/non[\s-]*academic/i', $subType) || AcademicHelper::isSpecialFormattingForClass($subject, $classId, $class?->class_name)) {
                 // Per requirement 3: No Non-Academic / Skill Subjects table
                 continue;
             }
@@ -853,7 +875,7 @@ class SeniorMarksheetController extends Controller
             'date' => $this->formatSeniorDate($request->input('print_date', $request->input('date'))),
             'session_year' => $sessionYear,
             'display_session' => $displaySession,
-            'title' => 'Annual Examination Report Card',
+            'title' => (\App\Academic\AcademicHelper::normalizeClassIdentifier(optional($class)->class_name) === '12') ? 'Pre Board Examination Report Card' : 'Annual Examination Report Card',
         ];
     }
 
@@ -1012,16 +1034,18 @@ class SeniorMarksheetController extends Controller
             return 'term1';
         }
 
-        // 4. Annual / Term 2
+        // 4. Annual / Term 2 / Pre Board
         if (
             preg_match('/\bterm[\s_-]*(2|ii)\b/i', $raw) ||
             preg_match('/annual/i', $raw) ||
+            preg_match('/pre[\s_-]*board/i', $raw) ||
             preg_match('/(?<!half[\s_-])yearly/i', $raw) ||
             preg_match('/final/i', $raw) ||
-            in_array($clean, ['term2', 'termii', 'annual', 'yearly', 'final'], true) ||
+            in_array($clean, ['term2', 'termii', 'annual', 'yearly', 'final', 'preboard'], true) ||
             str_starts_with($clean, 'term2') ||
             str_starts_with($clean, 'termii') ||
-            str_starts_with($clean, 'annual')
+            str_starts_with($clean, 'annual') ||
+            str_starts_with($clean, 'preboard')
         ) {
             return 'term2';
         }
@@ -1077,7 +1101,7 @@ class SeniorMarksheetController extends Controller
     private function subjectsFor(?int $classId, ?int $studentId)
     {
         $class = $classId ? Classes::find($classId) : null;
-        $subjectColumns = ['id', 'subject_name', 'subject_type', 'evaluation', 'practical', 'do_not_print_in_main_scholastic_area'];
+        $subjectColumns = ['id', 'subject_name', 'subject_type', 'evaluation', 'practical', 'do_not_print_in_main_scholastic_area', 'special_formatting_classes'];
         $actualColumns = [];
         foreach ($subjectColumns as $col) {
             if (Schema::connection('dynamic')->hasColumn('subjectmaster', $col)) {
@@ -1092,35 +1116,84 @@ class SeniorMarksheetController extends Controller
 
         // 1. Check student-specific assignment
         if ($studentId && Schema::connection('dynamic')->hasTable('subject_assign_student') && Schema::connection('dynamic')->hasTable('combination_subject')) {
-            $assigned = DB::connection('dynamic')
-                ->table('subject_assign_student as sas')
-                ->join('combination_subject as cs', 'cs.subject_combination_id', '=', 'sas.assign_this_combtoall')
-                ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
-                ->where(function ($q) use ($studentId) {
-                    $q->where('sas.students_details', (string) $studentId)
-                        ->orWhere('sas.students_details', $studentId)
-                        ->orWhereJsonContains('sas.students_details', (string) $studentId)
-                        ->orWhereJsonContains('sas.students_details', $studentId);
-                })
-                ->when($class && !empty($class->class_name), fn ($q) => $q->where('sas.class_name', $class->class_name))
-                ->where(function ($q) {
-                    $q->where('sas.is_delete', 0)->orWhereNull('sas.is_delete');
-                })
-                ->select($actualColumns)
-                ->distinct()
-                ->orderBy('cs.subject_order')
-                ->orderBy('s.subject_name')
-                ->get()
-                ->unique('id')
-                ->values();
+            $hasIsDelete = Schema::connection('dynamic')->hasColumn('subject_assign_student', 'is_delete');
+            $query = DB::connection('dynamic')->table('subject_assign_student as sas');
+            if ($class && !empty($class->class_name)) {
+                $norm = AcademicHelper::normalizeClassIdentifier($class->class_name);
+                $query->where(function ($q) use ($class, $norm) {
+                    $q->where('sas.class_name', $class->class_name)
+                      ->orWhere('sas.class_name', $norm);
+                });
+            }
+            if ($hasIsDelete) {
+                $query->orderByRaw('CASE WHEN sas.is_delete = 0 OR sas.is_delete IS NULL THEN 0 ELSE 1 END ASC');
+            }
+            $assignments = $query->orderByDesc('sas.id')->get();
+
+            $matchedCombId = null;
+            foreach ($assignments as $a) {
+                $raw = $a->students_details;
+                $ids = [];
+                if (is_numeric($raw)) {
+                    $ids[] = (int) $raw;
+                } elseif (is_string($raw) && str_starts_with(trim($raw), '[')) {
+                    $decoded = json_decode($raw, true);
+                    if (is_array($decoded)) {
+                        foreach ($decoded as $d) {
+                            if (is_numeric($d)) $ids[] = (int) $d;
+                        }
+                    }
+                } elseif (is_string($raw) && str_contains($raw, ',')) {
+                    foreach (explode(',', $raw) as $d) {
+                        if (is_numeric(trim($d))) $ids[] = (int) trim($d);
+                    }
+                } elseif (!empty($raw) && is_numeric(trim($raw))) {
+                    $ids[] = (int) trim($raw);
+                }
+
+                if (in_array((int) $studentId, $ids, true)) {
+                    $matchedCombId = (int) $a->assign_this_combtoall;
+                    break;
+                }
+            }
+
+            if ($matchedCombId) {
+                $assigned = DB::connection('dynamic')
+                    ->table('combination_subject as cs')
+                    ->join('subjectmaster as s', 's.id', '=', 'cs.subject_id')
+                    ->where('cs.subject_combination_id', $matchedCombId)
+                    ->where(function ($q) {
+                        if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                            $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                        }
+                    })
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
+                    ->select($actualColumns)
+                    ->orderBy('cs.subject_order')
+                    ->orderBy('s.subject_name')
+                    ->get()
+                    ->unique('id')
+                    ->values();
+            }
         }
 
-        // 2. Check class-level assigned subjects
-        if ($assigned->isEmpty() && $classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
+        // If combination subjects are found, return ONLY those assigned subjects (do not append extra subjects from mark entries or class master)
+        if ($assigned->isNotEmpty()) {
+            return $assigned;
+        }
+
+        // 2. Check class-level assigned subjects (fallback only when student has no assigned combination)
+        if ($classId && Schema::connection('dynamic')->hasTable('academic_class_subject')) {
             $assigned = DB::connection('dynamic')
                 ->table('academic_class_subject as acs')
                 ->join('subjectmaster as s', 's.id', '=', 'acs.subject_id')
                 ->whereIn('acs.class_id', $this->marksClassIdsFor($classId))
+                ->where(function ($q) {
+                    if (Schema::connection('dynamic')->hasColumn('subjectmaster', 'is_delete')) {
+                        $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
+                    }
+                })
+                ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                 ->select($actualColumns)
                 ->orderBy('s.subject_name')
                 ->get()
@@ -1128,7 +1201,7 @@ class SeniorMarksheetController extends Controller
                 ->values();
         }
 
-        // 3. Include any subjects where marks are recorded for this student
+        // 3. Include any subjects where marks are recorded for this student (fallback only when student has no assigned combination)
         if ($studentId && Schema::connection('dynamic')->hasTable('previosly_saved_marks_entry')) {
             $marksTable = Schema::connection('dynamic')->hasTable('academic_students_marks') ? 'academic_students_marks' : 'marks';
             $markedSubjectIds = DB::connection('dynamic')
@@ -1147,6 +1220,7 @@ class SeniorMarksheetController extends Controller
                 $extraSubjects = DB::connection('dynamic')
                     ->table('subjectmaster as s')
                     ->whereIn('s.id', $missingIds)
+                    ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                     ->select($actualColumns)
                     ->get();
                 $assigned = $assigned->concat($extraSubjects)->unique('id')->values();
@@ -1166,6 +1240,7 @@ class SeniorMarksheetController extends Controller
                         $q->where('s.is_delete', 0)->orWhereNull('s.is_delete');
                     }
                 })
+                ->whereNotIn(DB::raw('LOWER(TRIM(s.subject_name))'), ['test', 'te4st', 'dummy'])
                 ->select($actualColumns)
                 ->orderBy('s.subject_name')
                 ->get();

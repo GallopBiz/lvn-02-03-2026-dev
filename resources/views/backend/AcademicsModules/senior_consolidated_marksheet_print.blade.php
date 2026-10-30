@@ -122,11 +122,26 @@
                     @endphp
 
                     @foreach($groupPages as $pageIdx => $studentsPage)
+                        @php
+                            $normClass = \App\Academic\AcademicHelper::normalizeClassIdentifier(optional($report['class'] ?? null)->class_name ?? '');
+                            $isClass12 = ($normClass === '12');
+
+                            $term1Heading = 'Half Yearly Exam';
+                            $term2Heading = $isClass12 ? 'Pre Board' : 'Annual Exam';
+
+                            $rawExamTitle = $report['exam_title'] ?? (!empty($report['show_term_2']) ? ($isClass12 ? 'Pre Board Examination' : 'Annual Examination') : 'Half Yearly Examination');
+                            $examTitleDisplay = $rawExamTitle;
+                            if (preg_match('/\bterm[\s_-]*(?:2|ii)\b/i', $examTitleDisplay) || str_contains(strtolower($examTitleDisplay), 'annual')) {
+                                $examTitleDisplay = $isClass12 ? 'Pre Board Examination' : 'Annual Examination';
+                            } elseif (preg_match('/\bterm[\s_-]*(?:1|i)\b/i', $examTitleDisplay)) {
+                                $examTitleDisplay = 'Half Yearly Examination';
+                            }
+                        @endphp
                         <main class="sheet {{ empty($report['show_term_2']) ? 'term1-mode' : '' }}">
                             <div class="title">
                                 <h2>Lokmanya Vidya Niketan</h2>
                                 <h3>Consolidated Marksheet (Senior 11-12)</h3>
-                                <div class="exam-line">Exam Name : {{ $report['exam_title'] ?? (!empty($report['show_term_2']) ? 'Term - II (Annual) Examination' : 'Term - I Examination') }}</div>
+                                <div class="exam-line">Exam Name : {{ $examTitleDisplay }}</div>
                                 <div class="exam-line">Academic Session : {{ str_replace('_', '-', $report['session_year'] ?? '') }}</div>
                             </div>
 
@@ -156,9 +171,9 @@
                                         <th class="scholar" rowspan="2">Sch. No<br>Att.</th>
                                         <th class="optional-sub" rowspan="2">Optional<br>Subject</th>
                                         <th class="subject" rowspan="2">Subject</th>
-                                        <th colspan="5">Term - I</th>
+                                        <th colspan="5">{{ $term1Heading }}</th>
                                         @if(!empty($report['show_term_2']))
-                                            <th colspan="5">Term - II</th>
+                                            <th colspan="5">{{ $term2Heading }}</th>
                                         @endif
                                         <th class="percent" rowspan="2">Perc%</th>
                                         <th class="division" rowspan="2">Division</th>

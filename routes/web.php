@@ -298,6 +298,9 @@ Route::group(['middleware' => ['auth', 'admin']], function() {
     Route::post('store-permission', [UserPermissionController::class, 'store_permission'])->name('store-permission');
     Route::get('view-permission/{id}', [UserPermissionController::class, 'view'])->name('view-permission');
     Route::get('delete-permission/{id}', [UserPermissionController::class, 'bs_soft_delete']);
+});
+
+Route::group(['middleware' => ['auth', 'check.permission']], function() {
     // Route::resource('products', ProductController::class);
     /*Admin Routes*/
 	//Route::get('bonafide', [BonafideCertificateController::class, 'index']);
@@ -802,7 +805,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('delete-nature-of-work', [NatureofworkController::class, 'Natureofwork_delete']);
 
     Route::get('BusFees',[BusFees::class, 'index'])->name('BusFees');
-    Route::get('CourseFees',[CourseFees::class, 'index'])->name('CourseFees');
+    // Route::get('CourseFees',[CourseFees::class, 'index'])->name('CourseFees');
 
     Route::get('vehical',[AddVehical::class, 'showvehical'])->name('showvehical');
     Route::get('list',[AddVehical::class,'list'])->name('list');
@@ -811,7 +814,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('Challa',[Challa::class, 'index'])->name('Challan');
     Route::post('Challa',[Challa::class, 'registerchallan'])->name('Challa');
     Route::get('challanlist',[Challa::class, 'challanlist'])->name('challanlist');
-    Route::get('Refundvoucher',[Refundvoucher::class, 'index'])->name('Refundvoucher');
+    // Route::get('Refundvoucher',[Refundvoucher::class, 'index'])->name('Refundvoucher');
 
      /*Student Master  routes*/
     Route::get('Student-master',[StudentMaster::class, 'index'])->name('Student-master');
@@ -874,7 +877,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('busstop-delete', [BusstopController::class, 'busstop_delete']);
     Route::post('bus-stop-store', [BusstopController::class, 'store']);
     Route::get('delete-busstop/{id}', [BusstopController::class, 'bs_soft_delete']);
-    Route::get('RouteMaster', [RouteMaster::class, 'index'])->name('RouteMaster');
+    // Route::get('RouteMaster', [RouteMaster::class, 'index'])->name('RouteMaster');
 
 
     // Driver / Conductor Master
@@ -920,7 +923,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     // student_ledger
     Route::get('student_ledger', [FeesTypesMasterController::class, 'student_ledger'])->name('student_ledger');
 	Route::get('tuition-fees-certificate', [FeesTypesMasterController::class, 'student_ledger'])->name('student_ledger1');
-	Route::post('/print-certificate', [App\Http\Controllers\CertificateController::class, 'generate'])->name('print.certificate');
+	// Route::post('/print-certificate', [App\Http\Controllers\CertificateController::class, 'generate'])->name('print.certificate');
     Route::get('cancle_student_ledger', [FeesTypesMasterController::class, 'cancle_student_ledger'])->name('cancle_student_ledger');
     Route::match(['get', 'post'], 'search-student-ledger', [FeesTypesMasterController::class, 'search_student_ledger'])->name('search-student-ledger');
     Route::get('defaulterlist', [FeesTypesMasterController::class, 'defaulter_list'])->name('defaulterlist');

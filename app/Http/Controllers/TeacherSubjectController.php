@@ -170,12 +170,59 @@ class TeacherSubjectController extends Controller
             ? Auth::guard('staff')->user()->employee_id
             : $request->teacher;
 
-        $classes = TeacherSubject::with('Class')->where("teacher_id", $teacher)->groupBy('class_id')->where('is_delete','=',0)->get();
-        $subjects = TeacherSubject::with('Subject')->where("teacher_id", $teacher)->groupBy('subject_id')->where('is_delete','=',0)->get();
-        $sectionValues = TeacherSubject::where("teacher_id", $teacher)->where('is_delete','=',0)->distinct()->pluck('section_name');
-        $sections = $this->expandAllSections($sectionValues);
-        $assignments = TeacherSubject::where("teacher_id", $teacher)->where('is_delete', 0)->get(['class_id', 'subject_id', 'section_name']);
-        return ['classes' => $classes, 'subjects' => $subjects, 'sections' => $sections, 'assignments' => $assignments];
+        $rawAssignments = TeacherSubject::with(['Class', 'Subject'])
+            ->where("teacher_id", $teacher)
+            ->where('is_delete', 0)
+            ->get();
+
+        $classes = $rawAssignments->pluck('Class')
+            ->filter()
+            ->unique('id')
+            ->sortBy(function ($c) {
+                return (int) preg_replace('/\D/', '', $c->class_name ?? '') ?: $c->id;
+            })
+            ->values();
+
+        $subjects = $rawAssignments->pluck('Subject')
+            ->filter()
+            ->unique('id')
+            ->sortBy('subject_name')
+            ->values();
+
+        $expandedAssignments = [];
+        foreach ($rawAssignments as $item) {
+            $classId = $item->class_id;
+            $className = $item->Class->class_name ?? '';
+            $subjectId = $item->subject_id;
+            $subjectName = $item->Subject->subject_name ?? '';
+            $subjectType = $item->Subject->subject_type ?? '';
+            $rawSection = $item->section_name;
+
+            $sections = ($rawSection === 'All')
+                ? $this->expandAllSections(['All'], $classId)
+                : collect([$rawSection]);
+
+            foreach ($sections as $sec) {
+                if (empty($sec)) continue;
+                $expandedAssignments[] = [
+                    'class_id' => (string) $classId,
+                    'class_name' => $className,
+                    'section_name' => (string) $sec,
+                    'subject_id' => (string) $subjectId,
+                    'subject_name' => $subjectName,
+                    'subject_type' => $subjectType,
+                ];
+            }
+        }
+
+        $allSections = collect($expandedAssignments)->pluck('section_name')->unique()->values();
+
+        return [
+            'classes' => $classes,
+            'subjects' => $subjects,
+            'sections' => $allSections,
+            'assignments' => $expandedAssignments
+        ];
     }
 
     public function getteachersandsubject(Request $request){
@@ -184,28 +231,65 @@ class TeacherSubjectController extends Controller
             : $request->teacher;
         $class_name = $request->class_name;
 
-        $assignments = TeacherSubject::where('teacher_id', $teacher)
+        $rawAssignments = TeacherSubject::with(['Class', 'Subject'])
+            ->where('teacher_id', $teacher)
             ->where('class_id', $class_name)
-            ->where('is_delete', 0);
-
-        $subjects = (clone $assignments)
-            ->with('Subject')
-            ->groupBy('subject_id')
+            ->where('is_delete', 0)
             ->get();
 
-        $sectionAssignments = clone $assignments;
-        if ($request->filled('subject_id')) {
-            $sectionAssignments->where('subject_id', $request->subject_id);
+        $expandedAssignments = [];
+        foreach ($rawAssignments as $item) {
+            $classId = $item->class_id;
+            $className = $item->Class->class_name ?? '';
+            $subjectId = $item->subject_id;
+            $subjectName = $item->Subject->subject_name ?? '';
+            $subjectType = $item->Subject->subject_type ?? '';
+            $rawSection = $item->section_name;
+
+            $sections = ($rawSection === 'All')
+                ? $this->expandAllSections(['All'], $classId)
+                : collect([$rawSection]);
+
+            foreach ($sections as $sec) {
+                if (empty($sec)) continue;
+                $expandedAssignments[] = [
+                    'class_id' => (string) $classId,
+                    'class_name' => $className,
+                    'section_name' => (string) $sec,
+                    'subject_id' => (string) $subjectId,
+                    'subject_name' => $subjectName,
+                    'subject_type' => $subjectType,
+                ];
+            }
         }
 
-        $sectionValues = $sectionAssignments
-            ->distinct()
-            ->pluck('section_name')
-            ->filter()
-            ->values();
-        $sections = $this->expandAllSections($sectionValues, $class_name);
+        $filteredAssignments = collect($expandedAssignments);
 
-        return ['subjects' => $subjects, 'sections' => $sections];
+        if ($request->filled('subject_id')) {
+            $filteredAssignments = $filteredAssignments->where('subject_id', (string) $request->subject_id);
+        }
+
+        if ($request->filled('section_name')) {
+            $filteredAssignments = $filteredAssignments->where('section_name', (string) $request->section_name);
+        }
+
+        $sections = $filteredAssignments->pluck('section_name')->unique()->values();
+        $subjects = $filteredAssignments->map(function($a) {
+            return [
+                'subject_id' => $a['subject_id'],
+                'subject' => [
+                    'id' => $a['subject_id'],
+                    'subject_name' => $a['subject_name'],
+                    'subject_type' => $a['subject_type'],
+                ]
+            ];
+        })->unique('subject_id')->sortBy('subject.subject_name')->values();
+
+        return [
+            'subjects' => $subjects,
+            'sections' => $sections,
+            'assignments' => $expandedAssignments,
+        ];
     }
 
     private function expandAllSections($sectionValues, $classId = null)

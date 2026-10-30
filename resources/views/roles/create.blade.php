@@ -1,106 +1,47 @@
 @extends('layouts.app')
-@section('content')
-<div class="row col-12">
-
-    {{-- <div class="col-6">
-        <h2>Create New Role</h2>
-    </div> --}}
-    <div class="col-6 mb-3">
-        <a class="btn btn-primary" href="{{ route('roles.index') }}"> Back</a>
+@section('main-container')
+<div class="row">
+    <div class="col-lg-12 margin-tb">
+        <div class="pull-left">
+            <h2>Create New Role</h2>
+        </div>
+        <div class="pull-right">
+            <a class="btn btn-primary" href="{{ route('roles.index') }}"> Back</a>
+        </div>
     </div>
 </div>
 @if (count($errors) > 0)
-<div class="alert alert-danger">
-    <strong>Whoops!</strong> There were some problems with your input.<br><br>
-    <ul>
+    <div class="alert alert-danger mt-2">
+        <strong>Whoops!</strong> There were some problems with your input.<br><br>
+        <ul>
         @foreach ($errors->all() as $error)
-        <li>{{ $error }}</li>
+            <li>{{ $error }}</li>
         @endforeach
-    </ul>
-</div>
+        </ul>
+    </div>
 @endif
-{!! Form::open(array('route' => 'roles.store','method'=>'POST', 'class' => 'col-12')) !!}
+{!! Form::open(array('route' => 'roles.store','method'=>'POST')) !!}
 <div class="row">
-    <div class="col-xs-12 col-sm-12 col-md-12 d-flex align-items-end">
-        <div class="form-group col-6">
-            <strong>Name:</strong>
-            {!! Form::text('name', null, array('placeholder' => 'Name','class' => 'form-control')) !!}
-        </div>
-        <div class="form-group col-2 ms-2">            
-        <button type="submit" class="btn btn-primary">Submit</button>
+    <div class="col-xs-12 col-sm-12 col-md-12">
+        <div class="form-group mb-3">
+            <strong>Role Name:</strong>
+            {!! Form::text('name', null, array('placeholder' => 'Role Name (e.g. Teacher, Accounts, Receptionist)','class' => 'form-control')) !!}
         </div>
     </div>
-    <div class="col-xs-12 col-sm-12 col-md-12 text-center">
+
+    <!-- Sidebar Menu & Action Permissions -->
+    <div class="col-xs-12 col-sm-12 col-md-12">
+        <div class="form-group col-md-12 mt-2">
+            <h4 class="mb-3 text-primary fw-bold">Menu & Action Permissions (View, Add, Edit, Delete)</h4>
+            @include('backend.layouts.menu_columns_checkboxes', [
+                'selectedMenus' => $selectedMenu ?? []
+            ])
+        </div>
     </div>
-    <div class="col-xs-12 col-sm-12 col-md-12 row">
-        <div class="form-group col-2">
-            <strong>Scholars functions</strong>
-            <br />        
-            {{-- for functions only --}}
-            @foreach($Scholars_functions as $value)
-            <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
-                {{ $value['label'] }}</label>
-            <br />
-            @endforeach
-        </div>
 
-        <div class="form-group col-2">
-            <strong>Fees functions</strong>
-            <br />        
-            {{-- for functions only --}}
-            @foreach($Fees_functions as $value)
-            <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
-                {{ $value['label'] }}</label>
-            <br />
-            @endforeach
-        </div>
-
-        <div class="form-group col-2">
-            <strong>Transport functions</strong>
-            <br />        
-            {{-- for functions only --}}
-            @foreach($Transport_functions as $value)
-            <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
-                {{ $value['label'] }}</label>
-            <br />
-            @endforeach
-        </div>
-
-        <div class="form-group col-2">
-            <strong>Academic functions</strong>
-            <br />        
-            {{-- for functions only --}}
-            @foreach($Academic_functions as $value)
-            <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
-                {{ $value['label'] }}</label>
-            <br />
-            @endforeach
-        </div>
-
-        <div class="form-group col-2">
-            <strong>HRMS functions</strong>
-            <br />        
-            {{-- for functions only --}}
-            @foreach($hrms_functions as $value)
-            <label>{{ Form::checkbox('permission[]', $value['functionname'], false, array('class' => 'name')) }}
-                {{ $value['label'] }}</label>
-            <br />
-            @endforeach
-        </div>
-
-        <div class="form-group col-2">
-            <strong>Permission:</strong>
-            <br />
-            @foreach($permission as $value)
-            <label>{{ Form::checkbox('permission[]', $value->id, false, array('class' => 'name')) }}
-                {{ $value->name }}</label>
-            <br />
-            @endforeach
-        </div>
-
+    <div class="col-xs-12 col-sm-12 col-md-12 text-center my-4">
+        <button type="submit" class="btn btn-primary px-5 py-2 fw-bold fs-6">Create Role</button>
     </div>
-   
 </div>
 {!! Form::close() !!}
-
 @endsection
