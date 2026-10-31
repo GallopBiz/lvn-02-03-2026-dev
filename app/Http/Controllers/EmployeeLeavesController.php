@@ -21,6 +21,8 @@ use App\Mail\LeaveAppliedNotification;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
+use App\Services\Hrms\CasualLeaveBalanceService;
 
 class EmployeeLeavesController extends Controller
 {
@@ -189,10 +191,15 @@ class EmployeeLeavesController extends Controller
 {
     $mainRequest = HrmsLeaveRequest::findOrFail($id);
     $newStatus = $request->input('status');
+	$isHalfDay = in_array(strtolower(trim((string) $mainRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
 
-    if (!in_array($newStatus, ['approved', 'rejected'])) {
-        return back()->with('error', 'Invalid status.');
-    }
+	if (!in_array($newStatus, ['approved', 'rejected'])) {
+	    return back()->with('error', 'Invalid status.');
+	}
+
+	if ($isHalfDay) {
+	    $this->ensureHalfDayCasualLeaveDeducted($mainRequest);
+	}
 
     /*
     |--------------------------------------------------------------------------
@@ -200,6 +207,7 @@ class EmployeeLeavesController extends Controller
     |--------------------------------------------------------------------------
     */
     if (
+        !$isHalfDay &&
         $newStatus === 'rejected' &&
         $mainRequest->rollback_done == 0
     ) {
@@ -236,10 +244,13 @@ class EmployeeLeavesController extends Controller
 
         $leaveTypesByDate = $request->input('leave_types', []);
         $lwpDates = $request->input('lwp_dates', []);
+        if ($isHalfDay && empty($leaveTypesByDate)) {
+            $leaveTypesByDate[$mainRequest->start_date] = $mainRequest->leave_type_id;
+        }
 
         foreach ($leaveTypesByDate as $date => $leaveTypeId) {
 
-            $isLwp = in_array($date, $lwpDates);
+            $isLwp = !$isHalfDay && in_array($date, $lwpDates);
 
             HrmsLeaveRequest::create([
                 'employee_id' => $mainRequest->employee_id,
@@ -249,6 +260,8 @@ class EmployeeLeavesController extends Controller
                 'reason' => $mainRequest->reason,
                 'status' => 'approved',
                 'is_half_day' => $mainRequest->is_half_day,
+                'half_day_type' => $mainRequest->half_day_type,
+                'cl_days_deducted' => $mainRequest->cl_days_deducted,
             ]);
 
             if (!$isLwp) {
@@ -271,6 +284,33 @@ class EmployeeLeavesController extends Controller
 
     return back()->with('success', 'Leave request processed date-wise.');
 }
+
+    private function ensureHalfDayCasualLeaveDeducted(HrmsLeaveRequest $leaveRequest): void
+    {
+        if ($leaveRequest->cl_days_deducted !== null) {
+            return;
+        }
+
+        $employee = HrmsEmployee::findOrFail($leaveRequest->employee_id);
+        $leaveType = HrmsLeaveType::find($leaveRequest->leave_type_id);
+
+        DB::transaction(function () use ($leaveRequest, $employee, $leaveType) {
+            if ($leaveType && $leaveType->is_paid && !$leaveRequest->rollback_done) {
+                $requestedBalance = HrmsEmployeeLeaveBalance::where('employee_id', $leaveRequest->employee_id)
+                    ->where('leave_type_id', $leaveRequest->leave_type_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($requestedBalance) {
+                    $requestedBalance->balance = round((float) $requestedBalance->balance + 0.5, 1);
+                    $requestedBalance->save();
+                }
+            }
+
+            $leaveRequest->cl_days_deducted = app(CasualLeaveBalanceService::class)->deduct($employee, 0.5);
+            $leaveRequest->save();
+        });
+    }
 
 
 

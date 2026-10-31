@@ -704,7 +704,30 @@ class SeatingArrangementController extends Controller
             $student->stream_name = $resolved['academic_stream'];
         }
 
-        return $students->sort(function ($a, $b) {
+        $combinationStrength = [];
+        $combinationOrder = [];
+        foreach ($students as $index => $student) {
+            $streamKey = strtoupper(trim((string) ($student->academic_stream ?? '')));
+            $combinationId = $student->combination_id ?? null;
+            $combinationName = strtolower(preg_replace('/\s+/', ' ', trim((string) ($student->combination_name ?? ''))));
+            $optionalSubject = strtolower(trim((string) ($student->optional_subject ?? '')));
+
+            if (!empty($combinationId)) {
+                $combinationKey = $streamKey . '|id:' . $combinationId;
+            } elseif ($combinationName !== '') {
+                $combinationKey = $streamKey . '|name:' . $combinationName;
+            } elseif ($optionalSubject !== '') {
+                $combinationKey = $streamKey . '|optional:' . $optionalSubject;
+            } else {
+                $combinationKey = $streamKey . '|unassigned';
+            }
+
+            $student->sequence_combination_key = $combinationKey;
+            $combinationStrength[$combinationKey] = ($combinationStrength[$combinationKey] ?? 0) + 1;
+            $combinationOrder[$combinationKey] ??= $index;
+        }
+
+        $orderedStudents = $students->sort(function ($a, $b) use ($combinationStrength, $combinationOrder) {
             // 1. Group by Main Academic Stream (PCM -> PCB -> PCMB -> SCIENCE -> COMMERCE -> HUMANITIES -> Other -> Unassigned)
             $streamPriorityA = $this->getAcademicStreamPriority($a->academic_stream);
             $streamPriorityB = $this->getAcademicStreamPriority($b->academic_stream);
@@ -719,23 +742,19 @@ class SeatingArrangementController extends Controller
                 }
             }
 
-            // 2. Group by Optional Subject (e.g. CS, DANCE, IP, MUSIC, PE, PSYCHOLOGY)
-            $optA = trim((string) ($a->optional_subject ?? ''));
-            $optB = trim((string) ($b->optional_subject ?? ''));
-
-            if ($optA === '' && $optB !== '') {
-                return 1;
-            }
-            if ($optA !== '' && $optB === '') {
-                return -1;
+            // 2. Rank complete subject combinations by student strength, without alphabetical combination sorting.
+            $combinationKeyA = $a->sequence_combination_key;
+            $combinationKeyB = $b->sequence_combination_key;
+            $strengthCmp = ($combinationStrength[$combinationKeyB] ?? 0) <=> ($combinationStrength[$combinationKeyA] ?? 0);
+            if ($strengthCmp !== 0) {
+                return $strengthCmp;
             }
 
-            $optCmp = strnatcasecmp($optA, $optB);
-            if ($optCmp !== 0) {
-                return $optCmp;
+            if ($combinationKeyA !== $combinationKeyB) {
+                return ($combinationOrder[$combinationKeyA] ?? 0) <=> ($combinationOrder[$combinationKeyB] ?? 0);
             }
 
-            // 3. Within each (Main Academic + Optional Subject) group, arrange all students alphabetically by their names
+            // 3. Within each stream and subject combination, arrange students alphabetically by name.
             $nameA = trim((string) ($a->student_name ?? ''));
             $nameB = trim((string) ($b->student_name ?? ''));
             $nameCmp = strnatcasecmp($nameA, $nameB);
@@ -752,6 +771,12 @@ class SeatingArrangementController extends Controller
 
             return ((int) ($a->id ?? 0)) <=> ((int) ($b->id ?? 0));
         })->values();
+
+        foreach ($orderedStudents as $student) {
+            unset($student->sequence_combination_key);
+        }
+
+        return $orderedStudents;
     }
 
     private function getStudentCombinationMap(): array

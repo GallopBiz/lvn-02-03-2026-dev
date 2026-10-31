@@ -25,6 +25,7 @@ use App\Mail\LeaveAppliedNotification;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Services\Hrms\CasualLeaveBalanceService;
 
 
 class LeaverequestsController extends Controller
@@ -142,7 +143,7 @@ class LeaverequestsController extends Controller
                 ->with('error', 'Leave request already exists for this employee on the selected date.');
         }
 
-        $employee = HrmsEmployee::find($employeeId);
+        $employee = HrmsEmployee::findOrFail($employeeId);
 
         // Confirmation date restriction ONLY for Earn Leave (id 4) and Medical Leave (id 3)
         if ($employee && $employee->confirmation_date && in_array($leaveTypeId, [3, 4])) {
@@ -180,7 +181,7 @@ class LeaverequestsController extends Controller
 
         $leaveType = HrmsLeaveType::find($leaveTypeId);
 
-        if ($leaveType->is_paid && (!$leaveBalance || $leaveBalance->balance < $daysRequested)) {
+        if (!$isHalfDay && $leaveType->is_paid && (!$leaveBalance || $leaveBalance->balance < $daysRequested)) {
             Log::warning('Insufficient leave balance.', [
                 'available_balance' => optional($leaveBalance)->balance,
                 'required' => $daysRequested
@@ -206,23 +207,37 @@ class LeaverequestsController extends Controller
             return redirect()->route('leaverequests')->with('error', "Backdate leave applications are not allowed for {$leaveType->name}.");
         }
 
-        // Deduct balance only for paid leave.
-        if ($leaveType->is_paid) {
-            $leaveBalance->balance -= $daysRequested;
-            $leaveBalance->save();
-            Log::info('Leave balance updated.', ['new_balance' => $leaveBalance->balance]);
-        }
+        $clDaysDeducted = null;
+        DB::transaction(function () use (
+            $employee,
+            $leaveBalance,
+            $leaveType,
+            $daysRequested,
+            $isHalfDay,
+            $employeeId,
+            $leaveTypeId,
+            $request,
+            &$clDaysDeducted
+        ) {
+            if ($isHalfDay) {
+                $clDaysDeducted = app(CasualLeaveBalanceService::class)->deduct($employee, 0.5);
+            } elseif ($leaveType->is_paid) {
+                $leaveBalance->balance -= $daysRequested;
+                $leaveBalance->save();
+                Log::info('Leave balance updated.', ['new_balance' => $leaveBalance->balance]);
+            }
 
-        // Save leave request
-        HrmsLeaveRequest::create([
-            'employee_id' => $employeeId,
-            'leave_type_id' => $leaveTypeId,
-            'start_date' => $request->input('start_date'),
-            'end_date' => $request->input('end_date'),
-            'reason' => $request->input('reason'),
-            'is_half_day' => $isHalfDay,
-            'half_day_type' => $request->input('half_day_type'),
-        ]);
+            HrmsLeaveRequest::create([
+                'employee_id' => $employeeId,
+                'leave_type_id' => $leaveTypeId,
+                'start_date' => $request->input('start_date'),
+                'end_date' => $request->input('end_date'),
+                'reason' => $request->input('reason'),
+                'is_half_day' => $isHalfDay,
+                'half_day_type' => $request->input('half_day_type'),
+                'cl_days_deducted' => $clDaysDeducted,
+            ]);
+        });
 
         Log::info('Leave request created successfully.');
 
@@ -295,7 +310,7 @@ class LeaverequestsController extends Controller
                 ->with('error', 'Leave request already exists for this employee on the selected date.');
         }
 
-        $employee = HrmsEmployee::find($employeeId);
+        $employee = HrmsEmployee::findOrFail($employeeId);
 
         // Confirmation date restriction for update (Earn Leave and Medical Leave only)
         if ($employee && $employee->confirmation_date && in_array($leaveTypeId, [3, 4])) {
@@ -312,20 +327,16 @@ class LeaverequestsController extends Controller
             ->where('leave_type_id', $leaveTypeId)
             ->first();
 
-        if (!$leaveBalance) {
+        $originalIsHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+        if (!$leaveBalance && !$isHalfDay && !$originalIsHalfDay) {
             return back()->with('error', 'Leave balance not found.');
         }
 
-        $originalDays = $leaveRequest->is_half_day ? 0.5 : (Carbon::parse($leaveRequest->start_date)
+        $originalDays = $originalIsHalfDay ? 0.5 : (Carbon::parse($leaveRequest->start_date)
             ->diffInWeekdays(Carbon::parse($leaveRequest->end_date)) + 1);
 
-        $adjustedBalance = $leaveBalance->balance + $originalDays - $daysRequested;
-
-        if ($adjustedBalance < 0) {
-            return back()->with('error', 'Insufficient leave balance.');
-        }
-
         $leaveType = HrmsLeaveType::find($leaveTypeId);
+        $originalLeaveType = HrmsLeaveType::find($leaveRequest->leave_type_id);
         $today = now();
 
         if ($leaveType->apply_before_days) {
@@ -339,17 +350,101 @@ class LeaverequestsController extends Controller
             return redirect()->route('leaverequests')->with('error', "Backdate leave applications are not allowed for {$leaveType->name}.");
         }
 
-        $leaveBalance->balance = $adjustedBalance;
-        $leaveBalance->save();
+        if ($originalIsHalfDay || $isHalfDay) {
+            try {
+                DB::transaction(function () use (
+                    $employeeId,
+                    $employee,
+                    $leaveRequest,
+                    $leaveBalance,
+                    $leaveType,
+                    $originalLeaveType,
+                    $originalIsHalfDay,
+                    $isHalfDay,
+                    $originalDays,
+                    $daysRequested,
+                    $request,
+                    $leaveTypeId
+                ) {
+                    if ($originalIsHalfDay) {
+                        if ($leaveRequest->cl_days_deducted !== null) {
+                            app(CasualLeaveBalanceService::class)->refund(
+                                $employee,
+                                (float) $leaveRequest->cl_days_deducted
+                            );
+                        } elseif (
+                            $originalLeaveType &&
+                            $originalLeaveType->is_paid &&
+                            strtolower(trim((string) $leaveRequest->status)) !== 'rejected' &&
+                            !$leaveRequest->rollback_done
+                        ) {
+                            $oldBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
+                                ->where('leave_type_id', $leaveRequest->leave_type_id)
+                                ->lockForUpdate()
+                                ->first();
+                            if ($oldBalance) {
+                                $oldBalance->balance = round((float) $oldBalance->balance + 0.5, 1);
+                                $oldBalance->save();
+                            }
+                        }
+                    } elseif ($originalLeaveType && $originalLeaveType->is_paid) {
+                        $oldBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
+                            ->where('leave_type_id', $leaveRequest->leave_type_id)
+                            ->lockForUpdate()
+                            ->first();
+                        if ($oldBalance) {
+                            $oldBalance->balance = round((float) $oldBalance->balance + $originalDays, 1);
+                            $oldBalance->save();
+                        }
+                    }
 
-        $leaveRequest->update([
-            'start_date' => $request->input('start_date'),
-            'end_date' => $request->input('end_date'),
-            'leave_type_id' => $leaveTypeId,
-            'reason' => $request->input('reason'),
-            'is_half_day' => $isHalfDay,
-            'half_day_type' => $request->input('half_day_type'),
-        ]);
+                    $clDaysDeducted = null;
+                    if ($isHalfDay) {
+                        $clDaysDeducted = app(CasualLeaveBalanceService::class)->deduct($employee, 0.5);
+                    } elseif ($leaveType->is_paid) {
+                        $newBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
+                            ->where('leave_type_id', $leaveTypeId)
+                            ->lockForUpdate()
+                            ->first();
+                        if (!$newBalance || (float) $newBalance->balance < $daysRequested) {
+                            throw new \DomainException('Insufficient leave balance.');
+                        }
+                        $newBalance->balance = round((float) $newBalance->balance - $daysRequested, 1);
+                        $newBalance->save();
+                    }
+
+                    $leaveRequest->update([
+                        'start_date' => $request->input('start_date'),
+                        'end_date' => $request->input('end_date'),
+                        'leave_type_id' => $leaveTypeId,
+                        'reason' => $request->input('reason'),
+                        'is_half_day' => $isHalfDay,
+                        'half_day_type' => $request->input('half_day_type'),
+                        'cl_days_deducted' => $clDaysDeducted,
+                    ]);
+                });
+            } catch (\DomainException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        } else {
+            $adjustedBalance = $leaveBalance->balance + $originalDays - $daysRequested;
+            if ($adjustedBalance < 0) {
+                return back()->with('error', 'Insufficient leave balance.');
+            }
+
+            $leaveBalance->balance = $adjustedBalance;
+            $leaveBalance->save();
+
+            $leaveRequest->update([
+                'start_date' => $request->input('start_date'),
+                'end_date' => $request->input('end_date'),
+                'leave_type_id' => $leaveTypeId,
+                'reason' => $request->input('reason'),
+                'is_half_day' => $isHalfDay,
+                'half_day_type' => $request->input('half_day_type'),
+                'cl_days_deducted' => null,
+            ]);
+        }
 
         $emp=HrmsEmployee::find($leaveRequest->employee_id);
         $leaveDetails = [

@@ -22,7 +22,12 @@ class HrmsLeaveRequest extends Model
         'status',
         'is_half_day',
         'half_day_type',
+        'cl_days_deducted',
         'approved_by'
+    ];
+
+    protected $casts = [
+        'cl_days_deducted' => 'float',
     ];
 
     public function employee()

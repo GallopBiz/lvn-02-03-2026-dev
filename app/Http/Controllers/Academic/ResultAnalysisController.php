@@ -55,6 +55,230 @@ class ResultAnalysisController extends Controller
         ));
     }
 
+    public function topperList(Request $request)
+    {
+        return view('backend.AcademicsModules.topper_list', $this->buildTopperReportData($request));
+    }
+
+    public function topperListPrint(Request $request)
+    {
+        return view('backend.AcademicsModules.topper_list_print', $this->buildTopperReportData($request));
+    }
+
+    private function buildTopperReportData(Request $request): array
+    {
+        $sessionYear = $this->resolveDynamicSessionYear($request);
+        $classes = $this->classOptions();
+        $sections = $this->sectionsForRequest($request);
+        $rawExams = Exam::with('classInfo')->latest('id')->get();
+        $groupedExams = $this->groupedExams($rawExams);
+        $selectedSession = (string) ($request->query('session') ?: str_replace('-', '_', $sessionYear));
+        $selectedClass = (string) $request->query('class_name', '');
+        $selectedSection = (string) $request->query('section_name', '');
+        $rankingType = (string) $request->query('ranking_type', 'section');
+        $selectedClassRecord = $this->classes()->first(fn ($class) => (string) $class->class_name === $selectedClass);
+        $selectedExamId = $request->integer('exam_id');
+        $validExam = $groupedExams->contains(function ($exam) use ($selectedExamId) {
+            return (int) $exam['id'] === $selectedExamId
+                || in_array($selectedExamId, $exam['all_exam_ids'], true);
+        });
+        $validRankingType = in_array($rankingType, ['all_sections', 'section', 'stream_wise'], true);
+        $isSeniorClass = $selectedClassRecord
+            ? $this->isSeniorClass($selectedClassRecord->class_name, (int) $selectedClassRecord->id)
+            : false;
+        $hasFilters = $selectedClass !== ''
+            && $selectedExamId > 0
+            && $classes->contains($selectedClass)
+            && $validExam
+            && $validRankingType
+            && ($rankingType !== 'section' || ($selectedSection !== '' && $sections->contains($selectedSection)))
+            && ($rankingType !== 'stream_wise' || $isSeniorClass);
+        $reportRequest = clone $request;
+        if ($rankingType !== 'section') {
+            $reportRequest->query->remove('section_name');
+        }
+        $reports = $hasFilters ? $this->buildReports($reportRequest) : collect();
+        $rankedStudents = collect();
+
+        foreach ($reports as $report) {
+            $rollNumbers = collect();
+            if (
+                Schema::connection('dynamic')->hasTable('academic_student_roll_no')
+                && !empty($report['exam'])
+            ) {
+                $rollNumbers = DB::connection('dynamic')
+                    ->table('academic_student_roll_no')
+                    ->where('class_id', (string) $report['class']->class_name)
+                    ->where('section_id', (string) $report['class']->section_name)
+                    ->where('session_id', (string) $report['session_year'])
+                    ->where('exam_id', (int) $report['exam']->id)
+                    ->pluck('roll_no', 'student_id');
+            }
+
+            foreach ($report['students'] as $studentResult) {
+                $totalObtained = 0.0;
+                $totalMaximum = 0.0;
+
+                foreach ($studentResult['subject_scores'] as $score) {
+                    if (empty($score['enrolled'])) {
+                        continue;
+                    }
+
+                    $totalMaximum += (float) ($score['max_marks'] ?? 0);
+                    if (!empty($score['appeared'])) {
+                        $totalObtained += (float) ($score['obtained'] ?? 0);
+                    }
+                }
+
+                if ($totalMaximum <= 0) {
+                    continue;
+                }
+
+                $student = $studentResult['student'];
+                $studentId = (int) ($student->id ?? 0);
+                $rankedStudents->push([
+                    'student' => $student,
+                    'student_name' => (string) ($studentResult['student_name'] ?? ''),
+                    'class_name' => (string) $report['class']->class_name,
+                    'section_name' => (string) $report['class']->section_name,
+                    'roll_no' => $rollNumbers->get($studentId)
+                        ?: ($student->roll_no ?? $student->roll_number ?? ''),
+                    'photo' => (string) ($student->student_image_url ?? ''),
+                    'stream' => $this->resolveReportStream(
+                        $studentResult['stream_name'] ?? '',
+                        $studentResult['combination_name'] ?? ''
+                    ),
+                    'total_obtained' => $totalObtained,
+                    'total_max' => $totalMaximum,
+                    'percentage' => round(($totalObtained / $totalMaximum) * 100, 2),
+                ]);
+            }
+        }
+
+        $rankedStudents = $rankedStudents
+            ->sort(function ($a, $b) {
+                $percentageOrder = $b['percentage'] <=> $a['percentage'];
+                if ($percentageOrder !== 0) {
+                    return $percentageOrder;
+                }
+
+                $nameOrder = strnatcasecmp($a['student_name'], $b['student_name']);
+                if ($nameOrder !== 0) {
+                    return $nameOrder;
+                }
+
+                return ((int) ($a['student']->id ?? 0)) <=> ((int) ($b['student']->id ?? 0));
+            })->values();
+
+        if ($rankingType === 'section') {
+            $rankedStudents = $rankedStudents
+                ->filter(fn ($student) => $student['section_name'] === $selectedSection)
+                ->values();
+        }
+
+        if ($rankingType === 'stream_wise') {
+            $studentsByStream = $rankedStudents
+                ->groupBy(fn ($student) => $student['stream'] ?: 'Unassigned')
+                ->all();
+            $streamNames = array_keys($studentsByStream);
+            usort($streamNames, function ($streamA, $streamB) {
+                $priorityOrder = $this->getReportStreamPriority($streamA) <=> $this->getReportStreamPriority($streamB);
+                return $priorityOrder !== 0 ? $priorityOrder : strnatcasecmp($streamA, $streamB);
+            });
+            $rankGroups = collect($streamNames)->map(function ($stream) use ($studentsByStream) {
+                $students = $this->assignCompetitionRanks($studentsByStream[$stream]->values());
+
+                return [
+                    'label' => $stream,
+                    'students' => $students,
+                    'top_students' => $students->take(3)->values(),
+                ];
+            });
+        } else {
+            $rankedStudents = $this->assignCompetitionRanks($rankedStudents);
+            $classDisplay = 'Class ' . (AcademicHelper::toRoman($selectedClass) ?: $selectedClass);
+            $groupLabel = $rankingType === 'section'
+                ? $classDisplay . ' - ' . $selectedSection
+                : $classDisplay . ' - All Sections';
+            $rankGroups = collect([[
+                'label' => $groupLabel,
+                'students' => $rankedStudents,
+                'top_students' => $rankedStudents->take(3)->values(),
+            ]]);
+        }
+
+        return [
+            'classes' => $classes,
+            'sections' => $sections,
+            'groupedExams' => $groupedExams,
+            'sessionOptions' => collect(view()->shared('databaseNames') ?? [])
+                ->filter(fn ($name) => is_string($name) && preg_match('/^\d{4}_\d{4}$/', $name))
+                ->unique()
+                ->sortDesc()
+                ->values(),
+            'selectedSession' => $selectedSession,
+            'sessionYear' => $sessionYear,
+            'rankingType' => $rankingType,
+            'rankGroups' => $rankGroups,
+            'rankedStudents' => $rankedStudents,
+            'selectedExam' => $reports->first()['exam'] ?? null,
+            'hasFilters' => $hasFilters,
+            'isSeniorClass' => $isSeniorClass,
+        ];
+    }
+
+    private function assignCompetitionRanks(Collection $students): Collection
+    {
+        $previousPercentage = null;
+        $rank = 0;
+
+        return $students->values()->map(function ($student, $index) use (&$previousPercentage, &$rank) {
+            if ($previousPercentage === null || $student['percentage'] !== $previousPercentage) {
+                $rank = $index + 1;
+                $previousPercentage = $student['percentage'];
+            }
+
+            $student['rank'] = $rank;
+            return $student;
+        });
+    }
+
+    private function resolveReportStream(?string $streamName, ?string $combinationName): string
+    {
+        $stream = strtoupper(trim((string) $streamName));
+        $combination = strtoupper(trim((string) $combinationName));
+
+        foreach (['PCMB', 'PCM', 'PCB'] as $scienceStream) {
+            if (preg_match('/\b' . $scienceStream . '\b/', $stream . ' ' . $combination)) {
+                return $scienceStream;
+            }
+        }
+
+        if (preg_match('/\b(COMMERCE|COMMERCE STREAM)\b/', $stream . ' ' . $combination)) {
+            return 'Commerce';
+        }
+
+        if (preg_match('/\b(HUMANITIES|ARTS)\b/', $stream . ' ' . $combination)) {
+            return 'Humanities';
+        }
+
+        return $stream !== '' ? ucwords(strtolower($stream)) : 'Unassigned';
+    }
+
+    private function getReportStreamPriority(string $stream): int
+    {
+        return match (strtoupper(trim($stream))) {
+            'PCM' => 1,
+            'PCB' => 2,
+            'PCMB' => 3,
+            'SCIENCE' => 4,
+            'COMMERCE' => 5,
+            'HUMANITIES', 'ARTS' => 6,
+            'UNASSIGNED' => 99,
+            default => 7,
+        };
+    }
+
     public function print(Request $request)
     {
         $sessionYear = $this->resolveDynamicSessionYear($request);

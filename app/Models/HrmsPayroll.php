@@ -22,6 +22,8 @@ class HrmsPayroll extends Model
 		'epfa' => 'float',
         'esic' => 'float',
 		'late_deduction_amount' => 'float',
+        'unapproved_leaves' => 'float',
+        'lwp_days' => 'float',
         'deductions' => 'array',
     ];
     public function employee()

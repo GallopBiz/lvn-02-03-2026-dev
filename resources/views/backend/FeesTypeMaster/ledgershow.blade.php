@@ -419,19 +419,6 @@
                               {{ number_format(abs($totalDr - $totalCr), 2) }}
                           </td>
                       </tr>
-                  <!--<tr style="font-weight: bold; background-color: #e0f7fa;">
-                          <td colspan="3" class="text-end">Print Tuition Certificate</td>
-                          <td colspan="6">
-                              @if(isset($mergedRows) && count($mergedRows))
-                      <form method="POST" action="{{ route('print.certificate') }}" target="_blank">
-                        @csrf
-                        <input type="hidden" name="student_id" value="{{ $student_data->id ?? '' }}">
-                        <input type="hidden" name="merged_data" value="{{ base64_encode(serialize($mergedRows)) }}">
-                        <button type="submit" class="btn btn-success">Print Certificate</button>
-                      </form>
-                        @endif
-                    </td>
-                      </tr>--!>
                   <tr style="font-weight: bold; background-color: #e0f7fa;">
                     <td colspan="3" class="text-end no-print-col" style="text-align:left !important;">Print Tuition Certificate</td>
                     <td colspan="6">

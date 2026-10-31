@@ -101,6 +101,8 @@
     .student-info-box {
         width: 100%;
         margin-bottom: 2mm;
+        padding: 1mm 1.2mm;
+        border: 1px solid #333;
         font-size: 13px;
         line-height: 1.25;
     }
@@ -428,13 +430,13 @@
                             <th rowspan="3" class="col-pt">PT - 1<br>(5)</th>
                             <th colspan="4">Half Yearly Exam</th>
                             <th rowspan="3" class="col-obt-100">Marks<br>Obtained<br>HY (100)</th>
-                            <th rowspan="3" class="col-total-140">Grand<br>Total<br>(140)</th>
+                            <th rowspan="3" class="col-total-140">Grand<br>Total<br>(150)</th>
 
                             <th rowspan="3" class="col-pt">PT - II<br>(5)</th>
                             <th colspan="4">{{ !empty($isClass12) ? 'Pre Board' : 'Annual Exam' }}</th>
                             <th rowspan="3" class="col-obt-100">Marks<br>Obtained<br>(100)</th>
-                            <th rowspan="3" class="col-total-140">Total<br>(140)</th>
-                            <th rowspan="3" class="col-grand-280">Grand<br>Total<br>(280)</th>
+                            <th rowspan="3" class="col-total-140">Total<br>(150)</th>
+                            <th rowspan="3" class="col-grand-280">Grand<br>Total<br>(300)</th>
                         </tr>
                         {{-- Theory & Practical Group Row --}}
                         <tr>

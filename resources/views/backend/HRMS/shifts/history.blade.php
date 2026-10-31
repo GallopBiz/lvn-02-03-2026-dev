@@ -144,10 +144,17 @@
                                                     <th>Department</th>
                                                     <th>Designation</th>
                                                     <th>Staff Type</th>
+                                                    <th>Current Shift</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 @forelse ($employees as $employee)
+                                                    @php
+                                                        $currentShiftHistory = $employee->shiftHistories->first();
+                                                        $currentShift = $currentShiftHistory
+                                                            ? $currentShiftHistory->shift
+                                                            : $employee->shift;
+                                                    @endphp
                                                     <tr>
                                                         <td>
                                                             <input type="checkbox" class="shift-employee-checkbox"
@@ -157,10 +164,21 @@
                                                         <td>{{ optional($employee->department)->department_name }}</td>
                                                         <td>{{ optional($employee->position)->position_name }}</td>
                                                         <td>{{ optional($employee->staffType)->staff_type_name }}</td>
+                                                        <td>
+                                                            @if($currentShift)
+                                                                {{ optional($currentShift->shiftType)->shift_type_name ?? 'Shift '.$currentShift->id }}
+                                                                &ndash;
+                                                                {{ $currentShift->start_time ? \Carbon\Carbon::parse($currentShift->start_time)->format('g:i A') : '--' }}
+                                                                to
+                                                                {{ $currentShift->end_time ? \Carbon\Carbon::parse($currentShift->end_time)->format('g:i A') : '--' }}
+                                                            @else
+                                                                Not Assigned
+                                                            @endif
+                                                        </td>
                                                     </tr>
                                                 @empty
                                                     <tr>
-                                                        <td colspan="5" class="text-center text-muted">No employees found.</td>
+                                                        <td colspan="6" class="text-center text-muted">No employees found.</td>
                                                     </tr>
                                                 @endforelse
                                             </tbody>
@@ -584,6 +602,4 @@
         }
     </script>
 @endsection
-
-
 

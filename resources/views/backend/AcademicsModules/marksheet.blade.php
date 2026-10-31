@@ -18,7 +18,7 @@
     @endif
 
     <div class="row">
-        <div class="col-lg-5">
+        <div class="col-12">
             <div class="card mb-4">
                 <div class="card-body">
                     <h4 class="card-title">Generate / Print Marksheet</h4>
@@ -35,7 +35,8 @@
                     </div>
                     <form method="POST" action="{{ route('academic.marksheets.generate') }}" id="marksheetGenerateForm">
                         @csrf
-                        <div class="form-group">
+                        <div class="row align-items-end">
+                        <div class="form-group col-12 col-md-6 col-xl-3">
                             <label>Exam</label>
                             <select class="form-control" name="exam_id" id="print_exam_id">
                                 <option value="">Select exam</option>
@@ -47,7 +48,7 @@
                             </select>
                             <input type="hidden" name="resolved_exam_id" id="print_resolved_exam_id" value="{{ $resolvedExamId ?? $selectedExamId }}">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group col-12 col-md-6 col-xl-2">
                             <label>Class</label>
                             <select class="form-control" name="class_id" id="print_class_id">
                                 <option value="">{{ !empty($availableClasses) ? 'Select class' : 'Select exam first' }}</option>
@@ -59,7 +60,7 @@
 
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group col-12 col-md-6 col-xl-2">
                             <label>Section</label>
                             <select class="form-control" name="section_name" id="print_section_name">
                                 <option value="">All Sections</option>
@@ -72,7 +73,7 @@
                                 @endif
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group col-12 col-md-6 col-xl-3">
                             <label>Student</label>
                             <select class="form-control" name="student_id" id="print_student_id">
                                 <option value="">All students in selected class{{ !empty($students) && $students->count() ? ' (' . $students->count() . ' students)' : '' }}</option>
@@ -83,13 +84,15 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group col-12 col-md-6 col-xl-2">
                             <label>Marksheet Print Date</label>
-                            <input type="date" class="form-control" name="print_date" id="print_date" value="{{ date('Y-m-d') }}">
-                            <small class="form-text text-muted">Select date to display on marksheet printout (defaults to today).</small>
+                            <input type="date" class="form-control" name="print_date" id="print_date" value="{{ date('Y-m-d') }}" title="Select date to display on marksheet printout (defaults to today).">
                         </div>
-                        <button class="btn btn-success" type="submit">Generate & Save</button>
-                        <button class="btn btn-outline-primary" type="button" onclick="openMarksheetPreview()">Print Preview</button>
+                        <div class="col-12 d-flex flex-wrap align-items-center mb-3">
+                            <button class="btn btn-success mr-2 mb-2 mb-md-0" type="submit">Generate & Save</button>
+                            <button class="btn btn-outline-primary mb-2 mb-md-0" type="button" onclick="openMarksheetPreview()">Print Preview</button>
+                        </div>
+                        </div>
                     </form>
                 </div>
             </div>

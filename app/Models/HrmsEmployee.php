@@ -53,6 +53,11 @@ class HrmsEmployee extends Model
         return $this->belongsTo(HrmsPosition::class);
     }
 
+    public function shift()
+    {
+        return $this->belongsTo(HrmsShift::class, 'shift_id');
+    }
+
     public function addresses()
     {
         return $this->hasMany(HrmsEmployeeAddress::class,'employee_id');

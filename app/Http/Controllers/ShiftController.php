@@ -43,7 +43,20 @@ class ShiftController extends Controller
         $staffTypes = HrmsStaffType::orderBy('staff_type_name')->get();
         $shifts = HrmsShift::with('shiftType')->get();
 
-        $employeesQuery = HrmsEmployee::with(['department', 'position', 'staffType', 'shiftHistories.shift.shiftType'])
+        $today = now()->toDateString();
+        $employeesQuery = HrmsEmployee::with([
+            'department',
+            'position',
+            'staffType',
+            'shift.shiftType',
+            'shiftHistories' => function ($query) use ($today) {
+                $query->whereDate('effective_from', '<=', $today)
+                    ->whereDate('effective_to', '>=', $today)
+                    ->with('shift.shiftType')
+                    ->orderByDesc('effective_from')
+                    ->orderByDesc('id');
+            },
+        ])
             ->where(fn($q) => $q->where('employee_status', 'active')->orWhereNull('employee_status'))
             ->when($request->filled('department_id'), fn($q) => $q->where('department_id', $request->department_id))
             ->when($request->filled('position_id'), fn($q) => $q->where('position_id', $request->position_id))

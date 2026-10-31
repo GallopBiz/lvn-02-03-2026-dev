@@ -225,6 +225,7 @@ return [
                     [ 'title' => 'Consolidated Marksheet', 'route' => 'academic/consolidated-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Class 11-12 Consolidated Marksheet', 'route' => 'academic/senior-consolidated-marksheets', 'roles' => ['Admin'] ],
                     [ 'title' => 'Result Analysis', 'route' => 'academic/result-analysis', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
+                    [ 'title' => 'Topper List & Result Analysis', 'route' => 'academic/topper-list', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Overall Grade', 'route' => 'gradingmaster', 'roles' => ['Admin'] ],
                     [ 'title' => 'Individual Subject Grades', 'route' => 'grade', 'roles' => ['Admin'] ],
                     [ 'title' => 'Remark Master', 'route' => 'remarkmaster', 'roles' => ['Admin'] ],

@@ -16,10 +16,17 @@ class HrmsEmployeeAttendance extends Model
         'log_date',
         'in_time',
         'out_time',
+        'cl_days_deducted',
+        'lwp_days',
         'employee_id',
 		'entry_type',
         'status'
     ];
+    protected $casts = [
+        'cl_days_deducted' => 'float',
+        'lwp_days' => 'float',
+    ];
+
     public function employee()
     {
         return $this->belongsTo(HrmsEmployee::class);

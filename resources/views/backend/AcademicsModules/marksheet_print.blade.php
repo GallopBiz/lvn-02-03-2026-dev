@@ -94,19 +94,26 @@
         border: 1px solid #333;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        padding: 1mm 3.5mm;
-        font-size: 13px;
-        line-height: 1.2;
+        padding: 1mm 1.5mm;
+        font-size: 12px;
+        line-height: 1.25;
     }
 
     .student-box table {
         width: 100%;
         border-collapse: collapse;
+        font-size: inherit;
     }
 
     .student-box td:first-child {
         width: 38mm;
-        font-weight: bold;
+        font-size: inherit;
+        font-weight: 600;
+    }
+
+    .student-box td:last-child {
+        font-size: inherit;
+        font-weight: 500;
     }
 
     table.marks {
@@ -507,7 +514,7 @@
                     <thead>
                         <tr>
                             <th class="section scholastic-area">Scholastic Areas</th>
-                            @foreach($printData['layout']['scholastic_terms'] as $term)
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $term)
                             @php
                                 $termLabel = $term['label'] ?? '';
                                 $tKey = strtolower((string) ($term['key'] ?? ''));
@@ -526,7 +533,7 @@
                         </tr>
                         <tr>
                             <th class="subject">Subject Name</th>
-                            @foreach($printData['layout']['scholastic_terms'] as $term)
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $term)
                             @foreach($term['columns'] ?? [] as $column)
                             <th>{{ $column['label'] ?? '' }}</th>
                             @endforeach
@@ -541,8 +548,8 @@
                         @endphp
                         <tr>
                             <td class="subject">{{ in_array($normalizedSubject, ['environmental studies', 'environmental study', 'environment studies', 'environment study'], true) ? 'EVS' : $subjectName }}</td>
-                            @foreach($row['terms'] as $term)
-                            @foreach($term['cells'] as $cell)
+                            @foreach($row['terms'] ?? [] as $term)
+                            @foreach($term['cells'] ?? [] as $cell)
                             <td>{{ $cell }}</td>
                             @endforeach
                             @endforeach
@@ -556,7 +563,7 @@
                             }
                             @endphp
                             <td>{{ $rowGrade }}</td>
-                            <td>{{ !empty($row['is_non_academic']) ? '' : $formatMark($row['grand_total']) }}</td>
+                            <td>{{ !empty($row['is_non_academic']) ? '' : $formatMark($row['grand_total'] ?? null) }}</td>
                         </tr>
                         @empty
                         <tr>
@@ -565,7 +572,7 @@
                         @endforelse
                         <tr>
                             <td class="total-label">Total</td>
-                            @foreach($printData['layout']['scholastic_terms'] as $termIndex => $term)
+                            @foreach($printData['layout']['scholastic_terms'] ?? [] as $termIndex => $term)
                             @foreach($term['columns'] ?? [] as $columnIndex => $column)
                             @php
                             $source = strtolower((string) ($column['source'] ?? ''));

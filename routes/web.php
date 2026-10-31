@@ -656,6 +656,8 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('academic/result-analysis', [ResultAnalysisController::class, 'index'])->name('academic.result-analysis.index');
     Route::get('academic/result-analysis/print', [ResultAnalysisController::class, 'print'])->name('academic.result-analysis.print');
     Route::get('academic/result-analysis/export-excel', [ResultAnalysisController::class, 'exportExcel'])->name('academic.result-analysis.export-excel');
+    Route::get('academic/topper-list', [ResultAnalysisController::class, 'topperList'])->name('academic.topper-list.index');
+    Route::get('academic/topper-list/print', [ResultAnalysisController::class, 'topperListPrint'])->name('academic.topper-list.print');
 
     Route::get('marks',[MarksController::class, 'index'])->name('marks');
     Route::get('show_report_marks', [MarksController::class, 'showmarks']);

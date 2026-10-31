@@ -13,6 +13,10 @@ class HrmsEmployeeLeaveBalance extends Model
 
     protected $fillable = ['employee_id', 'leave_type_id', 'balance'];
 
+    protected $casts = [
+        'balance' => 'float',
+    ];
+
     public function leaveType()
     {
         return $this->belongsTo(HrmsLeaveType::class, 'leave_type_id');
