@@ -448,10 +448,39 @@ class ResultAnalysisController extends Controller
 
         $studentIds = $students->pluck('id')->map(fn ($id) => (int) $id)->all();
         $marks = $this->marksForStudents($studentIds, (int) $class->id, $examIds);
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        $allowedSubjectIds = $reportAccess->allowedSubjectIds($class->id, $class->section_name);
+        if (is_array($allowedSubjectIds)) {
+            $marks = $reportAccess->filterSubjectData($marks, $class->id, $class->section_name, 'subject_id');
+        }
 
         // Determine Subject Columns
         // In senior classes (like in reference image): ENGLISH, MATHS, PHYSICS, CHEMISTRY, BIOLOGY, OPTIONAL
         $subjectColumns = $this->determineSubjectColumns($class, $students, $marks, $combAssignments, $isSenior);
+        if (is_array($allowedSubjectIds)) {
+            $allowedSubjectNames = DB::connection('dynamic')->table('subjectmaster')
+                ->whereIn('id', $allowedSubjectIds)
+                ->pluck('subject_name')
+                ->filter()
+                ->all();
+
+            $subjectColumns = array_filter($subjectColumns, function ($column) use ($allowedSubjectIds, $allowedSubjectNames) {
+                if (isset($column['subject_id'])) {
+                    return in_array((int) $column['subject_id'], $allowedSubjectIds, true);
+                }
+
+                if (!empty($column['pattern'])) {
+                    foreach ($allowedSubjectNames as $subjectName) {
+                        if (preg_match($column['pattern'], (string) $subjectName)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                return in_array(strtolower((string) ($column['label'] ?? '')), array_map('strtolower', $allowedSubjectNames), true);
+            });
+        }
 
         $hasAnyMarksInClass = false;
         $studentRows = [];
@@ -1077,10 +1106,12 @@ class ResultAnalysisController extends Controller
 
     private function classes(): Collection
     {
-        return Classes::query()
+        return app(\App\Services\StaffReportAccessService::class)->filterClassOptions(
+            Classes::query()
             ->orderBy('class_name')
             ->orderBy('section_name')
-            ->get();
+            ->get()
+        );
     }
 
     private function classOptions(): Collection
@@ -1096,12 +1127,21 @@ class ResultAnalysisController extends Controller
     {
         $className = $request->filled('class_name') ? (string) $request->input('class_name') : null;
 
-        return $this->classes()
+        $sections = $this->classes()
             ->when($className, fn ($items) => $items->where('class_name', $className))
             ->pluck('section_name')
             ->filter()
             ->unique()
             ->values();
+
+        if ($className) {
+            $allowed = app(\App\Services\StaffReportAccessService::class)->allowedSections($className);
+            if (is_array($allowed)) {
+                return $sections->filter(fn ($section) => in_array($section, $allowed, true))->values();
+            }
+        }
+
+        return $sections;
     }
 
     private function sectionsByClass(): array

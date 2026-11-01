@@ -77,9 +77,11 @@
                         <input type="date" class="form-control" name="print_date" id="print_date" value="{{ date('Y-m-d') }}">
                     </div>
                     <div class="col-12 d-flex align-items-center mt-1">
+                        @canAdd('senior-marksheets')
                         <button class="btn btn-success mr-2" type="submit">
                             <i class="i-File-Clipboard-Text--Image mr-1"></i> Generate & Save
                         </button>
+                        @endcanAdd
                         <button class="btn btn-outline-primary" type="button" onclick="openSeniorMarksheetPreview()">
                             <i class="i-Eye mr-1"></i> Print Preview
                         </button>
@@ -151,7 +153,9 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <button class="btn btn-sm btn-primary" type="button" onclick="submitGeneratedBulk('print')">Bulk Print <span id="selected_print_count"></span></button>
+                        @canDelete('senior-marksheets')
                         <button class="btn btn-sm btn-danger" type="button" onclick="submitGeneratedBulk('delete')">Bulk Delete <span id="selected_delete_count"></span></button>
+                        @endcanDelete
                         <span class="text-muted ml-2">Showing {{ $generatedMarksheets->firstItem() ?? 0 }} to {{ $generatedMarksheets->lastItem() ?? 0 }} of {{ $generatedMarksheets->total() }} entries</span>
                     </div>
                 </div>
@@ -198,7 +202,9 @@
                                     <td>{{ $snapshot['print_date'] ?? ($printData['date'] ?? '-') }}</td>
                                     <td>
                                         <a class="btn btn-sm btn-primary" target="_blank" href="{{ route('academic.senior-marksheets.generated.print', $marksheet) }}">Print</a>
+                                        @canDelete('senior-marksheets')
                                         <button class="btn btn-sm btn-danger" type="button" onclick="deleteGeneratedSingle('{{ route('academic.senior-marksheets.generated.delete', $marksheet) }}')">Delete</button>
+                                        @endcanDelete
                                     </td>
                                 </tr>
                             @empty

@@ -12,14 +12,15 @@ use DB;
 class AttandenceReportsController extends Controller
 {
     public function index(){
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
         $month = Carbon::now()->month;
         $year = Carbon::now()->year;
 
         $AdaysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
         // filter class option 
         $alreadyShown = Student_registration::pluck('class_name')->toArray();
-        $uniqueNames = array_unique($alreadyShown);
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
+        $uniqueNames = array_values(array_unique(array_filter($alreadyShown, fn ($className) => $reportAccess->canAccess($className))));
+        $classlist = $reportAccess->filterClassOptions(DB::table('classes')->select('class_name')->distinct()->get());
         return view('backend.AcademicsModules.Attandencereports',compact('classlist','AdaysInMonth','uniqueNames'));
     }
 
@@ -29,6 +30,8 @@ class AttandenceReportsController extends Controller
      
         $AMonth=$request->Month;
         $class=$request->classname;
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        abort_unless($reportAccess->canAccess($class), 403, 'You are not allowed to view attendance for this class.');
         $date = Carbon::createFromFormat('Y-m', $request->Month);
         $year = $date->year;
         $month = $date->month;
@@ -39,15 +42,20 @@ class AttandenceReportsController extends Controller
         // print_r($startDate);
         // Calculate the last day of the month
         $endDate = $startDate->copy()->endOfMonth();
-        $classlist = DB::table('classes')->select('class_name')->distinct()->get();
+        $classlist = $reportAccess->filterClassOptions(DB::table('classes')->select('class_name')->distinct()->get());
         // print_r($endDate);
-        $monthWiseAttend = dailyattandence::where('create_date', '>=', $startDate)
+        $attendanceQuery = dailyattandence::where('create_date', '>=', $startDate)
                                 ->where('create_date', '<=', $endDate)
-                                ->where('class_name', $class)
-                                ->get();
+                                ->where('class_name', $class);
+        $allowedSections = $reportAccess->allowedSections($class);
+        if (is_array($allowedSections)) {
+            abort_if(empty($allowedSections), 403, 'You are not allowed to view attendance for this class/section.');
+            $attendanceQuery->whereIn('section_name', $allowedSections);
+        }
+        $monthWiseAttend = $attendanceQuery->get();
 
                                 $alreadyShown = Student_registration::pluck('class_name')->toArray();
-                                $uniqueNames = array_unique($alreadyShown);
+                                $uniqueNames = array_values(array_unique(array_filter($alreadyShown, fn ($className) => $reportAccess->canAccess($className))));
                                 $decodedDataArray = [];
 
                                 foreach ($monthWiseAttend as $item) {
@@ -55,7 +63,11 @@ class AttandenceReportsController extends Controller
                                     $decodedData['Attandence_Name'] = $item['Attandence_Name']; // Add this line
                                     $decodedDataArray[] = $decodedData;
                                 }
-                                $classwiseAttendance = Student_registration::where('class_name', $class)->get();
+                                $classwiseAttendance = Student_registration::where('class_name', $class)->get()
+                                    ->filter(fn ($student) => !$reportAccess->isStaffUser()
+                                        || (!empty($student->section_name)
+                                            && $reportAccess->canAccess($student->class_id ?: $student->class_name, $student->section_name)))
+                                    ->values();
                                 $sundays = [];
 
                                 while ($startDate->lte($endDate)) {
@@ -68,6 +80,7 @@ class AttandenceReportsController extends Controller
         exit;
     }
     public function classstrenght(Request $request){
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
         // echo "<pre>";
         // print_r($request->all());
         // exit;
@@ -92,6 +105,10 @@ class AttandenceReportsController extends Controller
         $monthWiseAttend = dailyattandence::where('create_date', '>=', $startDate)
         ->where('create_date', '<=', $endDate)
         ->get();
+        $monthWiseAttend = $monthWiseAttend->filter(fn ($item) =>
+            !$reportAccess->isStaffUser()
+                || (!empty($item->section_name) && $reportAccess->canAccess($item->class_name, $item->section_name))
+        )->values();
         // filter class option 
         // print_r($monthWiseAttend);exit;
         $sundays = [];
@@ -107,8 +124,10 @@ class AttandenceReportsController extends Controller
                                 }, $sundays);
             
         $alreadyShown = Student_registration::pluck('class_name')->toArray();
-        $uniqueNames = array_unique($alreadyShown);
-        $classes = array_values($uniqueNames);
+        $classes = array_values(array_unique(array_filter(
+            $alreadyShown,
+            fn ($className) => $reportAccess->canAccess($className)
+        )));
         $classOrder = [
             'Nursery', 'KG1', 'KG2', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', 'xyz'
         ];
@@ -118,6 +137,7 @@ class AttandenceReportsController extends Controller
         })->values()->all();
         
         $decodedDataArray = [];
+        $finaldata = [];
 
         foreach ($monthWiseAttend as $item) {
             $decodedData = json_decode($item['json_str'], true);
@@ -187,6 +207,12 @@ class AttandenceReportsController extends Controller
         $class=$request->value[2];
         $section=$request->value[3];
         $status=$request->value[4];
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        abort_unless(
+            $reportAccess->canAccess($class, $section),
+            403,
+            'You are not allowed to view attendance for this class/section.'
+        );
        
         $monthWiseAttend = dailyattandence::where('create_date', '>=', $startdate)
         ->where('create_date', '<=', $enddate)->where('section_name',$section)->where('class_name',$class)

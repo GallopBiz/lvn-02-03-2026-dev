@@ -1,108 +1,7 @@
 @php
-$adminUser = Auth::user();
-$staffUser = Auth::guard('staff')->user();
-@endphp
-
-<div class="side-content-wrap">
-
-	{{-- LEFT SIDEBAR --}}
-	<div class="sidebar-left open rtl-ps-none"
-		data-perfect-scrollbar
-		data-suppress-scroll-x="true">
-
-		<ul class="navigation-left">
-
-			@php
 			if (!function_exists('isStaffRouteRequest')) {
 				function isStaffRouteRequest() {
 					return request()->is('staff*') || request()->is('*staff*') || request()->routeIs('staff.*');
-				}
-			}
-
-			if (!function_exists('getSidebarUser')) {
-				function getSidebarUser() {
-					if (isStaffRouteRequest() && Auth::guard('staff')->check()) {
-						return Auth::guard('staff')->user();
-					}
-					if (Auth::guard('web')->check()) {
-						return Auth::guard('web')->user();
-					}
-					if (Auth::guard('staff')->check()) {
-						return Auth::guard('staff')->user();
-					}
-					return auth()->user();
-				}
-			}
-
-			$user = getSidebarUser();
-
-			// Check if current logged-in user is a Student (web guard user where type != 'a')
-			$isStudentUser = Auth::guard('web')->check() && strtolower(trim(Auth::guard('web')->user()->type ?? '')) !== 'a';
-
-			if ($isStudentUser) {
-				$isAdmin = false;
-				$roleName = 'Student';
-			} else {
-				$roleName = null;
-				if ($user && method_exists($user, 'getRoleNames')) {
-					$roleName = $user->getRoleNames()->first();
-				}
-				if (empty($roleName) && $user) {
-					$roleName = $user->role ?? null;
-				}
-				$isAdmin = $user && (
-					($roleName === 'Admin') ||
-					(method_exists($user, 'hasRole') && $user->hasRole('Admin')) ||
-					(isset($user->type) && strtolower(trim($user->type)) === 'a')
-				);
-			}
-
-			if (!function_exists('getAllowedMenuForUser')) {
-				function getAllowedMenuForUser($user, $roleName = null, $isStudentUser = false) {
-					if (!$user) return [];
-					if (!$roleName) {
-						$roleName = getRoleNameForUser($user);
-					}
-					if ($isStudentUser || !$roleName || $roleName === 'Student') return []; // Students do not use DB role_menus
-					$roleId = \DB::table('roles')->where('name', $roleName)->value('id');
-					if (!$roleId) return [];
-					$roleMenu = \App\Models\RoleMenu::where('role_id', $roleId)->first();
-					return $roleMenu ? json_decode($roleMenu->menu, true) : [];
-				}
-			}
-
-			if (!function_exists('filterMenuByAllowed')) {
-				function filterMenuByAllowed($menu, $allowed, $prefix = '') {
-					$filtered = [];
-					$isAssoc = is_array($allowed) && !isset($allowed[0]);
-
-					foreach ($menu as $item) {
-						$key = $prefix ? $prefix . ' > ' . $item['title'] : $item['title'];
-
-						$hasView = false;
-						if ($isAssoc) {
-							if (isset($allowed[$key])) {
-								$val = $allowed[$key];
-								$hasView = is_array($val) ? !empty($val['view']) : (bool)$val;
-							}
-						} else {
-							$hasView = in_array($key, (array)$allowed);
-						}
-
-						if (!empty($item['children'])) {
-							$children = filterMenuByAllowed($item['children'], $allowed, $key);
-							if (!empty($children)) {
-								$filteredItem = $item;
-								$filteredItem['children'] = $children;
-								$filtered[] = $filteredItem;
-							} elseif ($hasView) {
-								$filtered[] = $item;
-							}
-						} elseif ($hasView) {
-							$filtered[] = $item;
-						}
-					}
-					return $filtered;
 				}
 			}
 
@@ -132,13 +31,22 @@ $staffUser = Auth::guard('staff')->user();
 				}
 			}
 
+			$user = \App\Services\PermissionService::getCurrentUser();
+			$isStudentUser = !Auth::guard('staff')->check()
+				&& Auth::guard('web')->check()
+				&& strtolower(trim((string) Auth::guard('web')->user()->type)) !== 'a';
+			$menu = $isStudentUser
+				? filterMenuByRoleName(config('sidebar'), 'Student')
+				: \App\Services\PermissionService::filterSidebarForUser(config('sidebar'), $user);
+
 			if (!function_exists('menuItemUrl')) {
 				function menuItemUrl($item) {
 					if (!empty($item['children'])) {
 						return '#';
 					}
 
-					$isStaffUser = isStaffRouteRequest() || (Auth::guard('staff')->check() && !Auth::guard('web')->check());
+					$isStaffUser = isStaffRouteRequest()
+						|| (Auth::guard('staff')->check() && session('auth_portal') === 'staff');
 					$route = $isStaffUser && isset($item['staff_route'])
 						? $item['staff_route']
 						: ($item['route'] ?? '#');
@@ -154,92 +62,16 @@ $staffUser = Auth::guard('staff')->user();
 					return url($route);
 				}
 			}
-
-			if ($isAdmin) {
-				$menu = config('sidebar'); // Admin sees all menu items
-			} else {
-				$allowedMenu = getAllowedMenuForUser($user, $roleName, $isStudentUser);
-				$menu = !empty($allowedMenu)
-					? filterMenuByAllowed(config('sidebar'), $allowedMenu)
-					: filterMenuByRoleName(config('sidebar'), $roleName);
-				
-				$hasDashboard = false;
-				foreach ($menu as $mItem) {
-					if (strtolower($mItem['title'] ?? '') === 'dashboard') {
-						$hasDashboard = true;
-						break;
-					}
-				}
-				if (!$hasDashboard) {
-					array_unshift($menu, [
-						'title' => 'Dashboard',
-						'route' => 'admin-dashboard',
-						'staff_route' => 'staff.dashboard',
-						'icon' => 'i-Bar-Chart',
-						'permission' => 'dashboard',
-						'roles' => ['Admin', 'Student', 'Academic Staff (Teacher)', 'Staff'],
-					]);
-				}
-			}
-
-			if (isStaffRouteRequest() && Auth::guard('staff')->check()) {
-				$academicIndex = null;
-				foreach ($menu as $index => $item) {
-					if (strtolower($item['title'] ?? '') === 'academic') {
-						$academicIndex = $index;
-						break;
-					}
-				}
-
-				if ($academicIndex === null) {
-					$menu[] = [
-						'title' => 'Academic',
-						'icon' => 'i-Book',
-						'children' => [],
-					];
-					$academicIndex = array_key_last($menu);
-				}
-
-				if (empty($menu[$academicIndex]['children'])) {
-					$menu[$academicIndex]['children'] = [];
-				}
-
-				$attendanceIndex = null;
-				foreach ($menu[$academicIndex]['children'] as $index => $item) {
-					if (strtolower($item['title'] ?? '') === 'attendance') {
-						$attendanceIndex = $index;
-						break;
-					}
-				}
-
-				if ($attendanceIndex === null) {
-					$menu[$academicIndex]['children'][] = [
-						'title' => 'Attendance',
-						'icon' => 'i-Checked-User',
-						'children' => [],
-					];
-					$attendanceIndex = array_key_last($menu[$academicIndex]['children']);
-				}
-
-				if (empty($menu[$academicIndex]['children'][$attendanceIndex]['children'])) {
-					$menu[$academicIndex]['children'][$attendanceIndex]['children'] = [];
-				}
-
-				$menu[$academicIndex]['children'][$attendanceIndex]['children'] = array_values(array_filter(
-					$menu[$academicIndex]['children'][$attendanceIndex]['children'],
-					fn ($item) => !in_array($item['title'] ?? '', ['Monthly Attendance Summary', 'Lock Monthly Attendance'], true)
-				));
-				$menu[$academicIndex]['children'][$attendanceIndex]['children'][] = [
-					'title' => 'Monthly Attendance Summary',
-					'route' => 'staff.attendance.monthly-report',
-				];
-				$menu[$academicIndex]['children'][$attendanceIndex]['children'][] = [
-					'title' => 'Lock Monthly Attendance',
-					'route' => 'staff.attendance.monthly-lock',
-				];
-			}
 			@endphp
 
+	<div class="side-content-wrap">
+
+		{{-- LEFT SIDEBAR --}}
+		<div class="sidebar-left open rtl-ps-none"
+			data-perfect-scrollbar
+			data-suppress-scroll-x="true">
+
+			<ul class="navigation-left">
 
 			@foreach ($menu as $item)
 				<li class="nav-item" @if(!empty($item['children'])) data-item="{{ strtolower($item['title']) }}" @endif>
@@ -265,12 +97,7 @@ $staffUser = Auth::guard('staff')->user();
 
 		   @php
 		   if (!isset($menu)) {
-			   if ($isAdmin) {
-				   $menu = config('sidebar');
-			   } else {
-				   $allowedMenu = getAllowedMenuForUser($user, $roleName, $isStudentUser);
-				   $menu = filterMenuByAllowed(config('sidebar'), $allowedMenu);
-			   }
+			   $menu = \App\Services\PermissionService::filterSidebarForUser(config('sidebar'), $user);
 		   }
 		   @endphp
 

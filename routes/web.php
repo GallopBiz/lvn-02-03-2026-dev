@@ -232,6 +232,9 @@ Route::middleware(['auth:web,staff'])->group(function () {
     Route::post('store-marks', [MarksController::class, 'store']);
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
     Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
+    Route::post('bulk-lock-marks-entries', [MarksController::class, 'bulkLockEntries'])
+        ->middleware('check.permission:edit,Academic > Examination & Grading > Enter Marks')
+        ->name('bulk-lock-marks-entries');
     Route::post('lock-current-marks-entry', [MarksController::class, 'lockCurrentEntry'])->name('lock-current-marks-entry');
     Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry');
     Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata']);
@@ -255,16 +258,29 @@ Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(functi
     Route::get('show_report_marks', [MarksController::class, 'showmarks'])->name('show_report_marks');
     Route::post('show_report_markss', [MarksController::class, 'show_report_markss'])->name('show_report_markss');
     Route::post('save-marks', [MarksController::class, 'create'])->name('save-marks');
-    Route::post('class-studentdata', [MarksController::class, 'classstudentdata'])->name('class-studentdata');
-    Route::post('check-marks-entry-status', [MarksController::class, 'checkMarksEntryStatus'])->name('check-marks-entry-status');
-    Route::post('grade_percentage', [MarksController::class, 'grade_percentage'])->name('grade_percentage');
+    Route::post('class-studentdata', [MarksController::class, 'classstudentdata'])
+        ->middleware('check.permission:view,Academic > Examination & Grading > Enter Marks')
+        ->name('class-studentdata');
+    Route::post('check-marks-entry-status', [MarksController::class, 'checkMarksEntryStatus'])
+        ->middleware('check.permission:view,Academic > Examination & Grading > Enter Marks')
+        ->name('check-marks-entry-status');
+    Route::post('grade_percentage', [MarksController::class, 'grade_percentage'])
+        ->middleware('check.permission:view,Academic > Examination & Grading > Enter Marks')
+        ->name('grade_percentage');
     Route::get('view-marks/{id}', [MarksController::class, 'view'])->name('view-marks');
     Route::post('store-marks', [MarksController::class, 'store'])->name('store-marks');
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete'])->name('delete-marks');
     Route::post('lock-marks-entry/{id}', [MarksController::class, 'lockEntry'])->name('lock-marks-entry');
+    Route::post('bulk-lock-marks-entries', [MarksController::class, 'bulkLockEntries'])
+        ->middleware('check.permission:edit,Academic > Examination & Grading > Enter Marks')
+        ->name('bulk-lock-marks-entries');
     Route::post('lock-current-marks-entry', [MarksController::class, 'lockCurrentEntry'])->name('lock-current-marks-entry');
-    Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata'])->name('getteachersdata');
-    Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject'])->name('getteachersandsubject');
+    Route::post('getteachersdata', [TeacherSubjectController::class, 'getteachersdata'])
+        ->middleware('check.permission:view,Academic > Examination & Grading > Enter Marks')
+        ->name('getteachersdata');
+    Route::post('getteachersandsubject', [TeacherSubjectController::class, 'getteachersandsubject'])
+        ->middleware('check.permission:view,Academic > Examination & Grading > Enter Marks')
+        ->name('getteachersandsubject');
     Route::get('teacher-remark-entry', [TeacherRemarkEntryController::class, 'index'])->name('teacher-remark-entry');
     Route::post('save-teacher-remark-entry', [TeacherRemarkEntryController::class, 'create'])->name('save-teacher-remark-entry');
     Route::post('teacher-remark-class-studentdata', [TeacherRemarkEntryController::class, 'classStudentData'])->name('teacher-remark-class-studentdata');
@@ -291,6 +307,8 @@ Route::middleware(['auth'])->group(function() {
 });
 
 Route::group(['middleware' => ['auth', 'admin']], function() {
+    Route::get('academic/caste-wise-report', [\App\Http\Controllers\Academic\CasteWiseReportController::class, 'index'])
+        ->name('academic.caste-wise-report');
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/{id}/hide', [NotificationController::class, 'hide'])->name('notifications.hide');
@@ -673,6 +691,9 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('store-marks', [MarksController::class, 'store']);
     Route::get('delete-marks/{id}', [MarksController::class, 'marks_delete']);
     Route::post('unlock-marks-entry/{id}', [MarksController::class, 'unlockEntry'])->name('unlock-marks-entry.admin');
+    Route::post('bulk-unlock-marks-entries', [MarksController::class, 'bulkUnlockEntries'])
+        ->middleware('check.permission:edit,Academic > Examination & Grading > Enter Marks')
+        ->name('bulk-unlock-marks-entries.admin');
 
 
 

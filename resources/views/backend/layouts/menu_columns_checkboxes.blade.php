@@ -5,7 +5,7 @@ $permissionsMap = [];
 if (isset($selectedMenus) && is_array($selectedMenus)) {
     if (isset($selectedMenus[0]) && is_string($selectedMenus[0])) {
         foreach ($selectedMenus as $m) {
-            $permissionsMap[trim($m)] = ['view' => true, 'add' => true, 'edit' => true, 'delete' => true];
+            $permissionsMap[trim($m)] = ['view' => true, 'add' => false, 'edit' => false, 'delete' => false];
         }
     } else {
         $permissionsMap = $selectedMenus;

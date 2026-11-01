@@ -179,5 +179,81 @@
         }
     });
 </script>
+@php
+    $staffReportAccess = app(\App\Services\StaffReportAccessService::class);
+    $staffReportPage = $staffReportAccess->appliesToRequest(request());
+    $staffReportScope = $staffReportPage
+        ? $staffReportAccess->clientScope()
+        : [];
+@endphp
+@if($staffReportPage)
+<script>
+    (function () {
+        const assignments = @json($staffReportScope);
+        const classFields = ['class_id', 'class_name', 'classname', 'class'];
+        const sectionFields = ['section_name', 'section'];
+        const subjectFields = ['subject_id', 'subject_name', 'subject'];
+        const normalize = value => String(value || '').trim().toLowerCase();
+        const isReportFilter = select => {
+            const field = select.name || select.id || '';
+            return classFields.includes(field) || sectionFields.includes(field) || subjectFields.includes(field);
+        };
+        const valueFor = (fields, source) => {
+            const scope = source.closest('form') || document;
+            const select = Array.from(scope.querySelectorAll('select')).find(item =>
+                fields.includes(item.name) || fields.includes(item.id)
+            );
+            return select ? select.value : '';
+        };
+        const matchingAssignments = (classValue, sectionValue) => {
+            const classKey = normalize(classValue);
+            return assignments.filter(item =>
+                normalize(item.class_id) === classKey || normalize(item.class_name) === classKey
+            ).filter(item => !sectionValue
+                || item.sections.some(section => normalize(section) === normalize(sectionValue) || normalize(section) === 'all')
+            );
+        };
+
+        document.querySelectorAll('select').forEach(select => {
+            if (isReportFilter(select)) {
+                select.dataset.previousAuthorizedValue = select.value;
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            const select = event.target;
+            if (!select.matches('select') || !isReportFilter(select)) return;
+
+            const field = select.name || select.id;
+            const classValue = classFields.includes(field) ? select.value : valueFor(classFields, select);
+            const sectionValue = sectionFields.includes(field) ? select.value : valueFor(sectionFields, select);
+            const selectedAssignments = matchingAssignments(classValue, sectionValue);
+            let authorized = true;
+
+            if (classFields.includes(field)) {
+                authorized = selectedAssignments.length > 0;
+            } else if (sectionFields.includes(field)) {
+                authorized = !!classValue && selectedAssignments.length > 0;
+            } else if (subjectFields.includes(field)) {
+                const subjectValue = normalize(select.value);
+                authorized = !!classValue && selectedAssignments.some(item =>
+                    item.all_subjects || item.subjects.some(subject => normalize(subject) === subjectValue)
+                );
+            }
+
+            if (select.value && !authorized) {
+                window.alert('You are not authorized to access reports for this class, section, or subject.');
+                select.value = select.dataset.previousAuthorizedValue || '';
+                if (window.jQuery && window.jQuery.fn.select2 && window.jQuery(select).data('select2')) {
+                    window.jQuery(select).trigger('change.select2');
+                }
+                return;
+            }
+
+            select.dataset.previousAuthorizedValue = select.value;
+        });
+    })();
+</script>
+@endif
    </body>
 </html>

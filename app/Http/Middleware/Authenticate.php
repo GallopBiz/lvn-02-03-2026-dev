@@ -23,6 +23,12 @@ class Authenticate extends Middleware
             $guards = ['web', 'staff'];
         }
 
+        $staffPortal = $request->cookie('auth_portal') === 'staff'
+            || ($request->hasSession() && $request->session()->get('auth_portal') === 'staff');
+        if ($staffPortal) {
+            $guards = ['staff'];
+        }
+
         foreach ($guards as $guard) {
             if ($this->auth->guard($guard)->check()) {
                 return $this->auth->shouldUse($guard);

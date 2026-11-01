@@ -104,6 +104,10 @@ class SeniorConsolidatedMarksheetController extends Controller
 
         // Fetch subjects assigned to students / combinations
         $subjectsByStudent = $this->assignedSubjectsForStudents($students, $class, $marks, $combAssignments);
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        $subjectsByStudent = $subjectsByStudent->map(function ($subjects) use ($class, $reportAccess) {
+            return $reportAccess->filterSubjectData($subjects, $class->id, $class->section_name);
+        });
 
         // Filter stream/combination if requested
         $filterStreamId = $request->integer('stream_id') ?: null;
@@ -408,7 +412,8 @@ class SeniorConsolidatedMarksheetController extends Controller
 
     private function seniorClasses()
     {
-        return Classes::query()
+        return app(\App\Services\StaffReportAccessService::class)->filterClassOptions(
+            Classes::query()
             ->where(function ($q) {
                 if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
@@ -421,7 +426,8 @@ class SeniorConsolidatedMarksheetController extends Controller
             ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
             ->orderBy('class_name')
             ->orderBy('section_name')
-            ->get();
+            ->get()
+        );
     }
 
     private function seniorClassOptions()
@@ -437,12 +443,21 @@ class SeniorConsolidatedMarksheetController extends Controller
     {
         $className = $request->filled('class_name') ? (string) $request->input('class_name') : null;
 
-        return $this->seniorClasses()
+        $sections = $this->seniorClasses()
             ->when($className, fn ($items) => $items->where('class_name', $className))
             ->pluck('section_name')
             ->filter()
             ->unique()
             ->values();
+
+        if ($className) {
+            $allowed = app(\App\Services\StaffReportAccessService::class)->allowedSections($className);
+            if (is_array($allowed)) {
+                return $sections->filter(fn ($section) => in_array($section, $allowed, true))->values();
+            }
+        }
+
+        return $sections;
     }
 
     private function sectionsByClass()

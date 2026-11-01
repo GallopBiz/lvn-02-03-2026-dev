@@ -53,10 +53,63 @@ class CheckMenuPermission
      */
     public function handle(Request $request, Closure $next, ?string $action = null, ?string $module = null)
     {
-        $user = Auth::guard('web')->user() ?: Auth::guard('staff')->user();
+        $staffOnly = $action === 'staff';
+        if ($staffOnly) {
+            $action = null;
+        }
+
+        $route = $request->route();
+        $routeName = $route ? $route->getName() : '';
+        $path = trim($request->path(), '/');
+        $staffPortal = $request->cookie('auth_portal') === 'staff'
+            || ($request->hasSession() && $request->session()->get('auth_portal') === 'staff')
+            || Str::startsWith($routeName, 'staff.')
+            || Str::startsWith($path, 'staff/')
+            || in_array('auth:staff', $route ? $route->gatherMiddleware() : [], true);
+
+        if ($staffOnly && !$staffPortal) {
+            return $next($request);
+        }
+
+        $user = $staffOnly
+            ? Auth::guard('staff')->user()
+            : PermissionService::getCurrentUser();
+
+        if ($staffOnly) {
+            $staffExemptRoutes = [
+                'staff/dashboard',
+                'staff.dashboard',
+                'staff/change-password',
+                'staff.password.change',
+                'staff.password.update',
+                'staff/logout',
+                'staff.logout',
+                'staff-logout',
+                'staff.login',
+                'staff.login.perform',
+                'leaverequests-staff',
+                'leaverequests.staff',
+                'compoffrequests-staff',
+                'compoffrequests.staff',
+            ];
+
+            foreach ($staffExemptRoutes as $exempt) {
+                if ($path === $exempt || Str::is($exempt, $path) || ($routeName && Str::is($exempt, $routeName))) {
+                    return $next($request);
+                }
+            }
+        }
 
         // If unauthenticated, let auth middleware handle redirection
         if (!$user) {
+            if ($staffOnly && $staffPortal) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json(['error' => 'Unauthenticated.'], 401);
+                }
+
+                return redirect()->route('staff.login');
+            }
+
             return $next($request);
         }
 
@@ -65,18 +118,22 @@ class CheckMenuPermission
             return $next($request);
         }
 
-        // Check exempt routes
+        // Check exempt routes for routes using the general permission middleware.
         $path = trim($request->path(), '/');
         $routeName = $request->route() ? $request->route()->getName() : '';
 
-        foreach ($this->exemptRoutes as $exempt) {
-            if ($path === $exempt || Str::is($exempt, $path) || ($routeName && Str::is($exempt, $routeName))) {
-                return $next($request);
+        if (!$staffOnly) {
+            foreach ($this->exemptRoutes as $exempt) {
+                if ($path === $exempt || Str::is($exempt, $path) || ($routeName && Str::is($exempt, $routeName))) {
+                    return $next($request);
+                }
             }
         }
 
         // Student users are restricted to their own student routes and dashboard
-        $isStudent = Auth::guard('web')->check() && strtolower(trim((string)($user->type ?? ''))) !== 'a';
+        $isStudent = !$staffPortal
+            && Auth::guard('web')->check()
+            && strtolower(trim((string) ($user->type ?? ''))) !== 'a';
         if ($isStudent) {
             $message = "Permission Denied: Students are not authorized to access this module.";
             if ($request->ajax() || $request->wantsJson()) {
@@ -104,9 +161,12 @@ class CheckMenuPermission
             return response()->json(['error' => $message], 403);
         }
 
+        if ($staffOnly) {
+            abort(403, $message);
+        }
+
         $fallbackRoute = Auth::guard('staff')->check() ? 'staff.dashboard' : 'admin.dashboard';
 
         return redirect()->route($fallbackRoute)->with('error', $message);
     }
 }
-

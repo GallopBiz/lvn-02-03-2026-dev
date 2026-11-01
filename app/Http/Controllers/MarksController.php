@@ -479,6 +479,55 @@ class MarksController extends Controller
         return redirect()->to(url($this->marksRoutePrefix() . 'view-marks/' . $entry->id))->with('success', $message);
     }
 
+    public function bulkLockEntries(Request $request)
+    {
+        $validated = $request->validate([
+            'marks_ids' => 'required|array|min:1',
+            'marks_ids.*' => 'required|integer|min:1|distinct',
+        ]);
+        $marksIds = array_map('intval', $validated['marks_ids']);
+        $entries = $this->accessibleMarksQuery()->whereIn('id', $marksIds)->get();
+
+        if ($entries->count() !== count($marksIds)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'One or more selected marks entries are unavailable.',
+            ], 403);
+        }
+
+        if ($this->isStaffMarksUser()) {
+            foreach ($entries as $entry) {
+                if ($this->isStaffExamLocked($entry->exam_id)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => $this->lockedExamMessage(),
+                    ], 403);
+                }
+            }
+        }
+
+        $entriesToLock = $entries->filter(function ($entry) {
+            return !$this->isMarksEntryLocked($entry);
+        });
+        $updatedIds = $entriesToLock->pluck('id')->values()->all();
+
+        if ($updatedIds) {
+            Marks::whereIn('id', $updatedIds)->update([
+                'is_locked' => 1,
+                'locked_at' => now(),
+                'locked_by' => $this->isStaffMarksUser() ? Auth::guard('staff')->id() : Auth::id(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => count($updatedIds)
+                ? count($updatedIds) . ' marks entr' . (count($updatedIds) === 1 ? 'y' : 'ies') . ' locked successfully.'
+                : 'All selected marks entries are already locked.',
+            'updated_ids' => $updatedIds,
+        ]);
+    }
+
     public function lockCurrentEntry(Request $request)
     {
         $marksId = $request->input('marks_id');
@@ -560,6 +609,51 @@ class MarksController extends Controller
         }
 
         return redirect()->to(url('view-marks/' . $entry->id))->with('success', $message);
+    }
+
+    public function bulkUnlockEntries(Request $request)
+    {
+        if ($this->isStaffMarksUser()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Only admin can unlock marks entries.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'marks_ids' => 'required|array|min:1',
+            'marks_ids.*' => 'required|integer|min:1|distinct',
+        ]);
+        $marksIds = array_map('intval', $validated['marks_ids']);
+        $entries = Marks::where('is_delete', 0)->whereIn('id', $marksIds)->get();
+
+        if ($entries->count() !== count($marksIds)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'One or more selected marks entries are unavailable.',
+            ], 404);
+        }
+
+        $entriesToUnlock = $entries->filter(function ($entry) {
+            return $this->isMarksEntryLocked($entry);
+        });
+        $updatedIds = $entriesToUnlock->pluck('id')->values()->all();
+
+        if ($updatedIds) {
+            Marks::whereIn('id', $updatedIds)->update([
+                'is_locked' => 0,
+                'locked_at' => null,
+                'locked_by' => null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => count($updatedIds)
+                ? count($updatedIds) . ' marks entr' . (count($updatedIds) === 1 ? 'y' : 'ies') . ' unlocked successfully.'
+                : 'All selected marks entries are already unlocked.',
+            'updated_ids' => $updatedIds,
+        ]);
     }
 
     public function showmarks(){
@@ -647,6 +741,8 @@ class MarksController extends Controller
         }
 
         $classId = Classname::where('class_name', $class_name)->value('id');
+        $allowedSubjectIds = app(\App\Services\StaffReportAccessService::class)
+            ->allowedSubjectIds($classId ?: $class_name, $section_name);
         $studentMarksTable = $this->studentMarksTable();
 
         $query = DB::connection('dynamic')
@@ -689,6 +785,10 @@ class MarksController extends Controller
 
         if ($section_name) {
             $query->where('previosly_saved_marks_entry.section_name', $section_name);
+        }
+
+        if ($this->isStaffMarksUser() && is_array($allowedSubjectIds)) {
+            $query->whereIn('previosly_saved_marks_entry.subject_id', $allowedSubjectIds);
         }
 
         $selectedExamTerm = $term_name ?: $exam_title;
@@ -1187,7 +1287,15 @@ class MarksController extends Controller
             ->get()
             ->groupBy('class_name')
             ->map(function ($items) {
-                return $items->pluck('section_name')->unique()->values()->all();
+                return $items->pluck('section_name')->unique()->values();
+            })
+            ->map(function ($sections, $className) {
+                $allowedSections = app(\App\Services\StaffReportAccessService::class)->allowedSections($className);
+                if ($this->isStaffMarksUser() && is_array($allowedSections)) {
+                    return $sections->filter(fn ($section) => in_array($section, $allowedSections, true))->values()->all();
+                }
+
+                return $sections->all();
             })
             ->toArray();
 
@@ -1218,20 +1326,8 @@ class MarksController extends Controller
 
     private function canAccessClassSectionByName(?string $className, ?string $sectionName): bool
     {
-        $classId = Classname::where('class_name', $className)->value('id');
-
-        if (!$classId || !$sectionName) {
-            return false;
-        }
-
-        return TeacherSubject::where('is_delete', 0)
-            ->where('teacher_id', $this->staffEmployeeId())
-            ->where('class_id', $classId)
-            ->where(function ($query) use ($sectionName) {
-                $query->where('section_name', $sectionName)
-                    ->orWhere('section_name', 'All');
-            })
-            ->exists();
+        return app(\App\Services\StaffReportAccessService::class)
+            ->canAccess($className, $sectionName);
     }
 
     private function classLevel(?string $className): int

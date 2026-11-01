@@ -200,6 +200,11 @@
                 <input type="hidden" name="start_date" value="{{ $filters['start_date'] }}">
                 <input type="hidden" name="end_date" value="{{ $filters['end_date'] }}">
                 <button class="btn btn-success" @disabled($collectiveRows->isEmpty() || $workingDays <= 0)>{{ $editingCollective ? 'Update Collective' : 'Save Collective' }}</button>
+                @if($collectiveRows->isNotEmpty() && $workingDays <= 0)
+                    <div class="small text-danger mt-2" role="status">
+                        Cannot save: no daily attendance has been recorded for this class, section, and date range. Record daily attendance, then reload this report.
+                    </div>
+                @endif
             </form>
         </div>
         <div class="table-responsive">

@@ -6,16 +6,17 @@ use App\Models\RoleMenu;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
 class PermissionService
 {
     /**
-     * Cache for role permissions during the current request lifecycle.
+     * Unambiguous controller-to-menu mappings inferred from sidebar landing routes.
      *
-     * @var array
+     * @var array<string, string>|null
      */
-    protected static $rolePermissionsCache = [];
+    protected static $controllerModuleMap;
 
     /**
      * Map of common module aliases to sidebar menu titles / paths or route keywords.
@@ -84,10 +85,28 @@ class PermissionService
             'menus' => [
                 'Academic > Examination & Grading > Class 11-12 Marksheet',
             ],
-            'view' => ['academic/senior-marksheets', 'academic.senior-marksheets.index', 'academic/senior-marksheets/print'],
-            'add' => ['academic/senior-marksheets/generate'],
-            'edit' => ['academic/senior-marksheets/generate'],
-            'delete' => ['academic/senior-marksheets/delete'],
+            'view' => [
+                'senior-marksheet',
+                'senior-marksheet.index',
+                'academic/senior-marksheets',
+                'academic.senior-marksheets.index',
+                'academic.senior-marksheets.students-data',
+                'academic.senior-marksheets.print',
+                'academic.senior-marksheets.generated.bulk-print-page',
+                'academic.senior-marksheets.generated.bulk-print',
+                'academic.senior-marksheets.generated.print',
+            ],
+            'add' => [
+                'academic/senior-marksheets/generate',
+                'academic.senior-marksheets.generate',
+            ],
+            'edit' => [],
+            'delete' => [
+                'academic/senior-marksheets/generated/bulk-delete',
+                'academic.senior-marksheets.generated.bulk-delete',
+                'academic/senior-marksheets/generated',
+                'academic.senior-marksheets.generated.delete',
+            ],
         ],
         'marks' => [
             'menus' => [
@@ -95,8 +114,26 @@ class PermissionService
             ],
             'view' => ['marks', 'show_report_marks', 'view-marks'],
             'add' => ['save-marks', 'store-marks'],
-            'edit' => ['store-marks', 'unlock-marks-entry'],
+            'edit' => ['store-marks', 'lock-marks-entry', 'lock-current-marks-entry', 'bulk-lock-marks-entries', 'unlock-marks-entry', 'bulk-unlock-marks-entries'],
             'delete' => ['delete-marks'],
+        ],
+        'monthly-attendance' => [
+            'menus' => [
+                'Academic > Attendance > Monthly Attendance Summary',
+                'Academic > Attendance > Lock Monthly Attendance',
+            ],
+            'view' => [
+                'staff.attendance.monthly-report',
+                'staff.attendance.monthly-lock',
+                'academic.attendance.monthly-report',
+                'academic/attendance-monthly-report',
+                'academic.attendance.monthly-lock',
+            ],
+            'edit' => [
+                'staff.attendance.monthly-lock.store',
+                'academic.attendance.monthly-lock.unlock',
+            ],
+            'delete' => [],
         ],
     ];
 
@@ -107,11 +144,17 @@ class PermissionService
      */
     public static function getCurrentUser()
     {
-        if (Auth::guard('staff')->check()) {
+        $staffPortal = request()->cookie('auth_portal') === 'staff'
+            || (request()->hasSession() && request()->session()->get('auth_portal') === 'staff');
+
+        if ($staffPortal && Auth::guard('staff')->check()) {
             return Auth::guard('staff')->user();
         }
         if (Auth::guard('web')->check()) {
             return Auth::guard('web')->user();
+        }
+        if (Auth::guard('staff')->check()) {
+            return Auth::guard('staff')->user();
         }
         return Auth::user();
     }
@@ -129,23 +172,42 @@ class PermissionService
             return false;
         }
 
-        // Web user type 'a' is Admin
-        if (isset($user->type) && strtolower(trim((string)$user->type)) === 'a') {
-            return true;
+        if (self::isStaffPrincipal($user)) {
+            return false;
         }
 
-        // Explicit role column 'Admin' or 'admin'
+        if (isset($user->type) && strtolower(trim((string) $user->type)) !== 'a') {
+            return false;
+        }
+
+        // An explicitly assigned administrator role grants the existing admin bypass.
         $roleName = strtolower(trim((string)($user->role ?? '')));
         if ($roleName === 'admin' || $roleName === 'super-admin') {
             return true;
         }
 
-        // Spatie HasRoles check
         if (method_exists($user, 'hasRole') && ($user->hasRole('Admin') || $user->hasRole('admin'))) {
             return true;
         }
 
-        return false;
+        return isset($user->type)
+            && strtolower(trim((string) $user->type)) === 'a';
+    }
+
+    /**
+     * Determine whether a user instance is authenticated as a staff principal.
+     *
+     * @param  mixed  $user
+     */
+    protected static function isStaffPrincipal($user): bool
+    {
+        $staffUser = Auth::guard('staff')->user();
+        if (!$staffUser || !method_exists($user, 'getAuthIdentifier')) {
+            return false;
+        }
+
+        $sameUser = $staffUser->getAuthIdentifier() == $user->getAuthIdentifier();
+        return $sameUser && get_class($staffUser) === get_class($user);
     }
 
     /**
@@ -184,53 +246,61 @@ class PermissionService
     public static function getPermissionsForRole($roleIdentifier = null): array
     {
         if ($roleIdentifier === null) {
-            $roleName = self::getRoleName();
-            if ($roleName === 'Admin') {
-                return ['*']; // Full access
+            $user = self::getCurrentUser();
+            if (self::isAdmin($user)) {
+                return ['*'];
             }
-            $roleIdentifier = $roleName;
+            $roleIdentifier = self::getRoleName($user);
         }
 
         if (!$roleIdentifier) {
             return [];
         }
 
-        if (isset(self::$rolePermissionsCache[$roleIdentifier])) {
-            return self::$rolePermissionsCache[$roleIdentifier];
+        // Resolve role ID
+        if (is_numeric($roleIdentifier)) {
+            $roleId = (int) $roleIdentifier;
+        } else {
+            $roleIdCacheKey = 'role_menu_role_id.' . md5((string) $roleIdentifier);
+            if (request()->attributes->has($roleIdCacheKey)) {
+                $roleId = request()->attributes->get($roleIdCacheKey);
+            } else {
+                $roleId = DB::table('roles')->where('name', $roleIdentifier)->value('id');
+                request()->attributes->set($roleIdCacheKey, $roleId ? (int) $roleId : null);
+            }
         }
 
-        // Resolve role ID
-        $roleId = is_numeric($roleIdentifier)
-            ? (int)$roleIdentifier
-            : DB::table('roles')->where('name', $roleIdentifier)->value('id');
-
         if (!$roleId) {
-            self::$rolePermissionsCache[$roleIdentifier] = [];
             return [];
+        }
+
+        $cacheKey = 'role_menu_permissions.' . $roleId;
+        if (request()->attributes->has($cacheKey)) {
+            return request()->attributes->get($cacheKey);
         }
 
         $roleMenu = RoleMenu::where('role_id', $roleId)->first();
         if (!$roleMenu || empty($roleMenu->menu)) {
-            self::$rolePermissionsCache[$roleIdentifier] = [];
+            request()->attributes->set($cacheKey, []);
             return [];
         }
 
         $raw = is_array($roleMenu->menu) ? $roleMenu->menu : json_decode($roleMenu->menu, true);
         if (!is_array($raw)) {
-            self::$rolePermissionsCache[$roleIdentifier] = [];
+            request()->attributes->set($cacheKey, []);
             return [];
         }
 
         $normalized = [];
 
-        // Check if legacy indexed array of strings e.g. ["Scholars > Student Registration", ...]
+        // Legacy menu lists only represented visibility, not CRUD grants.
         if (isset($raw[0]) && is_string($raw[0])) {
             foreach ($raw as $menuTitle) {
                 $normalized[trim($menuTitle)] = [
                     'view'   => true,
-                    'add'    => true,
-                    'edit'   => true,
-                    'delete' => true,
+                    'add'    => false,
+                    'edit'   => false,
+                    'delete' => false,
                 ];
             }
         } else {
@@ -238,24 +308,32 @@ class PermissionService
             foreach ($raw as $menuTitle => $actions) {
                 if (is_array($actions)) {
                     $normalized[trim($menuTitle)] = [
-                        'view'   => !empty($actions['view']),
-                        'add'    => !empty($actions['add']),
-                        'edit'   => !empty($actions['edit']),
-                        'delete' => !empty($actions['delete']),
+                        'view'   => filter_var($actions['view'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'add'    => filter_var($actions['add'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'edit'   => filter_var($actions['edit'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'delete' => filter_var($actions['delete'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     ];
                 } elseif ($actions === true || $actions == 1) {
                     $normalized[trim($menuTitle)] = [
                         'view'   => true,
-                        'add'    => true,
-                        'edit'   => true,
-                        'delete' => true,
+                        'add'    => false,
+                        'edit'   => false,
+                        'delete' => false,
                     ];
                 }
             }
         }
 
-        self::$rolePermissionsCache[$roleIdentifier] = $normalized;
+        request()->attributes->set($cacheKey, $normalized);
         return $normalized;
+    }
+
+    /**
+     * Clear the current request's role-menu cache after a role is updated.
+     */
+    public static function forgetRolePermissions(int $roleId): void
+    {
+        request()->attributes->remove('role_menu_permissions.' . $roleId);
     }
 
     /**
@@ -273,13 +351,17 @@ class PermissionService
             return false;
         }
 
+        if (self::canViewOwnStaffRequests($action, $user)) {
+            return true;
+        }
+
         if (self::isAdmin($user)) {
             return true;
         }
 
-        $action = strtolower(trim($action));
-        if (!in_array($action, ['view', 'add', 'edit', 'delete'])) {
-            $action = 'view';
+        $action = self::normalizeAction($action);
+        if ($action === null) {
+            return false;
         }
 
         $rolePermissions = self::getPermissionsForRole(self::getRoleName($user));
@@ -292,9 +374,6 @@ class PermissionService
             $request = request();
             $detected = self::detectModuleAndActionFromRequest($request);
             $moduleOrRoute = $detected['module'];
-            if (!$action) {
-                $action = $detected['action'];
-            }
         }
 
         if (!$moduleOrRoute) {
@@ -318,6 +397,12 @@ class PermissionService
                 || in_array($moduleOrRoute, $cfg['delete'] ?? [], true);
 
             if ($matchesModule) {
+                if ($moduleKey === 'monthly-attendance') {
+                    return collect($cfg['menus'])->contains(
+                        fn ($menuTitle) => !empty($rolePermissions[$menuTitle][$action])
+                    );
+                }
+
                 foreach ($cfg['menus'] as $menuTitle) {
                     if (isset($rolePermissions[$menuTitle])) {
                         return !empty($rolePermissions[$menuTitle][$action]);
@@ -334,14 +419,54 @@ class PermissionService
             }
         }
 
-        // 4. Fallback: match by partial title / path suffix
-        foreach ($rolePermissions as $menuTitle => $actions) {
-            if (Str::is('*' . $moduleOrRoute, $menuTitle) || Str::is($moduleOrRoute . '*', $menuTitle)) {
-                return !empty($actions[$action]);
-            }
+        return false;
+    }
+
+    private static function canViewOwnStaffRequests(string $action, $user): bool
+    {
+        if (
+            self::normalizeAction($action) !== 'view'
+            || !Auth::guard('staff')->check()
+            || Auth::guard('staff')->user() !== $user
+            || (int) (Auth::guard('staff')->user()->employee_id ?? 0) <= 0
+        ) {
+            return false;
         }
 
-        return false;
+        $request = request();
+        $routeName = (string) optional($request->route())->getName();
+        $path = trim($request->path(), '/');
+
+        return in_array($request->method(), ['GET', 'HEAD'], true)
+            && (
+                in_array($routeName, ['leaverequests.staff', 'compoffrequests.staff'], true)
+                || in_array($path, ['leaverequests-staff', 'compoffrequests-staff'], true)
+            );
+    }
+
+    private static function canViewOwnLeaveRequests(string $action, $user): bool
+    {
+        return self::canViewOwnStaffRequests($action, $user);
+    }
+
+    /**
+     * Normalize common CRUD terminology to the action names stored in role_menus.
+     */
+    protected static function normalizeAction(string $action): ?string
+    {
+        $action = strtolower(trim($action));
+        $aliases = [
+            'create' => 'add',
+            'store' => 'add',
+            'update' => 'edit',
+            'modify' => 'edit',
+            'destroy' => 'delete',
+        ];
+        $action = $aliases[$action] ?? $action;
+
+        return in_array($action, ['view', 'add', 'edit', 'delete'], true)
+            ? $action
+            : null;
     }
 
     /**
@@ -358,15 +483,18 @@ class PermissionService
         $walker = function ($items, $prefix = '') use (&$walker, &$results, $routeOrTitle) {
             foreach ($items as $item) {
                 $currentKey = $prefix ? $prefix . ' > ' . $item['title'] : $item['title'];
-                $itemRoute = $item['route'] ?? null;
+                $itemRoutes = array_filter([
+                    $item['route'] ?? null,
+                    $item['staff_route'] ?? null,
+                ]);
 
                 if (
                     strcasecmp($item['title'], $routeOrTitle) === 0 ||
                     strcasecmp($currentKey, $routeOrTitle) === 0 ||
-                    ($itemRoute && (
-                        strcasecmp($itemRoute, $routeOrTitle) === 0 ||
-                        Str::is(trim($itemRoute, '/') . '*', trim($routeOrTitle, '/'))
-                    ))
+                    collect($itemRoutes)->contains(function ($itemRoute) use ($routeOrTitle) {
+                        return strcasecmp($itemRoute, $routeOrTitle) === 0
+                            || Str::is(trim($itemRoute, '/') . '*', trim($routeOrTitle, '/'));
+                    })
                 ) {
                     $results[] = $currentKey;
                 }
@@ -389,37 +517,80 @@ class PermissionService
      */
     public static function detectModuleAndActionFromRequest(Request $request): array
     {
-        $routeName = $request->route() ? $request->route()->getName() : '';
+        $route = $request->route();
+        $routeName = $route ? $route->getName() : '';
+        $controllerMethod = $route ? strtolower((string) $route->getActionMethod()) : '';
         $path = trim($request->path(), '/');
         $method = strtoupper($request->method());
+        $module = $route ? ($route->getAction('permission_module') ?: null) : null;
+        $explicitAction = $route ? ($route->getAction('permission_action') ?: null) : null;
 
-        // 1. Detect Action
+        if ($route) {
+            foreach ($route->gatherMiddleware() as $middleware) {
+                if (!Str::startsWith($middleware, 'check.permission:')) {
+                    continue;
+                }
+
+                $parameters = explode(',', substr($middleware, strlen('check.permission:')), 2);
+                if (count($parameters) === 2) {
+                    $explicitAction = $explicitAction ?: trim($parameters[0]);
+                    $module = $module ?: trim($parameters[1]);
+                }
+                break;
+            }
+        }
+
+        $routeCandidates = array_unique(array_filter([
+            $routeName,
+            preg_replace('/^staff\./i', '', $routeName),
+        ]));
+        $pathCandidates = array_unique(array_filter([
+            $path,
+            preg_replace('/^staff\//i', '', $path),
+        ]));
+        foreach (array_merge($routeCandidates, $pathCandidates) as $candidate) {
+            $withoutActionPrefix = preg_replace('/^(save|store|delete|destroy|view|get|fetch|update|create|add|edit)-/i', '', $candidate);
+            $withoutActionSuffix = preg_replace('/-(delete|destroy|view|update|create|edit)$/i', '', $candidate);
+            if ($withoutActionPrefix !== $candidate) {
+                $routeCandidates[] = $withoutActionPrefix;
+                $pathCandidates[] = $withoutActionPrefix;
+            }
+            if ($withoutActionSuffix !== $candidate) {
+                $routeCandidates[] = $withoutActionSuffix;
+                $pathCandidates[] = $withoutActionSuffix;
+            }
+        }
+        $routeCandidates = array_unique(array_filter($routeCandidates));
+        $pathCandidates = array_unique(array_filter($pathCandidates));
+
+        $actionTokens = preg_split(
+            '/[.\/_\-\s]+/',
+            strtolower(preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $routeName . ' ' . $path . ' ' . $controllerMethod)),
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        );
+
+        // Resolve mutating controller actions before the HTTP-method fallback.
         $action = 'view';
-        if ($method === 'DELETE') {
+        if ($method === 'DELETE' || array_intersect($actionTokens, ['delete', 'destroy', 'archive', 'remove', 'soft'])) {
             $action = 'delete';
         } elseif (
-            Str::contains($path, ['delete', 'destroy', 'archive', 'remove', 'soft_delete']) ||
-            ($routeName && Str::contains($routeName, ['delete', 'destroy', 'archive', 'remove']))
-        ) {
-            $action = 'delete';
-        } elseif (
-            Str::contains($path, ['edit', 'update', 'modify']) ||
-            ($routeName && Str::contains($routeName, ['edit', 'update', 'modify']))
+            $method === 'PUT'
+            || $method === 'PATCH'
+            || array_intersect($actionTokens, ['edit', 'update', 'modify'])
+            || (!in_array($method, ['GET', 'HEAD'], true) && array_intersect($actionTokens, ['lock', 'unlock']))
         ) {
             $action = 'edit';
-        } elseif (
-            ($method === 'POST' || $method === 'PUT') &&
-            (
-                Str::contains($path, ['save', 'store', 'create', 'add', 'generate']) ||
-                ($routeName && Str::contains($routeName, ['save', 'store', 'create', 'add', 'generate']))
-            )
-        ) {
+        } elseif (array_intersect($actionTokens, ['create', 'store', 'save', 'add', 'generate'])) {
             $action = 'add';
-        } elseif (
-            Str::contains($path, ['create', 'add']) ||
-            ($routeName && Str::contains($routeName, ['create', 'add']))
-        ) {
-            $action = 'add';
+        } elseif ($method === 'POST') {
+            $readOnlyActions = ['fetch', 'filter', 'search', 'report', 'export', 'print', 'check', 'validate', 'lookup', 'data', 'status'];
+            $action = array_intersect($actionTokens, $readOnlyActions) ? 'view' : 'add';
+        }
+        $action = self::normalizeAction((string) ($explicitAction ?: $action)) ?: 'view';
+
+        if ($module) {
+            return ['module' => $module, 'action' => $action];
         }
 
         // 2. Detect Module from predefined moduleRouteMap
@@ -432,20 +603,92 @@ class PermissionService
             );
 
             foreach ($allRoutes as $pattern) {
-                if ($routeName === $pattern || $path === $pattern || Str::is(trim($pattern, '/') . '*', $path)) {
-                    return ['module' => $cfg['menus'][0] ?? $moduleKey, 'action' => $action];
+                foreach ($routeCandidates as $candidateRoute) {
+                    if ($candidateRoute === $pattern) {
+                        return ['module' => $cfg['menus'][0] ?? $moduleKey, 'action' => $action];
+                    }
+                }
+                foreach ($pathCandidates as $candidatePath) {
+                    if ($candidatePath === $pattern || Str::is(trim($pattern, '/') . '*', $candidatePath)) {
+                        return ['module' => $cfg['menus'][0] ?? $moduleKey, 'action' => $action];
+                    }
                 }
             }
         }
 
         // 3. Fallback: match directly against sidebar routes
-        $matching = self::findMenuKeysForRouteOrTitle($routeName ?: $path);
-        if (!empty($matching)) {
-            return ['module' => $matching[0], 'action' => $action];
+        foreach (array_merge($routeCandidates, $pathCandidates) as $candidate) {
+            $matching = self::findMenuKeysForRouteOrTitle($candidate);
+            if (!empty($matching)) {
+                return ['module' => $matching[0], 'action' => $action];
+            }
+        }
+
+        $controller = $route ? $route->getControllerClass() : null;
+        $controllerModule = $controller ? self::getControllerModuleMap()[$controller] ?? null : null;
+        if ($controllerModule) {
+            return ['module' => $controllerModule, 'action' => $action];
         }
 
         // 4. Return the path itself as the module candidate
         return ['module' => $routeName ?: $path, 'action' => $action];
+    }
+
+    /**
+     * Infer modules for legacy CRUD routes whose controller has one sidebar module.
+     *
+     * Controllers shared by multiple menu items are intentionally omitted.
+     *
+     * @return array<string, string>
+     */
+    protected static function getControllerModuleMap(): array
+    {
+        if (self::$controllerModuleMap !== null) {
+            return self::$controllerModuleMap;
+        }
+
+        $routesByName = [];
+        $routesByUri = [];
+        foreach (Route::getRoutes() as $route) {
+            if ($route->getName()) {
+                $routesByName[$route->getName()] = $route;
+            }
+            if (in_array('GET', $route->methods(), true) || in_array('HEAD', $route->methods(), true)) {
+                $routesByUri[$route->uri()] = $route;
+            }
+        }
+
+        $controllerMenus = [];
+        $walk = function (array $items, string $prefix = '') use (&$walk, &$controllerMenus, $routesByName, $routesByUri): void {
+            foreach ($items as $item) {
+                $key = $prefix ? $prefix . ' > ' . $item['title'] : $item['title'];
+                if (!empty($item['children'])) {
+                    $walk($item['children'], $key);
+                    continue;
+                }
+
+                $target = $item['route'] ?? null;
+                if (!$target) {
+                    continue;
+                }
+
+                $route = $routesByName[$target] ?? $routesByUri[trim($target, '/')] ?? null;
+                $controller = $route ? $route->getControllerClass() : null;
+                if ($controller) {
+                    $controllerMenus[$controller][$key] = true;
+                }
+            }
+        };
+        $walk(config('sidebar', []));
+
+        self::$controllerModuleMap = [];
+        foreach ($controllerMenus as $controller => $menus) {
+            if (count($menus) === 1) {
+                self::$controllerModuleMap[$controller] = array_key_first($menus);
+            }
+        }
+
+        return self::$controllerModuleMap;
     }
 
     /**
@@ -468,7 +711,11 @@ class PermissionService
 
         $permissions = self::getPermissionsForRole(self::getRoleName($user));
 
-        $filterNode = function ($items, $prefix = '') use (&$filterNode, $permissions) {
+        $isStaffSelfLeaveRequestsUser = Auth::guard('staff')->check()
+            && Auth::guard('staff')->user() === $user
+            && (int) (Auth::guard('staff')->user()->employee_id ?? 0) > 0;
+
+        $filterNode = function ($items, $prefix = '') use (&$filterNode, $permissions, $isStaffSelfLeaveRequestsUser) {
             $filtered = [];
 
             foreach ($items as $item) {
@@ -490,6 +737,15 @@ class PermissionService
                 if (isset($permissions[$key])) {
                     $hasView = !empty($permissions[$key]['view']);
                 }
+                if (
+                    $isStaffSelfLeaveRequestsUser
+                    && in_array($key, [
+                        'HRMS > Leave Management > My Leave Requests',
+                        'HRMS > Comp Off > My Comp Off Requests',
+                    ], true)
+                ) {
+                    $hasView = true;
+                }
 
                 // If menu item has child but no children were visible, don't show parent
                 if (empty($item['children']) && $hasView) {
@@ -503,4 +759,3 @@ class PermissionService
         return $filterNode($sidebar);
     }
 }
-

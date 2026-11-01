@@ -217,6 +217,26 @@
                                         </button>
                                     </div>
                                 </div>
+                                @if(!empty($stream) && count($stream))
+                                    <div class="d-flex align-items-center flex-wrap mt-2" id="bulk_marks_toolbar">
+                                        <label class="mb-0 mr-3">
+                                            <input type="checkbox" id="select_all_saved_marks"> Select visible
+                                        </label>
+                                        <span class="text-muted mr-3" id="bulk_selected_marks_count">0 selected</span>
+                                        @canEdit('marks')
+                                            <button type="button" class="btn btn-dark btn-sm mr-2" id="bulk_lock_marks_btn" disabled>
+                                                <i class="fa fa-lock"></i> Lock Selected
+                                            </button>
+                                        @endcanEdit
+                                        @if(empty($isStaffMarksUser))
+                                            @canEdit('marks')
+                                            <button type="button" class="btn btn-warning btn-sm" id="bulk_unlock_marks_btn" disabled>
+                                                <i class="fa fa-unlock"></i> Unlock Selected
+                                            </button>
+                                            @endcanEdit
+                                        @endif
+                                    </div>
+                                @endif
                                 <div id="active_teacher_filter_banner" class="alert alert-info py-1 px-2 mt-2 mb-0 d-none justify-content-between align-items-center" style="font-size: 0.85rem;">
                                     <div>
                                         <strong>Filtered by Teacher:</strong> <span id="filter_teacher_name_text"></span>
@@ -229,6 +249,9 @@
                                 <table class="display table table-striped table-bordered" id="another_div">
                                     <thead>
                                         <tr>
+                                            <th scope="col">
+                                                <span class="sr-only">Select</span>
+                                            </th>
                                             <th scope="col">S.no.</th>
                                             <th scope="col">Teacher</th>
                                             <th scope="col">Exam Name</th>
@@ -261,7 +284,16 @@
                                                     data-class-name="{{ strtolower($className) }}"
                                                     data-section-name="{{ strtolower($sectionName) }}"
                                                     data-subject-id="{{ $streams->subject_id }}"
-                                                    data-subject-name="{{ strtolower($subjectName) }}">
+                                                    data-subject-name="{{ strtolower($subjectName) }}"
+                                                    data-entry-locked="{{ !empty($streams->is_locked) ? 1 : 0 }}"
+                                                    data-exam-locked="{{ !empty($streams->Exammaster->is_locked) ? 1 : 0 }}">
+                                                    <td>
+                                                        <input type="checkbox" class="bulk-mark-entry-checkbox" value="{{ $streams->id }}"
+                                                            data-entry-locked="{{ !empty($streams->is_locked) ? 1 : 0 }}"
+                                                            data-exam-locked="{{ !empty($streams->Exammaster->is_locked) ? 1 : 0 }}"
+                                                            @if(!empty($isStaffMarksUser) && (!empty($streams->is_locked) || !empty($streams->Exammaster->is_locked))) disabled @endif
+                                                            aria-label="Select marks entry {{ $streams->id }}">
+                                                    </td>
                                                     <td class="saved-marks-sno">{{++$i}}</td>
                                                     <td>
                                                         @if(!empty($tFullName))
@@ -277,7 +309,7 @@
                                                     <td>{{ $className }}</td>
                                                     <td>{{ $sectionName }}</td>
                                                     <td class="uperletter">{{ $subjectName }}</td>
-                                                    <td class="d-flex align-items-center saved-row-actions" data-id="{{ $streams->id }}">
+                                                    <td class="d-flex align-items-center saved-row-actions" data-id="{{ $streams->id }}" data-delete-url="{{ url($marksUrlPrefix . 'delete-marks/previosly_saved_marks_entry-' . $streams->id) }}">
                                                         <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') .'/'.$streams->id}}">Edit</a>
                                                         <?php $a = "previosly_saved_marks_entry"."-".$streams->id ; ?>
                                                         @if(!empty($isStaffMarksUser))
@@ -306,11 +338,11 @@
                                                 </tr>
                                             @endforeach
                                             <tr id="no_saved_marks_found_row" style="display: none;">
-                                                <td colspan="7" class="text-center text-muted py-3">No matching marks entries found.</td>
+                                                <td colspan="8" class="text-center text-muted py-3">No matching marks entries found.</td>
                                             </tr>
                                         @else
                                             <tr>
-                                                <td colspan="7" class="text-center">No Data Found</td>
+                                                <td colspan="8" class="text-center">No Data Found</td>
                                             </tr>
                                         @endif
                                     </tbody>
@@ -1075,7 +1107,122 @@
         } else {
             $('#saved_marks_count_badge').text(`Showing ${totalRowsCount} entries`);
         }
+
+        refreshBulkMarksSelection();
     }
+
+    function refreshBulkMarksSelection() {
+        const selected = $('.bulk-mark-entry-checkbox:checked');
+        const selectedLockable = selected.filter(function () {
+            return $(this).attr('data-entry-locked') !== '1' &&
+                (!isStaffMarksUser || $(this).attr('data-exam-locked') !== '1');
+        });
+        const selectedUnlockable = selected.filter(function () {
+            return $(this).attr('data-entry-locked') === '1';
+        });
+        const visibleSelectable = $('.bulk-mark-entry-checkbox:visible:not(:disabled)');
+        const visibleSelected = visibleSelectable.filter(':checked');
+
+        $('#bulk_selected_marks_count').text(`${selected.length} selected`);
+        $('#bulk_lock_marks_btn').prop('disabled', selectedLockable.length === 0);
+        $('#bulk_unlock_marks_btn').prop('disabled', selectedUnlockable.length === 0);
+        $('#select_all_saved_marks')
+            .prop('checked', visibleSelectable.length > 0 && visibleSelected.length === visibleSelectable.length)
+            .prop('indeterminate', visibleSelected.length > 0 && visibleSelected.length < visibleSelectable.length);
+    }
+
+    function updateBulkMarksEntryRow(marksIds, isLocked) {
+        marksIds.forEach(function (marksId) {
+            const checkbox = $('.bulk-mark-entry-checkbox').filter(function () {
+                return String(this.value) === String(marksId);
+            });
+            const row = checkbox.closest('tr');
+            if (!row.length) return;
+
+            const examLocked = checkbox.attr('data-exam-locked') === '1';
+            const cell = row.find('.saved-row-actions');
+            row.attr('data-entry-locked', isLocked ? '1' : '0');
+            checkbox.attr('data-entry-locked', isLocked ? '1' : '0').prop('checked', false);
+            if (isStaffMarksUser) {
+                checkbox.prop('disabled', isLocked || examLocked);
+            }
+
+            cell.find('.lock-row-entry-btn, .unlock-row-entry-btn, .bulk-lock-state-btn').remove();
+            if (isLocked) {
+                cell.find('a[href*="delete-marks/"]').remove();
+                if (isStaffMarksUser) {
+                    cell.append('<button type="button" class="btn btn-secondary m-1 bulk-lock-state-btn" disabled><i class="fa fa-lock"></i> Locked</button>');
+                } else {
+                    cell.append(`<button type="button" class="btn btn-warning m-1 unlock-row-entry-btn" data-id="${marksId}"><i class="fa fa-unlock"></i> Unlock</button>`);
+                }
+            } else {
+                if (isStaffMarksUser && examLocked) {
+                    cell.append('<button type="button" class="btn btn-secondary m-1 bulk-lock-state-btn" disabled><i class="fa fa-lock"></i> Locked</button>');
+                } else {
+                    cell.append(`<button type="button" class="btn btn-dark m-1 lock-row-entry-btn" data-id="${marksId}"><i class="fa fa-lock"></i> Lock</button>`);
+                }
+                if (!isStaffMarksUser && !cell.find('a[href*="delete-marks/"]').length) {
+                    const deleteUrl = cell.attr('data-delete-url');
+                    cell.append(`<a class="btn btn-raised ripple btn-danger m-1" href="${escapeHtml(deleteUrl)}" onclick="confirmDelete(event)">Delete</a>`);
+                }
+            }
+        });
+
+        refreshBulkMarksSelection();
+    }
+
+    $(document).on('change', '.bulk-mark-entry-checkbox', refreshBulkMarksSelection);
+
+    $(document).on('change', '#select_all_saved_marks', function () {
+        const shouldSelect = $(this).prop('checked');
+        $('.bulk-mark-entry-checkbox:visible:not(:disabled)').prop('checked', shouldSelect);
+        refreshBulkMarksSelection();
+    });
+
+    $(document).on('click', '#bulk_lock_marks_btn, #bulk_unlock_marks_btn', function () {
+        const action = this.id === 'bulk_lock_marks_btn' ? 'lock' : 'unlock';
+        const selected = $('.bulk-mark-entry-checkbox:checked').filter(function () {
+            const entryLocked = $(this).attr('data-entry-locked') === '1';
+            return action === 'lock'
+                ? !entryLocked && (!isStaffMarksUser || $(this).attr('data-exam-locked') !== '1')
+                : entryLocked;
+        });
+        const marksIds = selected.map(function () {
+            return this.value;
+        }).get();
+
+        if (!marksIds.length) return;
+
+        const operation = action === 'lock' ? 'lock' : 'unlock';
+        if (!confirm(`Are you sure you want to ${operation} ${marksIds.length} selected marks entr${marksIds.length === 1 ? 'y' : 'ies'}?`)) {
+            return;
+        }
+
+        const button = $(this);
+        button.prop('disabled', true);
+        $.ajax({
+            url: action === 'lock'
+                ? "{{ url($marksUrlPrefix . 'bulk-lock-marks-entries') }}"
+                : "{{ url('bulk-unlock-marks-entries') }}",
+            type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                'Accept': 'application/json'
+            },
+            data: { marks_ids: marksIds },
+            dataType: 'json',
+            success: function (response) {
+                updateBulkMarksEntryRow(response.updated_ids || [], action === 'lock');
+                toastr.success(response.message || `Selected marks entries ${operation}ed successfully.`, 'Success');
+            },
+            error: function (xhr) {
+                toastr.error(ajaxErrorMessage(xhr), `Error ${action === 'lock' ? 'Locking' : 'Unlocking'} Marks`);
+            },
+            complete: function () {
+                refreshBulkMarksSelection();
+            }
+        });
+    });
 
     $(document).on('input keyup', '#saved_marks_search', function () {
         filterSavedMarksEntries();
@@ -1990,10 +2137,10 @@
         if (!marksId) return;
 
         const row = btn.closest('tr');
-        const examText = row.find('td:nth-child(3)').text().trim();
-        const classText = row.find('td:nth-child(4)').text().trim();
-        const sectionText = row.find('td:nth-child(5)').text().trim();
-        const subjectText = row.find('td:nth-child(6)').text().trim();
+        const examText = row.find('td:nth-child(4)').text().trim();
+        const classText = row.find('td:nth-child(5)').text().trim();
+        const sectionText = row.find('td:nth-child(6)').text().trim();
+        const subjectText = row.find('td:nth-child(7)').text().trim();
 
         const msg = `Are you sure you want to lock marks entry for:\n\n` +
             (classText ? `• Class: ${classText}\n` : '') +
@@ -2021,11 +2168,7 @@
             dataType: 'json',
             success: function(resp) {
                 toastr.success(resp.message || "Marks entry locked successfully.", "Locked");
-                const cell = btn.closest('.saved-row-actions');
-                cell.html(`
-                    <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') }}/${marksId}">Edit</a>
-                    <button type="button" class="btn btn-secondary m-1" disabled><i class="fa fa-lock"></i> Locked</button>
-                `);
+                updateBulkMarksEntryRow([marksId], true);
 
                 const currentOpenId = $('#marks_id').val();
                 if (String(currentOpenId) === String(marksId)) {
@@ -2065,11 +2208,7 @@
             dataType: 'json',
             success: function(resp) {
                 toastr.success(resp.message || "Marks entry unlocked successfully.", "Unlocked");
-                const cell = btn.closest('.saved-row-actions');
-                cell.html(`
-                    <a class="btn btn-primary m-1" href="{{ url($marksUrlPrefix . 'view-marks') }}/${marksId}">Edit</a>
-                    <button type="button" class="btn btn-dark m-1 lock-row-entry-btn" data-id="${marksId}"><i class="fa fa-lock"></i> Lock</button>
-                `);
+                updateBulkMarksEntryRow([marksId], false);
 
                 const currentOpenId = $('#marks_id').val();
                 if (String(currentOpenId) === String(marksId)) {

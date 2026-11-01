@@ -37,6 +37,8 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \App\Http\Middleware\SetDynamicDatabaseConnectionFromCookie::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\CheckMenuPermission::class . ':staff',
+            \App\Http\Middleware\EnsureStaffReportAccess::class,
         ],
 
         'api' => [

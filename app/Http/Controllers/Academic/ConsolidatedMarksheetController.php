@@ -72,6 +72,10 @@ class ConsolidatedMarksheetController extends Controller
         $examIds = collect($examMap)->filter()->pluck('id')->map(fn ($id) => (int) $id)->unique()->values()->all();
         $marks = $this->marksForStudents($students->pluck('id')->all(), (int) $class->id, $examIds);
         $subjectsByStudent = $this->assignedSubjectsForStudents($students, $class, $marks);
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        $subjectsByStudent = $subjectsByStudent->map(function ($subjects) use ($class, $reportAccess) {
+            return $reportAccess->filterSubjectData($subjects, $class->id, $class->section_name);
+        });
 
         $isTerm1 = $this->isTerm1Report($activeExam, $examMap, $marks);
         $showTerm2 = !$isTerm1;
@@ -231,10 +235,12 @@ class ConsolidatedMarksheetController extends Controller
 
     private function classes()
     {
-        return Classes::query()
+        return app(\App\Services\StaffReportAccessService::class)->filterClassOptions(
+            Classes::query()
             ->orderBy('class_name')
             ->orderBy('section_name')
-            ->get();
+            ->get()
+        );
     }
 
     private function classOptions()
@@ -250,12 +256,21 @@ class ConsolidatedMarksheetController extends Controller
     {
         $className = $request->filled('class_name') ? (string) $request->input('class_name') : null;
 
-        return $this->classes()
+        $sections = $this->classes()
             ->when($className, fn ($items) => $items->where('class_name', $className))
             ->pluck('section_name')
             ->filter()
             ->unique()
             ->values();
+
+        if ($className) {
+            $allowed = app(\App\Services\StaffReportAccessService::class)->allowedSections($className);
+            if (is_array($allowed)) {
+                return $sections->filter(fn ($section) => in_array($section, $allowed, true))->values();
+            }
+        }
+
+        return $sections;
     }
 
     private function sectionsByClass()

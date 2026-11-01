@@ -239,8 +239,16 @@ return [
                     [ 'title' => 'Student Collective Attendance', 'route' => 'academic/attendance-collective', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Manual Student Attendance', 'route' => 'academic/attendance-manual', 'roles' => ['Admin'] ],
                     // [ 'title' => 'Student-wise Attendance', 'route' => 'student-attandence-report', 'roles' => ['Admin'] ],
-                    [ 'title' => 'Monthly Attendance Summary', 'route' => 'academic/attendance-monthly-report', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
+                    [ 'title' => 'Monthly Attendance Summary', 'route' => 'academic/attendance-monthly-report', 'staff_route' => 'staff.attendance.monthly-report', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
+                    [ 'title' => 'Lock Monthly Attendance', 'route' => 'academic/attendance-monthly-report', 'staff_route' => 'staff.attendance.monthly-lock', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                     [ 'title' => 'Attendance Reports', 'route' => 'Attandencereports', 'roles' => ['Admin'] ],
+                ],
+            ],
+            [
+                'title' => 'Reports',
+                'icon' => 'i-Bar-Chart',
+                'children' => [
+                    [ 'title' => 'Caste-wise Strength Report', 'route' => 'academic.caste-wise-report', 'roles' => ['Admin'] ],
                 ],
             ],
             [

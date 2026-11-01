@@ -236,17 +236,17 @@ class RoleController extends Controller
             foreach ($menuPermissions as $key => $actions) {
                 if (!empty($actions['view']) || !empty($actions['add']) || !empty($actions['edit']) || !empty($actions['delete'])) {
                     $cleanPermissions[trim($key)] = [
-                        'view'   => !empty($actions['view']),
-                        'add'    => !empty($actions['add']),
-                        'edit'   => !empty($actions['edit']),
-                        'delete' => !empty($actions['delete']),
+                        'view'   => filter_var($actions['view'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'add'    => filter_var($actions['add'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'edit'   => filter_var($actions['edit'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'delete' => filter_var($actions['delete'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     ];
                 }
             }
         } elseif ($request->filled('menu')) {
             foreach ($request->input('menu', []) as $m) {
                 $cleanPermissions[trim($m)] = [
-                    'view' => true, 'add' => true, 'edit' => true, 'delete' => true
+                    'view' => true, 'add' => false, 'edit' => false, 'delete' => false
                 ];
             }
         }
@@ -255,6 +255,7 @@ class RoleController extends Controller
             ['role_id' => $role->id],
             ['menu' => json_encode($cleanPermissions)]
         );
+        \App\Services\PermissionService::forgetRolePermissions((int) $role->id);
     
         return redirect()->route('roles.index')
                         ->with('success','Role created successfully');
@@ -342,17 +343,17 @@ class RoleController extends Controller
             foreach ($menuPermissions as $key => $actions) {
                 if (!empty($actions['view']) || !empty($actions['add']) || !empty($actions['edit']) || !empty($actions['delete'])) {
                     $cleanPermissions[trim($key)] = [
-                        'view'   => !empty($actions['view']),
-                        'add'    => !empty($actions['add']),
-                        'edit'   => !empty($actions['edit']),
-                        'delete' => !empty($actions['delete']),
+                        'view'   => filter_var($actions['view'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'add'    => filter_var($actions['add'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'edit'   => filter_var($actions['edit'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                        'delete' => filter_var($actions['delete'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     ];
                 }
             }
         } elseif ($request->filled('menu')) {
             foreach ($request->input('menu', []) as $m) {
                 $cleanPermissions[trim($m)] = [
-                    'view' => true, 'add' => true, 'edit' => true, 'delete' => true
+                    'view' => true, 'add' => false, 'edit' => false, 'delete' => false
                 ];
             }
         }
@@ -361,6 +362,7 @@ class RoleController extends Controller
             ['role_id' => $id],
             ['menu' => json_encode($cleanPermissions)]
         );
+        \App\Services\PermissionService::forgetRolePermissions((int) $id);
 
         return redirect()->route('roles.index')
                         ->with('success','Role updated successfully');

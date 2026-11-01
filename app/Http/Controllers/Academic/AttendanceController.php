@@ -39,7 +39,7 @@ class AttendanceController extends Controller
         $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
         $isStaffUser = $this->isStaffAttendanceUser();
         if ($isStaffUser && $filters['class_id'] && $filters['section_name']
-            && !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
+            && !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])) {
             abort(403, 'You are not allowed to view students for this class/section.');
         }
         $students = $filters['class_id'] && (!$isStaffUser || $filters['section_name'])
@@ -60,7 +60,7 @@ class AttendanceController extends Controller
             $filters['section_name'] = $editingAttendance->section_name;
             $filters['academic_session'] = $editingAttendance->academic_session;
             if ($isStaffUser) {
-                if (!$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
+                if (!$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])) {
                     abort(403, 'You are not allowed to view students for this class/section.');
                 }
                 $students = $this->studentsForClass($filters['class_id'], $filters['section_name'], true)->get();
@@ -109,7 +109,7 @@ class AttendanceController extends Controller
             if (!$request->filled('section_name')) {
                 return response()->json([]);
             }
-            if (!$this->canStaffAccessClassSection($request->input('class_id'), $request->input('section_name'), true)) {
+            if (!$this->canStaffAccessClassSection($request->input('class_id'), $request->input('section_name'))) {
                 abort(403, 'You are not allowed to view students for this class/section.');
             }
         }
@@ -160,7 +160,7 @@ class AttendanceController extends Controller
             }
         }
 
-        if (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'], $this->isStaffAttendanceUser())) {
+        if (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'])) {
             abort(403, 'You are not allowed to mark attendance for this class/section.');
         }
 
@@ -297,9 +297,14 @@ class AttendanceController extends Controller
         $students = $this->studentOptions($filters['class_id'], $filters['section_name'], $studentSearch);
 
         $selectedStudent = $filters['student_id'] ? Student_registration::find($filters['student_id']) : null;
+        if ($this->isStaffAttendanceUser() && $selectedStudent
+            && !$students->contains(fn ($student) => (int) $student->id === (int) $selectedStudent->id)) {
+            $selectedStudent = null;
+        }
         $historyQuery = AttendanceDetail::with(['attendance.className', 'student'])
             ->join('academic_attendance', 'academic_attendance_details.attendance_id', '=', 'academic_attendance.id')
             ->where('academic_attendance.is_delete', 0)
+            ->whereIn('academic_attendance_details.attendance_id', $this->accessibleAttendanceQuery()->select('id'))
             ->whereHas('attendance', function ($query) use ($filters) {
                 $this->applyAttendanceFilters($query, $filters);
             })
@@ -533,6 +538,11 @@ class AttendanceController extends Controller
         $editingCollective = null;
         if ($request->integer('edit_collective_id')) {
             $editingCollective = AttendanceCollective::where('is_delete', 0)->findOrFail($request->integer('edit_collective_id'));
+            abort_unless(
+                $this->canStaffAccessClassSection($editingCollective->class_id, $editingCollective->section_name),
+                403,
+                'You are not allowed to view attendance for this class/section.'
+            );
             $filters = [
                 'teacher_id' => $editingCollective->teacher_id,
                 'class_id' => $editingCollective->class_id,
@@ -616,6 +626,11 @@ class AttendanceController extends Controller
             ->latest('id')
             ->limit(30)
             ->get();
+        if ($this->isStaffAttendanceUser()) {
+            $savedCollectives = $savedCollectives->filter(fn ($collective) =>
+                $this->canStaffAccessClassSection($collective->class_id, $collective->section_name)
+            )->values();
+        }
 
         return view('backend.AcademicsModules.attendance_collective', compact(
             'filters',
@@ -714,6 +729,11 @@ class AttendanceController extends Controller
         if (!$model) {
             abort(404, 'Attendance collective record not found.');
         }
+        abort_unless(
+            $this->canStaffAccessClassSection($model->class_id, $model->section_name),
+            403,
+            'You are not allowed to edit attendance for this class/section.'
+        );
 
         $model->update(['is_delete' => 1]);
 
@@ -726,6 +746,11 @@ class AttendanceController extends Controller
         if (!$model) {
             abort(404, 'Attendance collective record not found.');
         }
+        abort_unless(
+            $this->canStaffAccessClassSection($model->class_id, $model->section_name),
+            403,
+            'You are not allowed to view attendance for this class/section.'
+        );
 
         $model->load('details', 'teacher', 'className');
 
@@ -1266,14 +1291,15 @@ class AttendanceController extends Controller
         };
     }
 
-    private function classes()
+    private function classes(bool $classTeacherOnly = false)
     {
         $query = Classes::query()->orderBy('class_name');
 
         if ($this->isStaffAttendanceUser()) {
-            $classIds = $this->accessibleTeacherSubjects(true)->pluck('class_id')->unique()->values();
+            $classIds = $this->accessibleTeacherSubjects($classTeacherOnly)->pluck('class_id')->unique()->values();
             $classNames = Classes::query()->whereIn('id', $classIds)->pluck('class_name')
                 ->merge(Classname::query()->whereIn('id', $classIds)->pluck('class_name'))
+                ->merge($classIds)
                 ->filter()
                 ->unique();
 
@@ -1283,7 +1309,10 @@ class AttendanceController extends Controller
             });
         }
 
-        return $query->get()->unique('class_name')->values();
+        return app(\App\Services\StaffReportAccessService::class)
+            ->filterClassOptions($query->get())
+            ->unique('class_name')
+            ->values();
     }
 
     private function resolveClass($classId)
@@ -1303,7 +1332,7 @@ class AttendanceController extends Controller
         return $class;
     }
 
-    private function sections($classId)
+    private function sections($classId, bool $classTeacherOnly = false)
     {
         if (!$classId) {
             return collect();
@@ -1344,7 +1373,7 @@ class AttendanceController extends Controller
 
         if ($this->isStaffAttendanceUser()) {
             $classIds = $classRows->pluck('id')->push($classId)->unique()->values();
-            $allowedSections = $this->accessibleTeacherSubjects(true)
+            $allowedSections = $this->accessibleTeacherSubjects($classTeacherOnly)
                 ->where(function ($q) use ($classIds, $className, $classId) {
                     $q->whereIn('class_id', $classIds)
                         ->orWhere('class_id', $className)
@@ -1354,7 +1383,7 @@ class AttendanceController extends Controller
                 ->filter()
                 ->values();
 
-            if ($allowedSections->isNotEmpty() && !$allowedSections->contains('All')) {
+            if (!$allowedSections->contains('All')) {
                 $sortedSections = $sortedSections->filter(fn ($s) => $allowedSections->contains($s))->values();
             }
         }
@@ -1419,7 +1448,24 @@ class AttendanceController extends Controller
 
     private function studentOptions($classId, ?string $sectionName, string $search)
     {
-        return Student_registration::query()
+        $query = Student_registration::query();
+        if ($this->isStaffAttendanceUser() && !$classId) {
+            $studentIds = $this->accessibleTeacherSubjects()
+                ->get(['class_id', 'section_name'])
+                ->flatMap(function ($assignment) {
+                    $section = trim((string) $assignment->section_name);
+                    return $this->studentsForClass(
+                        $assignment->class_id,
+                        strcasecmp($section, 'All') === 0 ? null : $section,
+                        true
+                    )->pluck('id');
+                })
+                ->unique()
+                ->values();
+            $query->whereIn('id', $studentIds->isNotEmpty() ? $studentIds : [0]);
+        }
+
+        return $query
             ->when($classId, function ($query) use ($classId, $sectionName) {
                 $ids = $this->studentsForClass($classId, $sectionName, $this->isStaffAttendanceUser())->pluck('id');
                 $query->whereIn('id', $ids);
@@ -1602,7 +1648,12 @@ class AttendanceController extends Controller
     private function isStaffAttendanceUser(): bool
     {
         return Auth::guard('staff')->check()
-            && (!Auth::guard('web')->check() || request()->routeIs('staff.attendance.*'));
+            && (
+                request()->cookie('auth_portal') === 'staff'
+                || (request()->hasSession() && request()->session()->get('auth_portal') === 'staff')
+                || request()->is('staff', 'staff/*')
+                || !Auth::guard('web')->check()
+            );
     }
 
     private function isMonthLockedForAttendance(Attendance $attendance): bool
@@ -1631,7 +1682,7 @@ class AttendanceController extends Controller
         }
 
         if ($classTeacherOnly) {
-            $query->where('role', 'Class Teacher');
+            $query->whereRaw('LOWER(TRIM(role)) = ?', ['class teacher']);
         }
 
         return $query;

@@ -55,6 +55,10 @@ class AppServiceProvider extends ServiceProvider
             return PermissionService::can('add', $module);
         });
 
+        Blade::if('canCreate', function ($module = null) {
+            return PermissionService::can('create', $module);
+        });
+
         Blade::if('canEdit', function ($module = null) {
             return PermissionService::can('edit', $module);
         });

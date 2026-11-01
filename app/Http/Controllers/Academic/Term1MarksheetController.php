@@ -20,6 +20,7 @@ class Term1MarksheetController extends Controller
 {
     public function index(Request $request)
     {
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
         $generatedSearch = trim((string) $request->query('generated_search', ''));
         $generatedClassName = $request->query('generated_class_name') ?: null;
         $generatedClassId = $request->integer('generated_class_id') ?: null;
@@ -41,6 +42,10 @@ class Term1MarksheetController extends Controller
 
         $generatedMarksheets = Marksheet::query()
             ->whereIn('id', !empty($latestMarksheetIds) ? $latestMarksheetIds : [0])
+            ->when($reportAccess->isStaffUser(), function ($query) use ($reportAccess) {
+                $classIds = $reportAccess->filterClassOptions(Classes::query()->get())->pluck('id')->all();
+                $query->whereIn('class_id', $classIds ?: [0]);
+            })
             ->when($generatedSearch !== '', function ($query) use ($generatedSearch) {
                 $like = '%' . str_replace(' ', '%', $generatedSearch) . '%';
                 $query->where(function ($inner) use ($like) {
@@ -60,10 +65,12 @@ class Term1MarksheetController extends Controller
         $classes = Classname::where('is_delete', 0)
             ->whereNotIn('class_name', ['Test', 'testing', '12th out', 'xyz'])
             ->orderBy('id')
-            ->get(['id', 'class_name']);
+            ->get(['id', 'class_name'])
+            ->filter(fn ($class) => $reportAccess->canAccess($class->class_name))
+            ->values();
 
         // 2. Sections mapped by class
-        $sectionsByClass = Classes::query()
+        $sectionsByClass = $reportAccess->filterClassOptions(Classes::query()
             ->where(function ($q) {
                 if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
@@ -72,7 +79,7 @@ class Term1MarksheetController extends Controller
             ->whereNotNull('section_name')
             ->where('section_name', '!=', '')
             ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
-            ->get()
+            ->get())
             ->groupBy('class_name')
             ->map(function ($items) {
                 return $items->pluck('section_name')->unique()->values();
@@ -111,7 +118,7 @@ class Term1MarksheetController extends Controller
             foreach ($group as $examItem) {
                 $cName = optional($examItem->classInfo)->class_name;
                 $cId = (int) $examItem->class_id;
-                if ($cName || $cId) {
+                if (($cName || $cId) && $reportAccess->canAccess($cId ?: $cName)) {
                     $classesData[] = [
                         'exam_id' => (int) $examItem->id,
                         'class_id' => $cId,
@@ -568,6 +575,19 @@ class Term1MarksheetController extends Controller
 
         $subjects = $this->subjectsFor($classId, $studentId);
         $marks = $studentId ? $this->marksForStudent($studentId, $classId, $examId) : collect();
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if ($reportAccess->isStaffUser() && $class) {
+            $section = $student->section_name ?? $class->section_name ?? $request->input('section_name');
+            $studentClass = $student->class_id ?? $student->class_name ?? $class->id;
+            abort_unless(
+                $reportAccess->canAccess($class->id, $section)
+                    && $reportAccess->canAccess($studentClass, $section),
+                403,
+                'You are not authorized to access reports for this class, section, or subject.'
+            );
+            $subjects = $reportAccess->filterSubjectData($subjects, $class->id, $section);
+            $marks = $reportAccess->filterSubjectData($marks, $class->id, $section, 'subject_id');
+        }
         $examMap = $this->marksheetExamMap($classId, $exam);
         $rollNo = $this->rollNoFor($studentId, $classId, $examId);
 
@@ -1112,7 +1132,7 @@ class Term1MarksheetController extends Controller
             }
         }
 
-        return DB::connection('dynamic')
+        $students = DB::connection('dynamic')
             ->table('student_registration')
             ->where(function ($q) {
                 $q->where('is_archived', 0)->orWhereNull('is_archived');
@@ -1137,6 +1157,20 @@ class Term1MarksheetController extends Controller
             })
             ->orderBy('student_name')
             ->get();
+
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if (!$reportAccess->isStaffUser()) {
+            return $students;
+        }
+
+        return $students->filter(function ($student) use ($classId, $className, $sectionName, $reportAccess) {
+            $studentClass = $student->class_id ?: $student->class_name ?: $classId ?: $className;
+            $studentClassRow = !empty($student->class_id) && is_numeric($student->class_id)
+                ? Classes::query()->find((int) $student->class_id)
+                : null;
+            $studentSection = $student->section_name ?: $studentClassRow?->section_name ?: $sectionName;
+            return $studentClass && $studentSection && $reportAccess->canAccess($studentClass, $studentSection);
+        })->values();
     }
 
     private function resolveClassIdForStudent($student): ?int

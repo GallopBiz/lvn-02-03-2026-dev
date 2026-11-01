@@ -22,6 +22,7 @@ class SeniorMarksheetController extends Controller
 
     public function index(Request $request)
     {
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
         $generatedSearch = trim((string) $request->query('generated_search', ''));
         $generatedClassId = $request->integer('generated_class_id') ?: null;
         $generatedExamId = $request->integer('generated_exam_id') ?: null;
@@ -30,7 +31,7 @@ class SeniorMarksheetController extends Controller
         $selectedExamId = $request->integer('exam_id') ?: null;
 
         // Only Class 11 and 12
-        $classes = Classes::query()
+        $classes = $reportAccess->filterClassOptions(Classes::query()
             ->where(function ($q) {
                 if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
@@ -42,11 +43,11 @@ class SeniorMarksheetController extends Controller
             })
             ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
             ->orderBy('class_name')
-            ->get()
+            ->get())
             ->unique('class_name')
             ->values();
 
-        $sectionsByClass = Classes::query()
+        $sectionsByClass = $reportAccess->filterClassOptions(Classes::query()
             ->where(function ($q) {
                 if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
@@ -60,7 +61,7 @@ class SeniorMarksheetController extends Controller
             ->where('section_name', '!=', '')
             ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
             ->orderBy('section_name')
-            ->get()
+            ->get())
             ->groupBy('class_name')
             ->map(function ($items) {
                 return $items->pluck('section_name')->unique()->values();
@@ -108,14 +109,14 @@ class SeniorMarksheetController extends Controller
 
         $groupedExams = $rawExams->groupBy(function ($exam) {
             return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
-        })->map(function ($group) {
+        })->map(function ($group) use ($reportAccess) {
             $first = $group->first();
 
             $classesData = [];
             foreach ($group as $examItem) {
                 $cName = optional($examItem->classInfo)->class_name;
                 $cId = (int) $examItem->class_id;
-                if ($cName || $cId) {
+                if (($cName || $cId) && $reportAccess->canAccess($cId ?: $cName)) {
                     $classesData[] = [
                         'exam_id' => (int) $examItem->id,
                         'class_id' => (int) $examItem->class_id,
@@ -193,6 +194,10 @@ class SeniorMarksheetController extends Controller
 
         $generatedMarksheets = Marksheet::query()
             ->whereIn('id', !empty($latestMarksheetIds) ? $latestMarksheetIds : [0])
+            ->when($reportAccess->isStaffUser(), function ($query) use ($reportAccess) {
+                $classIds = $reportAccess->filterClassOptions(Classes::query()->get())->pluck('id')->all();
+                $query->whereIn('class_id', $classIds ?: [0]);
+            })
             ->where(function ($query) {
                 $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.marksheet_type')) = 'senior_11_12'")
                     ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.print_data.marksheet_type')) = 'senior_11_12'");
@@ -496,7 +501,9 @@ class SeniorMarksheetController extends Controller
         // Check if live marks exist when snapshot had no marks or missing annual marks
         if ($studentId && $classId) {
             $livePrintData = $this->buildPrintData($classId, $examId, $studentId, $request);
-            if (!empty($livePrintData['has_marks']) && empty($printData['has_marks'])) {
+            if (app(\App\Services\StaffReportAccessService::class)->isStaffUser()) {
+                $printData = $livePrintData;
+            } elseif (!empty($livePrintData['has_marks']) && empty($printData['has_marks'])) {
                 $printData = $livePrintData;
             } elseif (!empty($livePrintData['has_marks']) && !empty($printData['rows'])) {
                 $snapshotHasAnnual = false;
@@ -668,6 +675,19 @@ class SeniorMarksheetController extends Controller
 
         $subjects = $this->subjectsFor($classId, $studentId);
         $marks = $studentId ? $this->marksForStudent($studentId, $classId, $examId) : collect();
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if ($reportAccess->isStaffUser() && $class) {
+            $section = $student->section_name ?? $class->section_name ?? $request->input('section_name');
+            $studentClass = $student->class_id ?? $student->class_name ?? $class->id;
+            abort_unless(
+                $reportAccess->canAccess($class->id, $section)
+                    && $reportAccess->canAccess($studentClass, $section),
+                403,
+                'You are not authorized to access reports for this class, section, or subject.'
+            );
+            $subjects = $reportAccess->filterSubjectData($subjects, $class->id, $section);
+            $marks = $reportAccess->filterSubjectData($marks, $class->id, $section, 'subject_id');
+        }
 
         // Map exams for Class 11/12
         $examMap = $this->seniorExamMap($classId);
@@ -1305,7 +1325,20 @@ class SeniorMarksheetController extends Controller
             });
         }
 
-        return $query->orderBy('student_name')->get();
+        $students = $query->orderBy('student_name')->get();
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if (!$reportAccess->isStaffUser()) {
+            return $students;
+        }
+
+        return $students->filter(function ($student) use ($classId, $className, $sectionName, $reportAccess) {
+            $studentClass = $student->class_id ?: $student->class_name ?: $classId ?: $className;
+            $studentClassRow = !empty($student->class_id) && is_numeric($student->class_id)
+                ? Classes::query()->find((int) $student->class_id)
+                : null;
+            $studentSection = $student->section_name ?: $studentClassRow?->section_name ?: $sectionName;
+            return $studentClass && $studentSection && $reportAccess->canAccess($studentClass, $studentSection);
+        })->values();
     }
 
     private function studentById(int $id)

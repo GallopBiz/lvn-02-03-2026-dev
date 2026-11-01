@@ -26,13 +26,14 @@ class MarksheetController extends Controller
         $selectedSectionName = trim((string) $request->input('section_name', '')) ?: null;
         $selectedExamId = $request->integer('exam_id') ?: null;
 
-        $classes = Classes::query()
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        $classes = $reportAccess->filterClassOptions(Classes::query()
             ->orderBy('class_name')
-            ->get()
+            ->get())
             ->unique('class_name')
             ->values();
 
-        $sectionsByClass = Classes::query()
+        $sectionsByClass = $reportAccess->filterClassOptions(Classes::query()
             ->where(function ($q) {
                 if (Schema::connection('dynamic')->hasColumn('classes', 'is_delete')) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
@@ -43,6 +44,7 @@ class MarksheetController extends Controller
             ->whereNotIn('section_name', ['testing', 'test Section', '12th out section'])
             ->orderBy('section_name')
             ->get()
+        )
             ->groupBy('class_name')
             ->map(function ($items) {
                 return $items->pluck('section_name')->unique()->values();
@@ -59,6 +61,7 @@ class MarksheetController extends Controller
             if ($roman !== '') {
                 $augmentedSections[$roman] = $secs;
             }
+
         }
         foreach ($classes as $cls) {
             $cName = (string) $cls->class_name;
@@ -73,14 +76,14 @@ class MarksheetController extends Controller
 
         $groupedExams = $rawExams->groupBy(function ($exam) {
             return $exam->exam_group_id ?: ($exam->exam_name . '|' . $exam->exam_type);
-        })->map(function ($group) {
+        })->map(function ($group) use ($reportAccess) {
             $first = $group->first();
 
             $classesData = [];
             foreach ($group as $examItem) {
                 $cName = optional($examItem->classInfo)->class_name;
                 $cId = (int) $examItem->class_id;
-                if ($cName || $cId) {
+                if (($cName || $cId) && $reportAccess->canAccess($cId ?: $cName)) {
                     $classesData[] = [
                         'exam_id' => (int) $examItem->id,
                         'class_id' => (int) $examItem->class_id,
@@ -168,6 +171,10 @@ class MarksheetController extends Controller
 
         $generatedMarksheets = Marksheet::query()
             ->whereIn('id', !empty($latestMarksheetIds) ? $latestMarksheetIds : [0])
+            ->when($reportAccess->isStaffUser(), function ($query) use ($reportAccess) {
+                $classIds = $reportAccess->filterClassOptions(Classes::query()->get())->pluck('id')->all();
+                $query->whereIn('class_id', $classIds ?: [0]);
+            })
             ->when($generatedSearch !== '', function ($query) use ($generatedSearch) {
                 $like = '%' . str_replace(' ', '%', $generatedSearch) . '%';
                 $query->where(function ($inner) use ($like) {
@@ -520,7 +527,10 @@ class MarksheetController extends Controller
                 $liveRequest
             );
 
-            if (!empty($livePrintData['is_blank']) && !empty($printData['rows']) && empty($printData['is_blank'])) {
+            if (!app(\App\Services\StaffReportAccessService::class)->isStaffUser()
+                && !empty($livePrintData['is_blank'])
+                && !empty($printData['rows'])
+                && empty($printData['is_blank'])) {
                 $printData['date'] = $formattedDate;
                 if (!empty($livePrintData['attendance']) && $livePrintData['attendance'] !== '/') {
                     $printData['attendance'] = $livePrintData['attendance'];
@@ -619,6 +629,20 @@ class MarksheetController extends Controller
                         }
                     }
                 }
+                $reportAccess = app(\App\Services\StaffReportAccessService::class);
+                if ($reportAccess->isStaffUser()) {
+                    $student = $this->studentById((int) $marksheet->student_id);
+                    $class = Classes::query()->find((int) $marksheet->class_id);
+                    $section = $student->section_name ?? $class?->section_name;
+                    abort_unless(
+                        $reportAccess->canAccess((int) $marksheet->class_id, $section),
+                        403,
+                        'You are not authorized to access reports for this class, section, or subject.'
+                    );
+                    $printData['rows'] = $reportAccess
+                        ->filterSubjectData($printData['rows'] ?? [], (int) $marksheet->class_id, $section, 'subject_id')
+                        ->all();
+                }
             }
         }
 
@@ -703,6 +727,19 @@ class MarksheetController extends Controller
         $exam = $examId ? Exam::query()->find($examId) : null;
         $subjects = $this->subjectsFor($classId, $studentId);
         $marks = $studentId ? $this->marksForStudent($studentId, $classId, $examId, $layout) : collect();
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if ($reportAccess->isStaffUser() && $class) {
+            $section = $student->section_name ?? $class->section_name ?? $request->input('section_name');
+            $studentClass = $student->class_id ?? $student->class_name ?? $class->id;
+            abort_unless(
+                $reportAccess->canAccess($class->id, $section)
+                    && $reportAccess->canAccess($studentClass, $section),
+                403,
+                'You are not authorized to access reports for this class, section, or subject.'
+            );
+            $subjects = $reportAccess->filterSubjectData($subjects, $class->id, $section);
+            $marks = $reportAccess->filterSubjectData($marks, $class->id, $section, 'subject_id');
+        }
         $examMap = $this->marksheetExamMap($classId, $layout, $exam);
         $rollNo = $this->rollNoFor($studentId, $classId, $examId);
 
@@ -1369,7 +1406,7 @@ class MarksheetController extends Controller
             $sectionClassIds = $secQuery->pluck('id')->map(fn ($id) => (string) $id)->all();
         }
 
-        return DB::connection('dynamic')
+        $students = DB::connection('dynamic')
             ->table('student_registration')
             ->where(function ($q) {
                 $q->where('is_archived', 0)->orWhereNull('is_archived');
@@ -1398,6 +1435,20 @@ class MarksheetController extends Controller
             ->orderBy('student_name')
             ->limit(500)
             ->get();
+
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        if (!$reportAccess->isStaffUser()) {
+            return $students;
+        }
+
+        return $students->filter(function ($student) use ($sectionName, $classId, $className, $reportAccess) {
+            $studentClass = $student->class_id ?: $student->class_name ?: $classId ?: $className;
+            $studentClassRow = !empty($student->class_id) && is_numeric($student->class_id)
+                ? Classes::query()->find((int) $student->class_id)
+                : null;
+            $studentSection = $student->section_name ?: $studentClassRow?->section_name ?: $sectionName;
+            return $studentClass && $studentSection && $reportAccess->canAccess($studentClass, $studentSection);
+        })->values();
     }
 
     private function studentById(int $studentId)
@@ -2603,4 +2654,3 @@ class MarksheetController extends Controller
         }
     }
 }
-

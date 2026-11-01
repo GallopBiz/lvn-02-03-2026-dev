@@ -208,6 +208,7 @@
                             <button class="btn btn-warning" type="submit" onclick="return confirm('Unlock this attendance?');">Unlock</button>
                         </form>
                     @endif
+                    @canDelete('Academic > Attendance > Daily Attendance')
                     @if(!$editingAttendance->is_locked)
                         <form method="POST" action="{{ route('dailyattandence.delete', $editingAttendance) }}" class="mb-2">
                             @csrf
@@ -215,6 +216,7 @@
                             <button class="btn btn-danger" type="submit" onclick="return confirm('Delete this attendance entry?');">Delete</button>
                         </form>
                     @endif
+                    @endcanDelete
                 </div>
             </div>
         </div>
@@ -259,6 +261,7 @@
                                                 <button class="btn btn-sm btn-warning" type="submit" onclick="return confirm('Unlock this attendance?');">Unlock</button>
                                             </form>
                                         @endif
+                                        @canDelete('Academic > Attendance > Daily Attendance')
                                         @if(!$item->is_locked)
                                             <form method="POST" action="{{ route('dailyattandence.delete', $item) }}" class="mb-1">
                                                 @csrf
@@ -266,6 +269,7 @@
                                                 <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete this attendance entry?');">Delete</button>
                                             </form>
                                         @endif
+                                        @endcanDelete
                                     </div>
                                 </td>
                             </tr>
