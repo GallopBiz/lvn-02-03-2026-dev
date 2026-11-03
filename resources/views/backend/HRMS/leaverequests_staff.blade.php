@@ -202,8 +202,13 @@
             },
             body: JSON.stringify({}),
         })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+                return response.json();
+            })
             .then(data => {
+                if (!Array.isArray(data)) throw new Error('Invalid leave type response');
+
                 leaveTypeSelect.innerHTML = '<option value="">Select Leave Type</option>';
                 data.forEach(leaveType => {
                     const option = document.createElement('option');
@@ -212,11 +217,20 @@
                     leaveTypeSelect.appendChild(option);
                 });
             })
-            .catch(error => console.error('Error fetching leave types:', error));
+            .catch(error => {
+                console.error('Error fetching leave types:', error);
+                leaveTypeSelect.innerHTML = '<option value="">Unable to load leave types</option>';
+            });
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+    function initializeStaffLeaveTypes() {
         loadStaffLeaveTypes();
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeStaffLeaveTypes, { once: true });
+    } else {
+        initializeStaffLeaveTypes();
+    }
 </script>
 @endsection

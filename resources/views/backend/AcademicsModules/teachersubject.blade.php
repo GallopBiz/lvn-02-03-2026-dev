@@ -217,6 +217,9 @@ $i = 0;
                             </select>
                         </td>
                     </div>
+                    <div class="col-md-12">
+                        <div id="existing-assignment-info" class="alert alert-info d-none mb-3" role="status" aria-live="polite"></div>
+                    </div>
                     {{-- <div class="row"> --}}
 
                         <!--
@@ -530,6 +533,66 @@ $i = 0;
 
 
     document.addEventListener("DOMContentLoaded", function() {
+        const existingAssignments = @json($existingAssignments);
+        const currentAssignmentId = @json($currentAssignmentId);
+        const assignmentInfo = document.getElementById('existing-assignment-info');
+        const classSelect = document.getElementById('class_name');
+        const sectionSelect = document.getElementById('section_name');
+        const subjectSelect = document.getElementById('subject_name');
+
+        function showExistingAssignments() {
+            const classId = classSelect.value;
+            const subjectId = subjectSelect.value;
+            const sectionName = sectionSelect.value;
+            const matches = existingAssignments.filter(assignment => {
+                if (!classId || assignment.class_id !== classId || assignment.id === currentAssignmentId) {
+                    return false;
+                }
+
+                if (subjectId && assignment.subject_id !== subjectId) {
+                    return false;
+                }
+
+                return !sectionName || sectionName === 'All'
+                    || assignment.section_name === sectionName
+                    || assignment.section_name === 'All';
+            });
+
+            assignmentInfo.replaceChildren();
+            if (!classId || matches.length === 0) {
+                assignmentInfo.classList.add('d-none');
+                return;
+            }
+
+            const heading = document.createElement('strong');
+            heading.textContent = subjectId || sectionName
+                ? 'Existing assignment for this selection:'
+                : 'Existing assignments for this class:';
+            assignmentInfo.appendChild(heading);
+
+            const list = document.createElement('ul');
+            list.className = 'mb-0 mt-2';
+            matches.forEach(assignment => {
+                const item = document.createElement('li');
+                const details = [
+                    assignment.class_name ? `Class ${assignment.class_name}` : '',
+                    assignment.section_name ? `Section ${assignment.section_name}` : '',
+                    assignment.subject_name ? `Subject ${assignment.subject_name}` : '',
+                    assignment.teacher_name ? `Teacher ${assignment.teacher_name}` : 'Teacher not found',
+                    assignment.role || '',
+                ].filter(Boolean);
+                item.textContent = details.join(' - ');
+                list.appendChild(item);
+            });
+            assignmentInfo.appendChild(list);
+            assignmentInfo.classList.remove('d-none');
+        }
+
+        classSelect.addEventListener('change', showExistingAssignments);
+        sectionSelect.addEventListener('change', showExistingAssignments);
+        subjectSelect.addEventListener('change', showExistingAssignments);
+        showExistingAssignments();
+
         function fetchSubjects(classId){
             $.get('{{ route("fetchSubjectsForTeacher") }}', { class_id: classId, _token: '{{ csrf_token() }}' }, function (data) {
                 let subjectOptions = `<option value="">--Please Select--</option>`;
@@ -537,6 +600,7 @@ $i = 0;
                     subjectOptions += `<option value="${subject.id}">${subject.subject_name}</option>`;
                 });
                 $('#subject_name').html(subjectOptions).trigger('change');
+                showExistingAssignments();
             });
         }
         function showSubject() {

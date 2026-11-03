@@ -971,8 +971,7 @@
           $('input[name="enquiryno"]').val(response.inq_str_data.enquiryno);
           $('select[name="application_for"]').val(response.inq_str_data.admission_type);
           $('select[name="session"]').val(response.inq_data.session_name);
-          $('input[name="formno"]').val(response.inq_data.form_number);
-          $('input[name="enquiryno"]').val(response.inq_data.form_number);
+          $('input[name="formno"]').val(response.inq_str_data.formno || response.inq_data.form_number);
           if (response.inq_data.next_year === '1') {
             $('input[name="next_year"]').prop('checked', true);
           } else {

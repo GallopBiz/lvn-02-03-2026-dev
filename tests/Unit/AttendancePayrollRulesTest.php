@@ -66,7 +66,7 @@ class AttendancePayrollRulesTest extends TestCase
         $this->assertSame(['late_events' => 0, 'absence_days' => 1.0], $result);
     }
 
-    public function test_first_half_leave_uses_second_half_reporting_time_and_grace(): void
+    public function test_approved_first_half_leave_uses_the_normal_shift_start_late_threshold(): void
     {
         [$start, $end] = $this->shiftTimes();
         $firstHalfRequest = ['status' => 'approved', 'half_day_type' => 'first'];
@@ -74,8 +74,8 @@ class AttendancePayrollRulesTest extends TestCase
         $result = AttendancePayrollRules::evaluateDay(
             $start,
             $end,
-            60,
-            strtotime('2026-03-02 14:01:00'),
+            15,
+            strtotime('2026-03-02 09:30:00'),
             strtotime('2026-03-02 17:00:00'),
             $firstHalfRequest,
             false
@@ -84,7 +84,7 @@ class AttendancePayrollRulesTest extends TestCase
         $this->assertSame(['late_events' => 1, 'absence_days' => 0.0], $result);
     }
 
-    public function test_first_half_leave_arrival_within_grace_is_not_late(): void
+    public function test_approved_first_half_leave_arrival_within_threshold_is_not_late(): void
     {
         [$start, $end] = $this->shiftTimes();
         $firstHalfRequest = ['status' => 'approved', 'half_day_type' => 'first'];
@@ -92,14 +92,61 @@ class AttendancePayrollRulesTest extends TestCase
         $result = AttendancePayrollRules::evaluateDay(
             $start,
             $end,
-            60,
-            strtotime('2026-03-02 14:00:00'),
+            15,
+            strtotime('2026-03-02 09:15:00'),
             strtotime('2026-03-02 17:00:00'),
             $firstHalfRequest,
             false
         );
 
         $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
+    }
+
+    public function test_approved_first_half_arrival_over_one_hour_keeps_existing_no_late_event_rule(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $result = AttendancePayrollRules::evaluateDay(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 10:01:00'),
+            strtotime('2026-03-02 17:00:00'),
+            ['status' => 'approved', 'half_day_type' => 'first'],
+            false
+        );
+
+        $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
+    }
+
+    /**
+     * @dataProvider nonApprovedHalfDayRequests
+     */
+    public function test_pending_or_rejected_half_day_request_keeps_normal_late_calculation(string $status, string $halfDayType): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $result = AttendancePayrollRules::evaluateDay(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 09:30:00'),
+            strtotime('2026-03-02 17:00:00'),
+            ['status' => $status, 'half_day_type' => $halfDayType],
+            false
+        );
+
+        $this->assertSame(['late_events' => 1, 'absence_days' => 0.0], $result);
+    }
+
+    public static function nonApprovedHalfDayRequests(): array
+    {
+        return [
+            'pending first half' => ['pending', 'first'],
+            'rejected first half' => ['rejected', 'first'],
+            'pending second half' => ['pending', 'second'],
+            'rejected second half' => ['rejected', 'second'],
+        ];
     }
 
     public function test_approved_second_half_leave_does_not_count_early_leaving(): void

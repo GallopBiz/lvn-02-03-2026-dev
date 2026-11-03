@@ -18,17 +18,19 @@ class AttendancePayrollRules
         }
 
         if ($halfDayRequest) {
-            $lateEvents = 0;
             if (
-                $halfDayRequest['status'] === 'approved' &&
-                $halfDayRequest['half_day_type'] === 'first' &&
-                $inTime
+                $halfDayRequest['status'] === 'approved'
+                && $halfDayRequest['half_day_type'] === 'second'
             ) {
-                $secondHalfStart = $shiftStart + (int) floor(($shiftEnd - $shiftStart) / 2);
-                if ($inTime > $secondHalfStart + 3600) {
-                    $lateEvents = 1;
-                }
+                return ['late_events' => 0, 'absence_days' => 0.0];
             }
+
+            $lateMinutes = $inTime ? ($inTime - $shiftStart) / 60 : 0;
+            $lateEvents = $lateMinutes > 0
+                && $lateMinutes <= 60
+                && $lateMinutes > $lateComingThreshold
+                ? 1
+                : 0;
 
             return ['late_events' => $lateEvents, 'absence_days' => 0.0];
         }

@@ -1269,7 +1269,9 @@ Route::post('save-leaverequests',[LeaverequestsController::class, 'create']);
 Route::get('view-leaverequests/{id}', [LeaverequestsController::class, 'view']);
 Route::post('store-leaverequests', [LeaverequestsController::class, 'store']);
 Route::get('delete-leaverequests/{id}', [LeaverequestsController::class, 'leaverequests_delete']);
-Route::post('/get-leave-types', [LeaverequestsController::class, 'getLeaveTypesByEmployee'])->name('getLeaveTypes');
+Route::post('/get-leave-types', [LeaverequestsController::class, 'getLeaveTypesByEmployee'])
+    ->middleware('check.permission:view,HRMS > Leave Management > Leave Requests')
+    ->name('getLeaveTypes');
 
 Route::get('employeeleaves',[EmployeeLeavesController::class, 'index'])->name('employeeleaves');
 Route::get('employeeleaves/export', [EmployeeLeavesController::class, 'export'])->name('employeeleaves.export');

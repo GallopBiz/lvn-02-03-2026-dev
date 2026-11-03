@@ -28,7 +28,15 @@ class TeacherSubjectController extends Controller
         //$datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $employee = HrmsEmployee::with('biometricDetails')->get();
-        return view('backend.AcademicsModules.teachersubject', compact('employee','classlist', 'teachersubjects'));
+        $existingAssignments = $this->existingAssignmentOptions($teachersubjects);
+        $currentAssignmentId = '';
+        return view('backend.AcademicsModules.teachersubject', compact(
+            'employee',
+            'classlist',
+            'teachersubjects',
+            'existingAssignments',
+            'currentAssignmentId'
+        ));
     }
 
     public function create(Request $request)
@@ -115,6 +123,9 @@ class TeacherSubjectController extends Controller
 
     public function view($id){
         $teacher_subject = TeacherSubject::whereId($id)->first();
+        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])->where('is_delete', 0)->get();
+        $existingAssignments = $this->existingAssignmentOptions($teachersubjects);
+        $currentAssignmentId = (string) $teacher_subject->id;
         // $teachersubjects = TeacherSubject::orderBy('id','desc');
         //$teachersubjects = TeacherSubject::all();
 
@@ -133,7 +144,15 @@ class TeacherSubjectController extends Controller
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $employee = HrmsEmployee::with('biometricDetails')->get();
         //dd($employee[0]->biometricDetails->ess_emp_code);
-        return view('backend.AcademicsModules.teachersubject',compact('teacher_subject','classlist', 'subjects', 'employee'));
+        return view('backend.AcademicsModules.teachersubject', compact(
+            'teacher_subject',
+            'classlist',
+            'subjects',
+            'employee',
+            'teachersubjects',
+            'existingAssignments',
+            'currentAssignmentId'
+        ));
 
         /* $sessions = Student_registration::whereId($id)->get();
         $teachersession = Student_registration::orderBy('id','desc');
@@ -389,6 +408,22 @@ class TeacherSubjectController extends Controller
             ->when($departmentId, fn ($query) => $query->where('department_id', $departmentId))
             ->get();
         return $employee;
+    }
+
+    private function existingAssignmentOptions($assignments): array
+    {
+        return $assignments->map(function ($assignment) {
+            return [
+                'id' => (string) $assignment->id,
+                'class_id' => (string) $assignment->class_id,
+                'class_name' => optional($assignment->Class)->class_name ?? '',
+                'section_name' => (string) $assignment->section_name,
+                'subject_id' => (string) $assignment->subject_id,
+                'subject_name' => optional($assignment->Subject)->subject_name ?? '',
+                'teacher_name' => trim((optional($assignment->Teacher)->first_name ?? '') . ' ' . (optional($assignment->Teacher)->last_name ?? '')),
+                'role' => (string) $assignment->role,
+            ];
+        })->values()->all();
     }
 
 }

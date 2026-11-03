@@ -649,6 +649,13 @@
               >
                 @php
                   $isStaffRequest = request()->is('staff*') || request()->is('*staff*') || request()->routeIs('staff.*');
+                  $isStaffLogout = Auth::guard('staff')->check()
+                      && (
+                          request()->cookie('auth_portal') === 'staff'
+                          || session('auth_portal') === 'staff'
+                          || !Auth::guard('web')->check()
+                      );
+                  $logoutRoute = $isStaffLogout ? route('staff.logout') : route('logout');
                   $headerUser = ($isStaffRequest && Auth::guard('staff')->check())
                       ? Auth::guard('staff')->user()
                       : (Auth::guard('web')->check() ? Auth::guard('web')->user() : (Auth::guard('staff')->user() ?? Auth::user()));
@@ -658,12 +665,12 @@
                 </div>
                 <!-- <a class="dropdown-item" href="signin.html">Sign out</a> -->
 
-                 <a class="dropdown-item" href="{{ route('logout') }}"
+                 <a class="dropdown-item" href="{{ $logoutRoute }}"
                     onclick="event.preventDefault();
                     document.getElementById('logout-form').submit();">
                       {{ __('Logout') }}
                   </a>
-                  <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">
+                  <form id="logout-form" action="{{ $logoutRoute }}" method="POST" class="d-none">
                     @csrf
                   </form>
               </div>

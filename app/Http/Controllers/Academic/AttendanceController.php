@@ -33,17 +33,21 @@ class AttendanceController extends Controller
     public function daily(Request $request)
     {
         $filters = $this->filters($request);
-        $classes = $this->classes();
-        $selectedClass = $filters['class_id'] ? $this->resolveClass($filters['class_id']) : null;
-        $sections = $this->sections($filters['class_id']);
-        $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
         $isStaffUser = $this->isStaffAttendanceUser();
+        $classes = $this->classes($isStaffUser);
+        $selectedClass = $filters['class_id'] ? $this->resolveClass($filters['class_id']) : null;
+        $sections = $this->sections($filters['class_id'], $isStaffUser);
+        $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
         if ($isStaffUser && $filters['class_id'] && $filters['section_name']
-            && !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])) {
+            && !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
             abort(403, 'You are not allowed to view students for this class/section.');
         }
         $students = $filters['class_id'] && (!$isStaffUser || $filters['section_name'])
-            ? $this->studentsForClass($filters['class_id'], $filters['section_name'], $isStaffUser)->get()
+            ? $this->studentsForClass(
+                $filters['class_id'],
+                $filters['section_name'],
+                true
+            )->get()
             : collect();
 
         $editingAttendance = null;
@@ -60,14 +64,14 @@ class AttendanceController extends Controller
             $filters['section_name'] = $editingAttendance->section_name;
             $filters['academic_session'] = $editingAttendance->academic_session;
             if ($isStaffUser) {
-                if (!$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])) {
+                if (!$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
                     abort(403, 'You are not allowed to view students for this class/section.');
                 }
                 $students = $this->studentsForClass($filters['class_id'], $filters['section_name'], true)->get();
             } else {
                 $students = $editingAttendance->details->pluck('student')->filter()->values();
             }
-            $sections = $this->sections($filters['class_id']);
+            $sections = $this->sections($filters['class_id'], $isStaffUser);
             $selectedClass = $this->resolveClass($filters['class_id']);
         }
 
@@ -105,11 +109,16 @@ class AttendanceController extends Controller
             'section_name' => 'nullable|string',
         ]);
 
-        if ($this->isStaffAttendanceUser()) {
+        $isStaffUser = $this->isStaffAttendanceUser();
+        if ($isStaffUser) {
             if (!$request->filled('section_name')) {
                 return response()->json([]);
             }
-            if (!$this->canStaffAccessClassSection($request->input('class_id'), $request->input('section_name'))) {
+            if (!$this->canStaffAccessClassSection(
+                $request->input('class_id'),
+                $request->input('section_name'),
+                true
+            )) {
                 abort(403, 'You are not allowed to view students for this class/section.');
             }
         }
@@ -117,7 +126,7 @@ class AttendanceController extends Controller
         return response()->json($this->studentsForClass(
             $request->class_id,
             $request->section_name,
-            $this->isStaffAttendanceUser()
+            true
         )->get());
     }
 
@@ -160,7 +169,11 @@ class AttendanceController extends Controller
             }
         }
 
-        if (!$this->canStaffAccessClassSection($validated['class_id'], $validated['section_name'])) {
+        if (!$this->canStaffAccessClassSection(
+            $validated['class_id'],
+            $validated['section_name'],
+            $this->isStaffAttendanceUser()
+        )) {
             abort(403, 'You are not allowed to mark attendance for this class/section.');
         }
 
@@ -414,10 +427,11 @@ class AttendanceController extends Controller
         $filters['year'] = $selectedYear;
         $filters['month'] = sprintf('%04d-%02d', $selectedYear, $selectedMonth);
 
-        $classes = $this->classes();
-        $sections = $this->sections($filters['class_id']);
+        $isStaffUser = $this->isStaffAttendanceUser();
+        $classes = $this->classes($isStaffUser);
+        $sections = $this->sections($filters['class_id'], $isStaffUser);
 
-        if ($this->isStaffAttendanceUser()) {
+        if ($isStaffUser) {
             if ($filters['class_id'] && !$classes->contains(function ($class) use ($filters) {
                 return (string) $class->id === (string) $filters['class_id']
                     || (string) $class->class_name === (string) $filters['class_id'];
@@ -426,9 +440,9 @@ class AttendanceController extends Controller
             }
             if ($filters['section_name'] && (
                 !$filters['class_id']
-                || !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'])
+                || !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)
             )) {
-                abort(403, 'You are not allowed to view attendance for this class/section.');
+                abort(403, 'You are not allowed to view attendance for this class/section as its class teacher.');
             }
         }
 
@@ -1000,7 +1014,7 @@ class AttendanceController extends Controller
         $studentsQuery = $this->studentsForClass(
             $filters['class_id'],
             $filters['section_name'],
-            $this->isStaffAttendanceUser()
+            true
         );
         if ($onlyStudentId) {
             $studentsQuery->where('id', $onlyStudentId);
@@ -1299,7 +1313,6 @@ class AttendanceController extends Controller
             $classIds = $this->accessibleTeacherSubjects($classTeacherOnly)->pluck('class_id')->unique()->values();
             $classNames = Classes::query()->whereIn('id', $classIds)->pluck('class_name')
                 ->merge(Classname::query()->whereIn('id', $classIds)->pluck('class_name'))
-                ->merge($classIds)
                 ->filter()
                 ->unique();
 
@@ -1383,8 +1396,14 @@ class AttendanceController extends Controller
                 ->filter()
                 ->values();
 
+            if (!$classTeacherOnly && $allowedSections->contains('All')) {
+                return $sortedSections;
+            }
+
             if (!$allowedSections->contains('All')) {
                 $sortedSections = $sortedSections->filter(fn ($s) => $allowedSections->contains($s))->values();
+            } else {
+                $sortedSections = collect();
             }
         }
 
@@ -1398,31 +1417,63 @@ class AttendanceController extends Controller
         $classRows = Classes::query()->where('class_name', $className)->get();
         $classIds = $classRows->pluck('id')->push($classId)->unique()->values();
 
+        if ($strictSectionClassMatch && !$sectionName) {
+            $classRowIds = $classRows->pluck('id');
+            if ($classRowIds->isEmpty()) {
+                $classRowIds->push($classId);
+            }
+
+            return Student_registration::query()
+                ->where(function ($query) use ($className, $classRowIds) {
+                    $query->where('class_name', $className)
+                        ->orWhereIn('class_id', $classRowIds);
+                })
+                ->orderBy('student_name')
+                ->select('id', 'form_number', 'scholar_no', 'student_name', 'class_name', 'section_name', 'session_name', 'json_str');
+        }
+
         if ($strictSectionClassMatch && $sectionName) {
             $sectionClassIds = $classRows
                 ->filter(function ($row) use ($sectionName) {
-                    $sections = array_map('trim', explode(',', (string) $row->section_name));
-                    return in_array($sectionName, $sections, true);
+                    $sections = array_values(array_filter(
+                        array_map('trim', explode(',', (string) $row->section_name)),
+                        fn ($section) => $section !== ''
+                    ));
+                    return count($sections) === 1 && $sections[0] === $sectionName;
                 })
                 ->pluck('id')
                 ->values();
 
+            $sectionMatches = function ($query) use ($sectionName) {
+                $query->where('section_name', $sectionName)
+                    ->orWhere('json_str', 'like', '%"section_name":"' . $sectionName . '"%')
+                    ->orWhere('json_str', 'like', '%"section_name": "' . $sectionName . '"%');
+            };
+
             return Student_registration::query()
-                ->where(function ($query) use ($sectionClassIds, $className, $sectionName) {
+                ->where(function ($query) use ($sectionClassIds, $className, $sectionMatches) {
                     if ($sectionClassIds->isNotEmpty()) {
-                        $query->whereIn('class_id', $sectionClassIds);
+                        $query->where(function ($bySectionClass) use ($sectionClassIds, $sectionMatches) {
+                            $bySectionClass->whereIn('class_id', $sectionClassIds)
+                                ->where(function ($sectionQuery) use ($sectionMatches) {
+                                    $sectionQuery->where($sectionMatches)
+                                        ->orWhere(function ($unassigned) {
+                                            $unassigned->where(function ($emptySection) {
+                                                $emptySection->whereNull('section_name')
+                                                    ->orWhere('section_name', '');
+                                            })->where(function ($emptyJson) {
+                                                $emptyJson->whereNull('json_str')
+                                                    ->orWhere('json_str', '')
+                                                    ->orWhere('json_str', 'not like', '%section_name%');
+                                            });
+                                        });
+                                });
+                        });
                     }
 
-                    $query->orWhere(function ($legacy) use ($className, $sectionName) {
-                        $legacy->where(function ($classIdQuery) {
-                            $classIdQuery->whereNull('class_id')->orWhere('class_id', '');
-                        })
-                        ->where('class_name', $className)
-                        ->where(function ($sectionQuery) use ($sectionName) {
-                            $sectionQuery->where('section_name', $sectionName)
-                                ->orWhere('json_str', 'like', '%"section_name":"' . $sectionName . '"%')
-                                ->orWhere('json_str', 'like', '%"section_name": "' . $sectionName . '"%');
-                        });
+                    $query->orWhere(function ($legacy) use ($className, $sectionMatches) {
+                        $legacy->where('class_name', $className)
+                            ->where($sectionMatches);
                     });
                 })
                 ->orderBy('student_name')
@@ -1731,12 +1782,18 @@ class AttendanceController extends Controller
         $className = optional($class)->class_name ?: (string) $classId;
         $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->unique()->values();
 
-        return $this->accessibleTeacherSubjects($classTeacherOnly)
+        $assignments = $this->accessibleTeacherSubjects($classTeacherOnly)
             ->where(function ($query) use ($classIds, $className, $classId) {
                 $query->whereIn('class_id', $classIds)
                     ->orWhere('class_id', $className)
                     ->orWhere('class_id', $classId);
-            })
+            });
+
+        if ($classTeacherOnly) {
+            return $assignments->where('section_name', $sectionName)->exists();
+        }
+
+        return $assignments
             ->where(function ($query) use ($sectionName) {
                 $query->where('section_name', $sectionName)->orWhere('section_name', 'All');
             })

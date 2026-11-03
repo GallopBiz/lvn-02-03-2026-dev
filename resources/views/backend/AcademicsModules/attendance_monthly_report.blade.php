@@ -444,7 +444,7 @@
                 <select name="class_id" id="reportClassSelect" onchange="onClassFilterChange(this)">
                     <option value="">-- Select Class --</option>
                     @foreach($classes as $class)
-                        <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id || (string)$filters['class_id'] === (string)$class->class_name)>
+                        <option value="{{ $class->id }}" @selected((string)$filters['class_id'] === (string)$class->id)>
                             {{ $class->class_name }}
                         </option>
                     @endforeach

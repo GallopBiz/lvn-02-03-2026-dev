@@ -30,13 +30,12 @@ class InquiryEntryController extends Controller
 {
     public function __construct(Request $request)
     {
-        $db_name = $request->session
-            ?? $request->session_name
-            ?? ($_COOKIE['selectedYear'] ?? session('db_names') ?? Config::get('database.connections.dynamic.database') ?? env('DB_DATABASE', '2025_2026'));
-
+        $dynamicConfig = Config::get('database.connections.dynamic', []);
+        $db_name = $request->input('session')
+            ?? $request->input('session_name')
+            ?? ($_COOKIE['selectedYear'] ?? session('db_names') ?? ($dynamicConfig['database'] ?? env('DB_DATABASE')));
         $dynamicConnectionName = 'dynamic';
-        $dynamicConfig = Config::get("database.connections.{$dynamicConnectionName}");
-        $dynamicConfig['database'] = $db_name;
+		$dynamicConfig['database'] = $db_name;
         Config::set('database.connections.dynamic', $dynamicConfig);
         DB::reconnect('dynamic');
     }
@@ -232,7 +231,7 @@ class InquiryEntryController extends Controller
 
     public function adminpreenquiryfeeslist()
     {   
-        $this->syncPreviousNextYearInquiries();
+		$this->syncPreviousNextYearInquiries();
 		$currentSchoolYear = session('db_names');
 	
         $enquirecount = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->where('session_name', $currentSchoolYear)->count();
@@ -836,7 +835,11 @@ class InquiryEntryController extends Controller
     
     public function adminpreenquiryform(){
         // $all_inquiry = CommanModel::fetchDataWhere('inquiry_registration',['status'=>'p']);
-        $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('status','p')->get();
+        $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')
+            ->where('status', 'p')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
         $studentclasses = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
 
@@ -888,9 +891,10 @@ class InquiryEntryController extends Controller
 
         // return $records1;
         
-        $response = DB::table('inquiry_registration')
+        $response = DB::connection('dynamic')->table('inquiry_registration')
     ->select('inquiry_registration.*', 'student_registration.scholar_no')
-    ->join('student_registration', 'student_registration.form_number', '=', 'inquiry_registration.form_number');
+    ->join('student_registration', 'student_registration.form_number', '=', 'inquiry_registration.form_number')
+    ->where('inquiry_registration.status', 'p');
     // ->get();
 
     $records1 = $response;
@@ -912,10 +916,11 @@ class InquiryEntryController extends Controller
             $records1->whereBetween('inquiry_registration.created_at', [$fromdate, $todate]);
         }
         
-        $EnqSecdata = $records1->get();
-        
-        
-       $all_inquiry = $records1->get();
+        $all_inquiry = $records1
+            ->orderByDesc('inquiry_registration.created_at')
+            ->orderByDesc('inquiry_registration.id')
+            ->get();
+        $EnqSecdata = $all_inquiry;
 
     // $all_inquiry = $records1;
 
@@ -931,31 +936,35 @@ class InquiryEntryController extends Controller
      */
     private function getAdjacentSessionDatabases(): array
     {
-        $currentDb = Config::get('database.connections.dynamic.database') 
-            ?: ($_COOKIE['selectedYear'] ?? session('db_names') ?? env('DB_DATABASE', '2026_2027'));
+        $currentDb = Config::get('database.connections.dynamic.database')
+            ?: ($_COOKIE['selectedYear'] ?? session('db_names') ?? env('DB_DATABASE'));
 
         $prevDb = null;
         $nextDb = null;
 
-        if (preg_match('/^(\d{4})_(\d{4})$/', $currentDb, $matches)) {
+        if (is_string($currentDb) && preg_match('/^(\d{4})_(\d{4})$/', $currentDb, $matches)) {
             $startYear = (int)$matches[1];
             $endYear = (int)$matches[2];
             $prevDbCand = ($startYear - 1) . '_' . ($endYear - 1);
             $nextDbCand = ($startYear + 1) . '_' . ($endYear + 1);
 
             try {
-                $checkPrev = DB::select("SHOW TABLES FROM `{$prevDbCand}` LIKE 'inquiry_registration'");
+                $checkPrev = DB::connection('dynamic')->select("SHOW TABLES FROM `{$prevDbCand}` LIKE 'inquiry_registration'");
                 if (!empty($checkPrev)) {
                     $prevDb = $prevDbCand;
                 }
-            } catch (\Exception $e) {}
+            } catch (\Illuminate\Database\QueryException $e) {
+                $prevDb = null;
+            }
 
             try {
-                $checkNext = DB::select("SHOW TABLES FROM `{$nextDbCand}` LIKE 'inquiry_registration'");
+                $checkNext = DB::connection('dynamic')->select("SHOW TABLES FROM `{$nextDbCand}` LIKE 'inquiry_registration'");
                 if (!empty($checkNext)) {
                     $nextDb = $nextDbCand;
                 }
-            } catch (\Exception $e) {}
+            } catch (\Illuminate\Database\QueryException $e) {
+                $nextDb = null;
+            }
         }
 
         return [
@@ -963,6 +972,59 @@ class InquiryEntryController extends Controller
             'prev'    => $prevDb,
             'next'    => $nextDb
         ];
+    }
+
+    private function recentAcademicSessionDatabases(): array
+    {
+        $currentDb = Config::get('database.connections.dynamic.database')
+            ?: ($_COOKIE['selectedYear'] ?? session('db_names') ?? env('DB_DATABASE'));
+
+        if (!is_string($currentDb) || !preg_match('/^(\d{4})_(\d{4})$/', $currentDb, $matches)) {
+            return [];
+        }
+
+        $startYear = (int) $matches[1];
+
+        return array_map(function ($yearsAgo) use ($startYear) {
+            $sessionStart = $startYear - $yearsAgo;
+
+            return sprintf('%04d_%04d', $sessionStart, $sessionStart + 1);
+        }, range(0, 2));
+    }
+
+    private function resolvePreEnquirySession(Request $request): string
+    {
+        $dynamicConfig = Config::get('database.connections.dynamic', []);
+        $sessionName = session('db_names')
+            ?? ($_COOKIE['selectedYear'] ?? null)
+            ?? $request->input('session')
+            ?? $request->input('session_name')
+            ?? ($dynamicConfig['database'] ?? env('DB_DATABASE'));
+
+        if (!$sessionName) {
+            abort(503, 'The active academic session is not configured.');
+        }
+
+        if (($dynamicConfig['driver'] ?? null) !== 'sqlite'
+            && $sessionName !== ($dynamicConfig['database'] ?? null)) {
+            $dynamicConfig['database'] = $sessionName;
+            Config::set('database.connections.dynamic', $dynamicConfig);
+            DB::purge('dynamic');
+        }
+
+        if (($dynamicConfig['driver'] ?? null) !== 'sqlite'
+            && !Schema::connection('dynamic')->hasTable('inquiry_registration')) {
+            abort(503, "The academic session database {$sessionName} is missing the inquiry_registration table.");
+        }
+
+        return $sessionName;
+    }
+
+    private function nextYearEnquiriesAreOpen(): bool
+    {
+        $today = \Carbon\Carbon::now();
+
+        return $today->month >= 11 || $today->month <= 3;
     }
 
     /**
@@ -979,14 +1041,13 @@ class InquiryEntryController extends Controller
         }
 
         try {
-            $prevRecords = DB::table("{$prevDb}.inquiry_registration")
+            $prevRecords = DB::connection('dynamic')->table("{$prevDb}.inquiry_registration")
                 ->where(function($q) {
                     $q->where('next_year', 1)->orWhere('next_year', '1');
                 })
                 ->where(function($q) {
                     $q->where('is_delete', 0)->orWhereNull('is_delete');
                 })
-                ->whereRaw('CAST(form_number AS UNSIGNED) < 1000')
                 ->get();
 
             foreach ($prevRecords as $record) {
@@ -1020,9 +1081,9 @@ class InquiryEntryController extends Controller
         $prevDb = $sessions['prev'];
         $nextDb = $sessions['next'];
 
-        // 1. Current Session Sequence (next_year = 0 / unchecked):
-        // Filter out legacy 4-digit numbers (< 1000) and continue sequence from previous session next-year enquiries
-        $currMax = DB::connection('dynamic')->table('inquiry_registration')
+        // Enquiry numbers are stored in json_str; form_number is a separate form number.
+        $currentEnquiryMax = $this->maxEnquiryNumber(
+            DB::connection('dynamic')->table('inquiry_registration')
             ->where(function($q) {
                 $q->whereNull('next_year')
                   ->orWhere('next_year', 0)
@@ -1032,91 +1093,160 @@ class InquiryEntryController extends Controller
             ->where(function($q) {
                 $q->where('is_delete', 0)->orWhereNull('is_delete');
             })
-            ->whereRaw('CAST(form_number AS UNSIGNED) < 1000')
-            ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
-            ->value('max_num') ?: 0;
+        );
 
-        $prevMax = 0;
+        $previousEnquiryMax = 0;
         if ($prevDb) {
             try {
-                $prevMax = DB::table("{$prevDb}.inquiry_registration")
+                $previousEnquiryMax = $this->maxEnquiryNumber(
+                    DB::connection('dynamic')->table("{$prevDb}.inquiry_registration")
                     ->where(function($q) {
                         $q->where('next_year', 1)->orWhere('next_year', '1');
                     })
                     ->where(function($q) {
                         $q->where('is_delete', 0)->orWhereNull('is_delete');
                     })
-                    ->whereRaw('CAST(form_number AS UNSIGNED) < 1000')
-                    ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
-                    ->value('max_num') ?: 0;
-            } catch (\Exception $e) {
-                $prevMax = 0;
+                );
+            } catch (\Illuminate\Database\QueryException $e) {
+                $previousEnquiryMax = 0;
             }
         }
 
-        $maxCurrentOverall = max((int)$currMax, (int)$prevMax);
-        $currentEnquiryNo = $maxCurrentOverall > 0 ? ($maxCurrentOverall + 1) : 1;
+        $currentEnquiryNo = max($currentEnquiryMax, $previousEnquiryMax) + 1;
 
-        // 2. Next Year Sequence (next_year = 1 / checked):
-        // Starts from 1 and maintains sequence for the next session
-        $currNextMax = DB::connection('dynamic')->table('inquiry_registration')
+        $currentNextYearEnquiryMax = $this->maxEnquiryNumber(
+            DB::connection('dynamic')->table('inquiry_registration')
             ->where(function($q) {
                 $q->where('next_year', 1)->orWhere('next_year', '1');
             })
             ->where(function($q) {
                 $q->where('is_delete', 0)->orWhereNull('is_delete');
             })
-            ->whereRaw('CAST(form_number AS UNSIGNED) < 1000')
+        );
+
+        $nextYearEnquiryNo = $currentNextYearEnquiryMax + 1;
+
+        // Keep the existing form-number sequence independent from enquiry numbering.
+        $currentFormMax = DB::connection('dynamic')->table('inquiry_registration')
+            ->where(function($q) {
+                $q->whereNull('next_year')
+                  ->orWhere('next_year', 0)
+                  ->orWhere('next_year', '0')
+                  ->orWhere('next_year', '');
+            })
+            ->where(function($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            })
             ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
             ->value('max_num') ?: 0;
 
-        $nextSessionMax = 0;
-        if ($nextDb) {
+        $previousFormMax = 0;
+        if ($prevDb) {
             try {
-                $nextSessionMax = DB::table("{$nextDb}.inquiry_registration")
+                $previousFormMax = DB::connection('dynamic')->table("{$prevDb}.inquiry_registration")
+                    ->where(function($q) {
+                        $q->where('next_year', 1)->orWhere('next_year', '1');
+                    })
                     ->where(function($q) {
                         $q->where('is_delete', 0)->orWhereNull('is_delete');
                     })
-                    ->whereRaw('CAST(form_number AS UNSIGNED) < 1000')
                     ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
                     ->value('max_num') ?: 0;
-            } catch (\Exception $e) {
-                $nextSessionMax = 0;
+            } catch (\Illuminate\Database\QueryException $e) {
+                $previousFormMax = 0;
             }
         }
 
-        $maxNextOverall = max((int)$currNextMax, (int)$nextSessionMax);
-        $nextYearEnquiryNo = $maxNextOverall > 0 ? ($maxNextOverall + 1) : 1;
+        $currentNextYearFormMax = DB::connection('dynamic')->table('inquiry_registration')
+            ->where(function($q) {
+                $q->where('next_year', 1)->orWhere('next_year', '1');
+            })
+            ->where(function($q) {
+                $q->where('is_delete', 0)->orWhereNull('is_delete');
+            })
+            ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
+            ->value('max_num') ?: 0;
+
+        $nextSessionFormMax = 0;
+        if ($nextDb) {
+            try {
+                $nextSessionFormMax = DB::connection('dynamic')->table("{$nextDb}.inquiry_registration")
+                    ->where(function($q) {
+                        $q->where('is_delete', 0)->orWhereNull('is_delete');
+                    })
+                    ->where(function($q) {
+                        $q->whereNull('next_year')
+                          ->orWhere('next_year', 0)
+                          ->orWhere('next_year', '0')
+                          ->orWhere('next_year', '');
+                    })
+                    ->where(function($q) use ($nextDb) {
+                        $q->where('session_name', $nextDb)
+                          ->orWhereNull('session_name')
+                          ->orWhere('session_name', '');
+                    })
+                    ->selectRaw('MAX(CAST(form_number AS UNSIGNED)) as max_num')
+                    ->value('max_num') ?: 0;
+            } catch (\Illuminate\Database\QueryException $e) {
+                $nextSessionFormMax = 0;
+            }
+        }
 
         return [
-            'currentEnquiryNo'  => $currentEnquiryNo,
-            'nextYearEnquiryNo' => $nextYearEnquiryNo
+            'currentEnquiryNo' => $currentEnquiryNo,
+            'nextYearEnquiryNo' => $nextYearEnquiryNo,
+            'currentFormNo' => max((int) $currentFormMax, (int) $previousFormMax) + 1,
+            'nextYearFormNo' => max((int) $currentNextYearFormMax, (int) $nextSessionFormMax) + 1,
         ];
+    }
+
+    private function maxEnquiryNumber(\Illuminate\Database\Query\Builder $query): int
+    {
+        $max = 0;
+
+        foreach ($query->select('json_str')->get() as $record) {
+            $data = json_decode($record->json_str ?? '', true);
+            $number = $data['enquiryno'] ?? null;
+
+            if ((is_int($number) || is_string($number))
+                && preg_match('/^\d+$/', trim((string) $number))) {
+                $max = max($max, (int) $number);
+            }
+        }
+
+        return $max;
     }
 
     public function admin_preenquiryform()
     {   
-        $this->syncPreviousNextYearInquiries();
+            $currentSession = $this->resolvePreEnquirySession(request());
+            $this->syncPreviousNextYearInquiries();
         $numbers = $this->calculateEnquiryNumbers();
         $currentEnquiryNo = $numbers['currentEnquiryNo'];
         $nextYearEnquiryNo = $numbers['nextYearEnquiryNo'];
+        $currentFormNo = $numbers['currentFormNo'];
+        $nextYearFormNo = $numbers['nextYearFormNo'];
 
         $data['states'] = DB::connection('dynamic')->table('states')->select(['name','id'])->get();
         $Userid = $currentEnquiryNo;
         $data['Userid'] = $Userid;
+        $data['currentFormNo'] = $currentFormNo;
         $data['currentEnquiryNo'] = $currentEnquiryNo;
         $data['nextYearEnquiryNo'] = $nextYearEnquiryNo;
-
+        $data['currentSession'] = $currentSession;
+        $canEnquireNextYear = $this->nextYearEnquiriesAreOpen();
         $states = $data['states'];
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         
-        return view('backend.preinquiryregistration', compact('classlist','data','Userid', 'states', 'currentEnquiryNo', 'nextYearEnquiryNo'));
-    }
+        return view('backend.preinquiryregistration', compact('classlist','data','Userid', 'states', 'currentEnquiryNo', 'nextYearEnquiryNo', 'currentFormNo', 'nextYearFormNo', 'canEnquireNextYear'));
+	}
 
-    public function get_next_enquiry_number(Request $request)
+		public function get_next_enquiry_number(Request $request)
     {
-        $this->syncPreviousNextYearInquiries();
-        $isNextYear = $request->input('next_year') == 1 || $request->input('next_year') === 'true' || $request->input('next_year') === '1';
+		    $this->resolvePreEnquirySession($request);
+		    $this->syncPreviousNextYearInquiries();
+		    $isNextYear = $this->nextYearEnquiriesAreOpen()
+		        && ($request->input('next_year') == 1 || $request->input('next_year') === 'true' || $request->input('next_year') === '1');
 
         $numbers = $this->calculateEnquiryNumbers();
         $enquiryNo = $isNextYear ? $numbers['nextYearEnquiryNo'] : $numbers['currentEnquiryNo'];
@@ -1129,84 +1259,67 @@ class InquiryEntryController extends Controller
     }
     
     public function save_student_preinquiryentry(Request $request)
-    {   
-        $statename = DB::connection('dynamic')->table('states')->where('id', $request->state)->first()->name ?? '';
+{   
+    $sessionName = $this->resolvePreEnquirySession($request);
+    $statename = DB::connection('dynamic')->table('states')->where('id', $request->state)->first()->name ?? '';
 
-        // Format names properly
-        $studentName = $this->formatFullName($request->studentname);
-        $fatherName = $this->formatFullName($request->fathername);
-        $motherName = $this->formatFullName($request->mothername);
+    // Format names properly
+    $studentName = $this->formatFullName($request->studentname);
+    $fatherName = $this->formatFullName($request->fathername);
+    $motherName = $this->formatFullName($request->mothername);
+	
+	$isNextYear = $this->nextYearEnquiriesAreOpen() && !empty($request->next_year) ? 1 : 0;
 
-        $isNextYear = !empty($request->next_year) ? 1 : 0;
-        $formNumber = $request->formno ?: $request->formno2;
+        $this->syncPreviousNextYearInquiries();
+        $numbers = $this->calculateEnquiryNumbers();
+        $enquiryNumber = $isNextYear ? $numbers['nextYearEnquiryNo'] : $numbers['currentEnquiryNo'];
+        $formNumber = $request->input('formno') ?: $numbers['currentFormNo'];
+	
+    $jsonArr = [
+        'enquiryno'         => $enquiryNumber,
+        'formno'            => $formNumber,
+        'enquirydate'       => $request->enquirydate,
+        'date_of_birth'     => $request->date_of_birth,
+        'studentname_prefix'=> $request->studentname_prefix,
+        'class_name'        => $request->classname,
+        'student_name'      => $studentName,
+        'student_dob'       => $request->date_of_birth,
+        'fathername_prefix' => $request->fathername_prefix,
+        'fathername'        => $fatherName,
+        'fathermobile'      => $request->fathermobile,
+        'mothername_prefix' => $request->mothername_prefix,
+        'mothername'        => $motherName,
+        'mothermobile'      => $request->mothermobile,
+        'gender'            => $request->gender,
+        'admission_type'    => $request->admission_type,
+        'address'           => $request->address,
+        'city'              => $request->city,
+        'pincode'           => $request->pincode,
+        'state'             => $statename,
+    ];
 
-        if (empty($formNumber)) {
-            $numbers = $this->calculateEnquiryNumbers();
-            $formNumber = $isNextYear ? $numbers['nextYearEnquiryNo'] : $numbers['currentEnquiryNo'];
-        }
+    $jsonStr = json_encode($jsonArr);
 
-        $sessionName = $request->session ?: (Config::get('database.connections.dynamic.database') ?: ($_COOKIE['selectedYear'] ?? '2026_2027'));
+    $insertArr = [
+        'application_for'   => $request->admission_type,
+        'form_number'       => $formNumber,
+        'date_of_birth'     => $request->date_of_birth,
+        'class_name'        => $request->classname,
+        'student_name'      => $studentName,
+        'session_name'      => $sessionName,
+        'json_str'          => $jsonStr,
+        'gender'            => $request->gender,
+        'mobile_number'     => $request->fathermobile,
+        'inq_mode'          => 'on',
+        'next_year'         => $isNextYear,
+        'status'            => 'p'
+    ];
 
-        $jsonArr = [
-            'enquiryno'         => $formNumber,
-            'formno'            => $formNumber,
-            'enquirydate'       => $request->enquirydate,
-            'date_of_birth'     => $request->date_of_birth,
-            'studentname_prefix'=> $request->studentname_prefix,
-            'class_name'        => $request->classname,
-            'student_name'      => $studentName,
-            'student_dob'       => $request->date_of_birth,
-            'fathername_prefix' => $request->fathername_prefix,
-            'fathername'        => $fatherName,
-            'fathermobile'      => $request->fathermobile,
-            'mothername_prefix' => $request->mothername_prefix,
-            'mothername'        => $motherName,
-            'mothermobile'      => $request->mothermobile,
-            'gender'            => $request->gender,
-            'admission_type'    => $request->admission_type,
-            'address'           => $request->address,
-            'city'              => $request->city,
-            'pincode'           => $request->pincode,
-            'state'             => $statename,
-        ];
+    DB::connection('dynamic')->table('inquiry_registration')->insert($insertArr);
 
-        $jsonStr = json_encode($jsonArr);
-
-        $insertArr = [
-            'application_for'   => $request->admission_type,
-            'form_number'       => $formNumber,
-            'date_of_birth'     => $request->date_of_birth,
-            'class_name'        => $request->classname,
-            'student_name'      => $studentName,
-            'session_name'      => $sessionName,
-            'json_str'          => $jsonStr,
-            'gender'            => $request->gender,
-            'mobile_number'     => $request->fathermobile,
-            'inq_mode'          => 'on',
-            'next_year'         => $isNextYear,
-            'status'            => 'p'
-        ];
-
-        DB::connection('dynamic')->table('inquiry_registration')->insert($insertArr);
-
-        // If next_year = 1 and next session database exists, also mirror the record into next session
-        if ($isNextYear) {
-            $sessions = $this->getAdjacentSessionDatabases();
-            $nextDb = $sessions['next'];
-            if ($nextDb) {
-                try {
-                    $nextInsert = $insertArr;
-                    $nextInsert['session_name'] = $nextDb;
-                    $nextInsert['next_year'] = 0; // In next session, this becomes a current-year admission enquiry
-                    DB::table("{$nextDb}.inquiry_registration")->insert($nextInsert);
-                } catch (\Exception $e) {
-                    \Log::error('Error mirroring next-year enquiry to next session: ' . $e->getMessage());
-                }
-            }
-        }
-
-        return redirect('admin-preenquiryform')->with('success', 'Record inserted successfully');
-    }
+    return redirect()->route('admin-preenquiryform', ['session' => $sessionName])
+            ->with('success', 'Record inserted successfully');
+}
 
 
     public function preenquiryviewlist($id)
@@ -1381,9 +1494,8 @@ class InquiryEntryController extends Controller
         $data['inqArr'] = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','Form Selected')->get(); 
         $data['stutdentsArr'] = DB::connection('dynamic')->table('student_registration')->get(); 
         $data['all_inquiry'] = DB::connection('dynamic')->table('student_registration')->where('id',$id)->get(); 
-
-        if ($data['all_inquiry']->isEmpty()) {
-            foreach (['2025_2026', '2026_2027', '2024_2025'] as $candidateDb) {
+		if ($data['all_inquiry']->isEmpty()) {
+            foreach ($this->recentAcademicSessionDatabases() as $candidateDb) {
                 try {
                     $dynamicConfig = Config::get('database.connections.dynamic');
                     $dynamicConfig['database'] = $candidateDb;
@@ -1397,7 +1509,6 @@ class InquiryEntryController extends Controller
                 } catch (\Exception $e) {}
             }
         }
-
         if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
             $data['drivername'] = HrmsEmployee::query()
                 ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
@@ -1417,10 +1528,8 @@ class InquiryEntryController extends Controller
             $data['drivername'] = DB::connection('dynamic')->table('busstaff')->where('role', 'Driver')->where('is_delete', 0)->get();
             $data['staffList'] = collect([]);
         }
-
         $data['caste'] = DB::connection('dynamic')->table('caste_name')->orderByRaw('LOWER(TRIM(caste_name)) ASC')->get();
-
-        $data['classlist'] = DB::connection('dynamic')->table('class_name')
+		$data['classlist'] = DB::connection('dynamic')->table('class_name')
             ->whereNotNull('class_name')
             ->distinct()
             ->orderBy('id')
@@ -1433,7 +1542,6 @@ class InquiryEntryController extends Controller
                 ->orderBy('class_name')
                 ->get();
         }
-
         return view('backend.student_registrations.edit_registration',$data); 
     }
 
@@ -1450,8 +1558,8 @@ public function perstudueamount($id){
 
 }
     
-   public function saveeditregistration(Request $request){   //   thisone....
-        $dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
+   public function saveeditregistration(Request $request){ 
+	$dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
         if (!empty($dbName)) {
             Config::set('database.connections.dynamic.database', $dbName);
             DB::purge('dynamic');
@@ -1459,7 +1567,7 @@ public function perstudueamount($id){
 
         $existingStudent = DB::connection('dynamic')->table('student_registration')->where('id', $request->id)->first();
         if (!$existingStudent) {
-            foreach (['2025_2026', '2026_2027', '2024_2025'] as $candidateDb) {
+            foreach ($this->recentAcademicSessionDatabases() as $candidateDb) {
                 try {
                     Config::set('database.connections.dynamic.database', $candidateDb);
                     DB::purge('dynamic');
@@ -1477,10 +1585,9 @@ public function perstudueamount($id){
         $existingJson = (!empty($existingStudent) && !empty($existingStudent->json_str)) ? json_decode($existingStudent->json_str, true) : [];
         if (!is_array($existingJson)) {
             $existingJson = [];
-        }
-
-        $postData_html = $request->all();
-        $files = [];
+        }	
+   $postData_html = $request->all();
+   $files = [];
         
         // echo '<pre>';
         // echo"<pre>";print_r($postData_html);die();
@@ -1589,9 +1696,7 @@ public function perstudueamount($id){
                 // or $LastReportCard = '';
             }
 
-
-
-        $studentDobVal = !empty($request->student_dob) ? $request->student_dob : (!empty($existingStudent->date_of_birth) ? $existingStudent->date_of_birth : ($existingJson['student_dob'] ?? ''));
+		$studentDobVal = !empty($request->student_dob) ? $request->student_dob : (!empty($existingStudent->date_of_birth) ? $existingStudent->date_of_birth : ($existingJson['student_dob'] ?? ''));
         $nationalityVal = !empty($postData_html['nationality']) ? $postData_html['nationality'] : ($existingJson['nationality'] ?? 'Indian');
         $categoryVal = !empty($request->category) ? $request->category : ($existingJson['category'] ?? '');
         $classNameVal = !empty($request->classname) ? $request->classname : (!empty($existingStudent->class_name) ? $existingStudent->class_name : ($existingJson['classname'] ?? ''));
@@ -1602,6 +1707,7 @@ public function perstudueamount($id){
         $studentNameVal = !empty($request->studentname) ? $request->studentname : (!empty($request->student_name) ? $request->student_name : (!empty($existingStudent->student_name) ? $existingStudent->student_name : ($existingJson['studentname'] ?? '')));
 
         $postData = [
+        
             "scholar_no"    => $postData_html['scholar_no'] ?? ($existingStudent->scholar_no ?? ($existingJson['scholar_no'] ?? '')),
             "application_for"   => $postData_html['application_for'] ?? ($existingStudent->application_for ?? ($existingJson['application_for'] ?? '')),
             "form_number"    => $postData_html['form_number'] ?? ($existingStudent->form_number ?? ($existingJson['form_number'] ?? '')),
@@ -1697,7 +1803,6 @@ public function perstudueamount($id){
             "guradian_new_house" => $postData_html['guradian_new_house'] ?? ($existingJson['guradian_new_house'] ?? ''),
             // ----------------------------------------------------------
 
-                
             "category" => $categoryVal,
             "religion" => !empty($request->religion) ? $request->religion : ($existingJson['religion'] ?? ""),
             "student_caste" => $casteVal,
@@ -1724,24 +1829,6 @@ public function perstudueamount($id){
             "LastReportCard" => (!empty($postData_html['LastReportCard'])) ? $LastReportCard : (!empty($postData_html['LastReportCard1']) ? $postData_html['LastReportCard1'] : ($existingJson['LastReportCard'] ?? null))
 
     ];
-
-
-
-
-
-
-
-
-
-       
-
-
-
-
-     
-
-
-
         // print_r($postData);die();
         // unset($postData['application_for']);
         // unset($postData['form_number']);
@@ -1750,8 +1837,8 @@ public function perstudueamount($id){
 
 
         unset($postData['_token']);
-
-        // Merge existing json_str so unrelated fields are not lost
+		
+		// Merge existing json_str so unrelated fields are not lost
         $mergedPostData = array_merge($existingJson, array_filter($postData, function($val) {
             return $val !== null && $val !== '';
         }));
@@ -1778,7 +1865,7 @@ public function perstudueamount($id){
         if (!empty($studentNameVal)) {
             $mergedPostData['studentname'] = $studentNameVal;
         }
-
+        
         $insertArr  = [
             'application_for'=> !empty($request->application_for) ? $request->application_for : ($existingStudent->application_for ?? ''),
             'form_number'=> !empty($request->form_number) ? $request->form_number : ($existingStudent->form_number ?? ''),
@@ -1793,8 +1880,7 @@ public function perstudueamount($id){
             'json_str'=>json_encode($mergedPostData),
             'registration_date'=> !empty($request->registration_date) ? $request->registration_date : (!empty($existingStudent->registration_date) ? $existingStudent->registration_date : date('Y-m-d')),
         ];
-
-        if (!empty($classNameVal)) {
+		if (!empty($classNameVal)) {
             $classQuery = DB::connection('dynamic')->table('classes')->where('class_name', $classNameVal);
             if (!empty($sectionNameVal)) {
                 $matchedClass = (clone $classQuery)->where('section_name', $sectionNameVal)->first();
@@ -1838,11 +1924,9 @@ public function perstudueamount($id){
                 'exempt_per' => $percentage_total
             ]
         );
-        return redirect()->route('registrationeditlist', ['id' => $request->id])->with('success', 'Student registration updated successfully.');
+        return redirect()->route('registrationeditlist', ['id' => $request->id])->with('success', 'Student registration updated successfully.');  
     }
-
-
- 
+	
     public function getcastename(){
 
           $inquiry_data = CommanModel::fetchDataArr('caste_name');
@@ -1907,10 +1991,9 @@ public function perstudueamount($id){
             foreach($statename as $state){
                 $statename = $state->name;
             } 
-        $studentName = $this->formatFullName($request->studentname);
+		$studentName = $this->formatFullName($request->studentname);
         $fatherName = $this->formatFullName($request->fathername);
         $motherName = $this->formatFullName($request->mothername);
-
         $jsonArr = [
             'enquiryno'=>$request->formno,
             'formno'=>$request->formno,
@@ -2101,13 +2184,3 @@ public function perstudueamount($id){
 
 	
 }
-
-
-
-
-
-
-
-
-
-

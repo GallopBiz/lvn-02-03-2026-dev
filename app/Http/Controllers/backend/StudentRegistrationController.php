@@ -571,25 +571,42 @@ public function downloadcertificate($id)
     {           
         $form_number = $request->form_number;
        
-       $inquiry_data = DB::connection('dynamic')->table('inquiry_registration')
-       ->select('*')
-       ->where('status', '=', 'p')
-       ->where('form_number', '=', $form_number)
-       ->orWhere('student_name', '=', $form_number)
-       ->orWhereJsonContains('json_str->fathername', $form_number)
-       ->orWhereJsonContains('json_str->fathermobile', $form_number)
-       ->orWhereJsonContains('json_str->mothermobile', $form_number)
-       ->orWhereJsonContains('json_str->mothername', $form_number)
-       ->first();   
-         $da=json_decode($inquiry_data->json_str);
-         $statename= $da->state;
-         $statevalue = DB::connection('dynamic')
-         ->table('states')
-         ->where('name', $statename)
-         ->get();
-         foreach($statevalue as $v){ $statevalue= $v->id; }
+        $preEnquiries = DB::connection('dynamic')->table('inquiry_registration')
+            ->where('status', 'p');
+        $inquiry_data = (clone $preEnquiries)
+            ->where(function ($query) use ($form_number) {
+                $query->where('form_number', $form_number)
+                    ->orWhere('student_name', $form_number);
+            })
+            ->first();
+
+        if (!$inquiry_data) {
+            $inquiry_data = (clone $preEnquiries)
+                ->where(function ($query) use ($form_number) {
+                    $query->whereJsonContains('json_str->formno', $form_number)
+                        ->orWhereJsonContains('json_str->fathername', $form_number)
+                        ->orWhereJsonContains('json_str->fathermobile', $form_number)
+                        ->orWhereJsonContains('json_str->mothermobile', $form_number)
+                        ->orWhereJsonContains('json_str->mothername', $form_number);
+                })
+                ->first();
+        }
+
+        if (!$inquiry_data) {
+            return ['inq_data' => null, 'inq_str_data' => null, 'statevalue' => null];
+        }
+
+        $inquiryJson = json_decode($inquiry_data->json_str);
+        $statevalue = DB::connection('dynamic')
+            ->table('states')
+            ->where('name', $inquiryJson->state ?? null)
+            ->value('id');
          
-        $passArr = ['inq_data'=>$inquiry_data,'inq_str_data'=>json_decode($inquiry_data->json_str),'statevalue'=>$statevalue];
+        $passArr = [
+            'inq_data' => $inquiry_data,
+            'inq_str_data' => $inquiryJson,
+            'statevalue' => $statevalue,
+        ];
  
         return $passArr;
     }

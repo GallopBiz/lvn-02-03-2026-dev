@@ -10,6 +10,12 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 @php $i = 0; @endphp
+@php
+    $selectedEmployeeId = old(
+        'employee_id',
+        $stream_master->employee_id ?? ($employees->count() === 1 ? optional($employees->first())->id : '')
+    );
+@endphp
 
 <div class="main-content">
     <div class="form_section1_div">
@@ -42,11 +48,10 @@
                 <div class="col-md-3 form-group mb-3">
                     <label for="employee_id">Employee</label>
                     <select name="employee_id" id="employee_id" class="form-control">
-                        @if (count($employees) > 1)
-                            <option value="">Select Employee</option>
-                        @endif
+                        <option value="">Select Employee</option>
                         @foreach ($employees as $employee)
-                            <option value="{{ $employee->id }}" selected>
+                            <option value="{{ $employee->id }}"
+                                @selected((string) $selectedEmployeeId === (string) $employee->id)>
                                 {{ $employee->first_name }} {{ $employee->last_name }}
                             </option>
                         @endforeach
@@ -269,43 +274,53 @@
         const employeeSelect = document.getElementById(employeeSelectId);
         const leaveTypeSelect = document.getElementById(leaveTypeSelectId);
 
-        employeeSelect.addEventListener('change', function () {
-            const employeeId = this.value;
+        function loadLeaveTypes(employeeId) {
             leaveTypeSelect.innerHTML = '<option value="">Select Leave Type</option>';
 
-            if (employeeId) {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            if (!employeeId) return;
 
-                fetch("{{ route('getLeaveTypes') }}", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-CSRF-TOKEN": csrfToken,
-                    },
-                    body: JSON.stringify({ employee_id: employeeId }),
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            fetch("{{ route('getLeaveTypes') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRF-TOKEN": csrfToken,
+                },
+                body: JSON.stringify({ employee_id: employeeId }),
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+                    return response.json();
                 })
-                    .then(response => response.json())
-                    .then(data => {
-                        data.forEach(leaveType => {
-                            const option = document.createElement('option');
-                            option.value = leaveType.id;
-                            option.text = leaveType.name;
-                            leaveTypeSelect.appendChild(option);
-                        });
-                    })
-                    .catch(error => console.error('Error fetching leave types:', error));
-            }
+                .then(data => {
+                    if (!Array.isArray(data)) throw new Error('Invalid leave type response');
+
+                    data.forEach(leaveType => {
+                        const option = document.createElement('option');
+                        option.value = leaveType.id;
+                        option.text = leaveType.name;
+                        leaveTypeSelect.appendChild(option);
+                    });
+
+                    const selectedLeaveType = @json((string) old('leave_type_id', $stream_master->leave_type_id ?? ''));
+                    if (selectedLeaveType) leaveTypeSelect.value = selectedLeaveType;
+                })
+                .catch(error => {
+                    console.error('Error fetching leave types:', error);
+                    leaveTypeSelect.innerHTML = '<option value="">Unable to load leave types</option>';
+                });
+        }
+
+        employeeSelect.addEventListener('change', function () {
+            loadLeaveTypes(this.value);
         });
+
+        loadLeaveTypes(employeeSelect.value);
     }
 
     setupDynamicLeaveTypeUpdate('employee_id', 'leave_type_id');
-    document.addEventListener('DOMContentLoaded', function() {
-        var employeeSelect = document.getElementById('employee_id');
-        // If only one employee (staff panel), trigger change to load leave types
-        if (employeeSelect && employeeSelect.options.length === 2 && employeeSelect.value) {
-            employeeSelect.dispatchEvent(new Event('change'));
-        }
-    });
 </script>
 
 @endsection

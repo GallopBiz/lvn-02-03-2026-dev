@@ -56,6 +56,10 @@ class StaffReportAccessTest extends TestCase
             $table->string('class_id')->nullable();
             $table->string('section_name')->nullable();
             $table->text('json_str')->nullable();
+            $table->string('student_name')->nullable();
+            $table->string('form_number')->nullable();
+            $table->string('scholar_no')->nullable();
+            $table->string('session_name')->nullable();
             $table->boolean('is_archived')->default(false);
         });
 
@@ -135,18 +139,124 @@ class StaffReportAccessTest extends TestCase
         $classTeacherClasses = $classesMethod->invoke($controller, true);
         $reportSections = $sectionsMethod->invoke($controller, '100');
         $dailySections = $sectionsMethod->invoke($controller, '100');
+        $classTeacherSections = $sectionsMethod->invoke($controller, '100', true);
 
         $this->assertSame(['10', '11'], $reportClasses->pluck('class_name')->all());
         $this->assertSame(['10', '11'], $dailyClasses->pluck('class_name')->all());
         $this->assertSame(['10'], $classTeacherClasses->pluck('class_name')->all());
         $this->assertSame(['A', 'B'], $reportSections->all());
         $this->assertSame(['A', 'B'], $dailySections->all());
+        $this->assertSame(['B'], $classTeacherSections->all());
 
         $accessMethod = new \ReflectionMethod($controller, 'canStaffAccessClassSection');
         $accessMethod->setAccessible(true);
         $this->assertTrue($accessMethod->invoke($controller, '100', 'A'));
         $this->assertFalse($accessMethod->invoke($controller, '100', 'A', true));
         $this->assertTrue($accessMethod->invoke($controller, '100', 'B', true));
+    }
+
+    public function test_admin_daily_attendance_student_fetching_matches_the_selected_class_and_section(): void
+    {
+        DB::connection('dynamic')->table('classes')->insert([
+            [
+                'id' => 101,
+                'class_name' => '11',
+                'section_name' => 'C',
+            ],
+            [
+                'id' => 102,
+                'class_name' => '10',
+                'section_name' => 'A',
+            ],
+        ]);
+        DB::connection('dynamic')->table('student_registration')->insert([
+            [
+                'id' => 1,
+                'class_name' => '10',
+                'class_id' => '100',
+                'section_name' => 'A',
+                'json_str' => null,
+                'student_name' => 'Section A student',
+            ],
+            [
+                'id' => 2,
+                'class_name' => '10',
+                'class_id' => '100',
+                'section_name' => 'B',
+                'json_str' => null,
+                'student_name' => 'Section B student',
+            ],
+            [
+                'id' => 3,
+                'class_name' => '10',
+                'class_id' => '100',
+                'section_name' => null,
+                'json_str' => '{"section_name":"A"}',
+                'student_name' => 'Legacy Section A student',
+            ],
+            [
+                'id' => 4,
+                'class_name' => '11',
+                'class_id' => '101',
+                'section_name' => 'A',
+                'json_str' => null,
+                'student_name' => 'Other class student',
+            ],
+            [
+                'id' => 5,
+                'class_name' => '100',
+                'class_id' => '101',
+                'section_name' => 'A',
+                'json_str' => null,
+                'student_name' => 'Class name collision student',
+            ],
+            [
+                'id' => 6,
+                'class_name' => '10',
+                'class_id' => '102',
+                'section_name' => 'B',
+                'json_str' => null,
+                'student_name' => 'Wrong section student',
+            ],
+            [
+                'id' => 7,
+                'class_name' => '10',
+                'class_id' => '102',
+                'section_name' => null,
+                'json_str' => null,
+                'student_name' => 'Unsectioned student',
+            ],
+        ]);
+
+        $controller = new AttendanceController();
+        $studentsMethod = new \ReflectionMethod($controller, 'studentsForClass');
+        $studentsMethod->setAccessible(true);
+
+        $sectionAStudents = $studentsMethod->invoke($controller, '100', 'A', true)->get();
+        $allClassStudents = $studentsMethod->invoke($controller, '100', null, true)->get();
+
+        $this->assertSame([3, 1, 7], $sectionAStudents->pluck('id')->all());
+        $this->assertSame([3, 1, 2, 7, 6], $allClassStudents->pluck('id')->all());
+    }
+
+    public function test_attendance_filter_options_do_not_treat_an_assigned_class_id_as_another_class_name(): void
+    {
+        DB::connection('dynamic')->table('classes')->insert([
+            ['id' => 12, 'class_name' => '09', 'section_name' => 'A'],
+            ['id' => 15, 'class_name' => '12', 'section_name' => 'B'],
+        ]);
+        DB::connection('dynamic')->table('class_name')->insert([
+            ['id' => 12, 'class_name' => '09'],
+            ['id' => 15, 'class_name' => '12'],
+        ]);
+        $this->assignStaffTo('A', 21, 'Teacher', '12');
+        $this->actAsStaff();
+
+        $controller = new AttendanceController();
+        $classesMethod = new \ReflectionMethod($controller, 'classes');
+        $classesMethod->setAccessible(true);
+
+        $this->assertSame(['09'], $classesMethod->invoke($controller)->pluck('class_name')->all());
     }
 
     public function test_daily_attendance_uses_staff_assignments_when_both_guards_are_authenticated(): void

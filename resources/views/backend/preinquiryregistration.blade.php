@@ -62,7 +62,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                         <div class="col-md-3 form-group mb-3">
                            <label for="firstName1">Enquiry Session:<b class="validation_err">*</b></label>
                            <input name="_token" type="hidden" value="{{ csrf_token() }}">
-                            <input type="text" readonly id="session" class="form-control" value="{{ session('db_names') ?? ($_COOKIE['selectedYear'] ?? Config::get('database.connections.dynamic.database', '2026_2027')) }}" name="session">
+                            <input type="text" readonly id="session" class="form-control" value="{{ $currentSession ?? Config::get('database.connections.dynamic.database') }}" name="session">
                            
                            <!-- <select id="session" class="form-control" name="session" autocomplete="shipping address-level1">
                               <option value="" disabled selected>Please Select</option>
@@ -79,9 +79,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                              id="enquiryno"
                              type="text" readonly style="background-color: #e9ecef; cursor: not-allowed;"
                              placeholder="Enter your Enquiry no." name="enquiryno" required value="{{$currentEnquiryNo ?? $Userid}}"
-                           /><input type="hidden" name="formno2" value="{{$currentEnquiryNo ?? $Userid}}">
+                           /><input type="hidden" name="formno2" value="{{$currentFormNo ?? $currentEnquiryNo ?? $Userid}}">
                            <span class="enquiryno_msg validation_err"></span>
                          </div>
+                         @if($canEnquireNextYear)
                          <div class="col-md-2 form-group mb-3">
                            <label for="next_year">Enquiry For Next Year</label>
                            <br>
@@ -92,9 +93,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                              value="1"
                              data-current-enquiry="{{ $currentEnquiryNo ?? $Userid }}"
                              data-next-enquiry="{{ $nextYearEnquiryNo ?? 1 }}"
+                             data-current-form="{{ $currentFormNo ?? $Userid }}"
+                             data-next-form="{{ $nextYearFormNo ?? $currentFormNo ?? $Userid }}"
                            />
                            <span class="enquiryno_msg validation_err"></span>
                          </div>
+                         @endif
 
                          <div class="col-md-3 form-group mb-3">
                            <label for="formno">Form No.</label>
@@ -102,7 +106,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                              class="form-control"
                              id="formno"
                              type="text" 
-                             placeholder="Enter your formno no." name="formno" required value="{{$currentEnquiryNo ?? $Userid}}"
+                             placeholder="Enter your formno no." name="formno" required value="{{$currentFormNo ?? $currentEnquiryNo ?? $Userid}}"
                            /><span class="enquiryno_msg validation_err"></span>
                          </div>
 
@@ -652,54 +656,56 @@ $(".submit_btn").on('click', function (e) {
     
 </script>    
 <script>
-  $(document).ready(function() {
-    // Function to handle the date input
-    $("#picker2").on("input", function() {
-      // Do something with the date value
-      const dateValue = $(this).val();
-      console.log("Selected Date:", dateValue);
-    });
+  const enquiryCheckbox = document.getElementById('next_year');
+  if (enquiryCheckbox) {
+    let enquiryNumberRequest = 0;
 
-    function syncEnquiryNumber(isChecked) {
-      var currentVal = $('#next_year').data('current-enquiry') || '{{ $currentEnquiryNo ?? $Userid }}';
-      var nextVal = $('#next_year').data('next-enquiry') || '{{ $nextYearEnquiryNo ?? 1 }}';
-      var targetNo = isChecked ? nextVal : currentVal;
+    function syncEnquiryNumber() {
+      const isChecked = enquiryCheckbox.checked;
+      const enquiryNo = isChecked
+        ? enquiryCheckbox.dataset.nextEnquiry
+        : enquiryCheckbox.dataset.currentEnquiry;
+      const formNo = isChecked
+        ? enquiryCheckbox.dataset.nextForm
+        : enquiryCheckbox.dataset.currentForm;
 
-      $('#enquiryno').val(targetNo);
-      $('#formno').val(targetNo);
-      $('input[name="formno2"]').val(targetNo);
+      document.getElementById('enquiryno').value = enquiryNo;
+      document.getElementById('formno').value = formNo;
+      document.querySelector('input[name="formno2"]').value = formNo;
+      const requestId = ++enquiryNumberRequest;
+      const url = new URL("{{ route('get-next-enquiry-number') }}", window.location.origin);
+      url.searchParams.set('next_year', isChecked ? '1' : '0');
+      url.searchParams.set('session', document.getElementById('session').value);
 
-      // Verify and fetch fresh sequence number from server
-      $.ajax({
-        url: "{{ route('get-next-enquiry-number') }}",
-        type: "GET",
-        data: {
-          next_year: isChecked ? 1 : 0
-        },
-        dataType: 'json',
-        success: function(res) {
-          if (res && res.enquiry_no) {
-            $('#enquiryno').val(res.enquiry_no);
-            $('#formno').val(res.enquiry_no);
-            $('input[name="formno2"]').val(res.enquiry_no);
-            if (isChecked) {
-              $('#next_year').data('next-enquiry', res.enquiry_no);
-            } else {
-              $('#next_year').data('current-enquiry', res.enquiry_no);
-            }
+      fetch(url, { credentials: 'same-origin' })
+        .then(function(response) {
+          if (!response.ok) {
+            throw new Error('Unable to refresh the enquiry number.');
           }
-        }
-      });
+          return response.json();
+        })
+        .then(function(response) {
+          if (requestId !== enquiryNumberRequest || enquiryCheckbox.checked !== isChecked) {
+            return;
+          }
+          if (!response.status || response.enquiry_no === null || response.enquiry_no === undefined) {
+            throw new Error('The enquiry number response was invalid.');
+          }
+
+          const updatedNumber = String(response.enquiry_no);
+          document.getElementById('enquiryno').value = updatedNumber;
+          enquiryCheckbox.dataset[isChecked ? 'nextEnquiry' : 'currentEnquiry'] = updatedNumber;
+        })
+        .catch(function(error) {
+          console.error('Enquiry number refresh failed:', error);
+        });
     }
 
-    $('#next_year').on('change', function() {
-      syncEnquiryNumber($(this).is(':checked'));
-    });
-
-    if ($('#next_year').is(':checked')) {
-      syncEnquiryNumber(true);
+    enquiryCheckbox.addEventListener('change', syncEnquiryNumber);
+    if (enquiryCheckbox.checked) {
+      syncEnquiryNumber();
     }
-  });
+  }
 </script>
 
 

@@ -119,6 +119,58 @@ class RoleMenuPermissionTest extends TestCase
         $this->assertSame('allowed', $response->getContent());
     }
 
+    public function test_staff_leave_type_lookup_uses_own_leave_request_view_access(): void
+    {
+        $staff = new class extends Authenticatable
+        {
+            public $role = 'Academic';
+            public $type = 's';
+            public $employee_id = 42;
+        };
+        $staff->setAttribute('id', 7);
+        Auth::guard('staff')->setUser($staff);
+
+        $request = Request::create('/get-leave-types-staff', 'POST');
+        $route = Route::getRoutes()->getByName('getLeaveTypes.staff');
+        $request->setRouteResolver(fn () => $route);
+        $this->app->instance('request', $request);
+
+        $this->assertSame(
+            [
+                'module' => 'HRMS > Leave Management > My Leave Requests',
+                'action' => 'view',
+            ],
+            PermissionService::detectModuleAndActionFromRequest($request)
+        );
+
+        $response = (new CheckMenuPermission())->handle(
+            $request,
+            fn () => response('allowed'),
+            'staff'
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('allowed', $response->getContent());
+    }
+
+    public function test_staff_logout_route_logs_out_staff_without_logging_out_web_user(): void
+    {
+        $staff = new class extends Authenticatable
+        {
+            public $employee_id = 42;
+        };
+        $webUser = new class extends Authenticatable {};
+
+        $this->actingAs($staff, 'staff')
+            ->actingAs($webUser, 'web')
+            ->withSession(['auth_portal' => 'staff'])
+            ->post(route('staff.logout'))
+            ->assertRedirect('/staff-login');
+
+        $this->assertFalse(Auth::guard('staff')->check());
+        $this->assertTrue(Auth::guard('web')->check());
+    }
+
     public function test_staff_can_view_only_their_own_comp_off_requests_without_role_menu_setup(): void
     {
         $staff = new class extends Authenticatable

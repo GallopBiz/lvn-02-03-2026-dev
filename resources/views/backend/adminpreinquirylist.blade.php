@@ -146,6 +146,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                          <!--  <th>Application For</th> -->
                           <th>S No.</th>
                           <th>Enquiry No.</th>
+                          <th>Form No.</th>
                           <th>Class Name</th>                                               
                           <th>Student Name</th>
                           <th>Father Name</th>
@@ -164,8 +165,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                         <tr>
                          <!--  <td>{{$each_inq->application_for}}</td> -->
                           <td><?php echo $i; ?></td>
-                          <td>{{$each_inq->form_number}}</td>
-                          <td>{{$each_inq->class_name}}</td>
+                          <td>{{ $notificationData1['enquiryno'] ?? '' }}</td>
+                         <td>{{$each_inq->form_number}}</td>
+                         <td>{{$each_inq->class_name}}</td>
                           <td><?php if(!empty($notificationData1['studentname_prefix'])){ echo $notificationData1['studentname_prefix'].' '; } echo ucwords($each_inq->student_name);?></td>
                           <td><?php if(!empty($notificationData1['fathername_prefix'])){ echo $notificationData1['fathername_prefix'].' '; } if(!empty($notificationData1['fathername'])){ echo ucwords($notificationData1['fathername']);}?> </td>
                           <td>{{$each_inq->session_name}}</td>
@@ -219,7 +221,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                         <?php $i++; ?>
                         @endforeach
                         @else
-                       <tr><td colspan="9" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
+                       <tr><td colspan="11" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
                         @endif
                       </tbody>
                       <tfoot>
@@ -227,6 +229,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <!-- <th>Application For</th> -->
                           <th>S No.</th>
                           <th>Enquiry No.</th>
+                          <th>Form No.</th>
                           <th>Class Name</th>
                           <th>Student Name</th>
                           <th>Father Name</th>

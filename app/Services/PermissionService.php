@@ -355,6 +355,10 @@ class PermissionService
             return true;
         }
 
+        if (self::canSubmitOwnStaffLeaveRequest($action, $user)) {
+            return true;
+        }
+
         if (self::isAdmin($user)) {
             return true;
         }
@@ -437,10 +441,34 @@ class PermissionService
         $routeName = (string) optional($request->route())->getName();
         $path = trim($request->path(), '/');
 
-        return in_array($request->method(), ['GET', 'HEAD'], true)
+        $isOwnRequestsPage = in_array($request->method(), ['GET', 'HEAD'], true)
             && (
                 in_array($routeName, ['leaverequests.staff', 'compoffrequests.staff'], true)
                 || in_array($path, ['leaverequests-staff', 'compoffrequests-staff'], true)
+            );
+        $isLeaveTypeLookup = $request->isMethod('POST')
+            && $routeName === 'getLeaveTypes.staff';
+
+        return $isOwnRequestsPage || $isLeaveTypeLookup;
+    }
+
+    private static function canSubmitOwnStaffLeaveRequest(string $action, $user): bool
+    {
+        if (
+            self::normalizeAction($action) !== 'add'
+            || !Auth::guard('staff')->check()
+            || Auth::guard('staff')->user() !== $user
+            || (int) (Auth::guard('staff')->user()->employee_id ?? 0) <= 0
+        ) {
+            return false;
+        }
+
+        $request = request();
+
+        return $request->isMethod('POST')
+            && (
+                optional($request->route())->getName() === 'save-leaverequests.staff'
+                || trim($request->path(), '/') === 'save-leaverequests-staff'
             );
     }
 
@@ -524,6 +552,11 @@ class PermissionService
         $method = strtoupper($request->method());
         $module = $route ? ($route->getAction('permission_module') ?: null) : null;
         $explicitAction = $route ? ($route->getAction('permission_action') ?: null) : null;
+
+        if ($routeName === 'getLeaveTypes.staff') {
+            $module = $module ?: 'HRMS > Leave Management > My Leave Requests';
+            $explicitAction = $explicitAction ?: 'view';
+        }
 
         if ($route) {
             foreach ($route->gatherMiddleware() as $middleware) {
