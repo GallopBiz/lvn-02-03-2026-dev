@@ -66,57 +66,78 @@ class AttendancePayrollRulesTest extends TestCase
         $this->assertSame(['late_events' => 0, 'absence_days' => 1.0], $result);
     }
 
-    public function test_approved_first_half_leave_uses_the_normal_shift_start_late_threshold(): void
+    public function test_approved_first_half_leave_exempts_late_arrival(): void
     {
         [$start, $end] = $this->shiftTimes();
-        $firstHalfRequest = ['status' => 'approved', 'half_day_type' => 'first'];
-
-        $result = AttendancePayrollRules::evaluateDay(
+        $isLate = AttendancePayrollRules::isLateArrival(
             $start,
             $end,
             15,
             strtotime('2026-03-02 09:30:00'),
-            strtotime('2026-03-02 17:00:00'),
-            $firstHalfRequest,
-            false
+            ['status' => 'approved', 'half_day_type' => 'first']
         );
 
-        $this->assertSame(['late_events' => 1, 'absence_days' => 0.0], $result);
+        $this->assertFalse($isLate);
     }
 
-    public function test_approved_first_half_leave_arrival_within_threshold_is_not_late(): void
+    public function test_approved_first_half_leave_arriving_during_second_half_is_not_late(): void
     {
         [$start, $end] = $this->shiftTimes();
-        $firstHalfRequest = ['status' => 'approved', 'half_day_type' => 'first'];
 
-        $result = AttendancePayrollRules::evaluateDay(
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 13:30:00'),
+            ['status' => 'approved', 'half_day_type' => 'first']
+        );
+
+        $this->assertFalse($isLate);
+    }
+
+    public function test_approved_second_half_leave_checks_late_arrival_during_first_half(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 09:30:00'),
+            ['status' => 'approved', 'half_day_type' => 'second']
+        );
+
+        $this->assertTrue($isLate);
+    }
+
+    public function test_approved_second_half_leave_does_not_count_late_arrival_during_second_half(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 13:30:00'),
+            ['status' => 'approved', 'half_day_type' => 'second']
+        );
+
+        $this->assertFalse($isLate);
+    }
+
+    public function test_approved_second_half_leave_does_not_count_on_time_first_half_arrival_as_late(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
             $start,
             $end,
             15,
             strtotime('2026-03-02 09:15:00'),
-            strtotime('2026-03-02 17:00:00'),
-            $firstHalfRequest,
-            false
+            ['status' => 'approved', 'half_day_type' => 'second']
         );
 
-        $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
-    }
-
-    public function test_approved_first_half_arrival_over_one_hour_keeps_existing_no_late_event_rule(): void
-    {
-        [$start, $end] = $this->shiftTimes();
-
-        $result = AttendancePayrollRules::evaluateDay(
-            $start,
-            $end,
-            15,
-            strtotime('2026-03-02 10:01:00'),
-            strtotime('2026-03-02 17:00:00'),
-            ['status' => 'approved', 'half_day_type' => 'first'],
-            false
-        );
-
-        $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
+        $this->assertFalse($isLate);
     }
 
     /**
@@ -126,17 +147,15 @@ class AttendancePayrollRulesTest extends TestCase
     {
         [$start, $end] = $this->shiftTimes();
 
-        $result = AttendancePayrollRules::evaluateDay(
+        $isLate = AttendancePayrollRules::isLateArrival(
             $start,
             $end,
             15,
             strtotime('2026-03-02 09:30:00'),
-            strtotime('2026-03-02 17:00:00'),
-            ['status' => $status, 'half_day_type' => $halfDayType],
-            false
+            ['status' => $status, 'half_day_type' => $halfDayType]
         );
 
-        $this->assertSame(['late_events' => 1, 'absence_days' => 0.0], $result);
+        $this->assertTrue($isLate);
     }
 
     public static function nonApprovedHalfDayRequests(): array

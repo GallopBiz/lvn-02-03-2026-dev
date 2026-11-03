@@ -324,6 +324,7 @@
                                     if (!$employee || !$employeeName) {
                                         continue;
                                     }
+                                    $employeeShift = \App\Services\Hrms\ShiftResolver::getApplicableShift($employee, $startDate);
                                 @endphp
                                 <tr>
                                     <td>
@@ -333,6 +334,11 @@
                                             </div>
                                             <div style="font-weight: 600; font-size: 12.5px; color: #1e293b; line-height: 1.2;">
                                                 {{ $employeeName ?: '--' }}
+                                                @if ($employeeShift)
+                                                    <div class="text-muted" style="font-size: 10px; font-weight: 400;">
+                                                        Shift: {{ \Carbon\Carbon::parse($employeeShift->start_time)->format('h:i A') }} - {{ \Carbon\Carbon::parse($employeeShift->end_time)->format('h:i A') }}
+                                                    </div>
+                                                @endif
                                             </div>
                                         </div>
                                     </td>
@@ -348,6 +354,14 @@
 
                                             $approvedLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
                                                 return $lr->employee_id == $employeeId
+                                                    && \Carbon\Carbon::parse($lr->start_date)->lte($date)
+                                                    && \Carbon\Carbon::parse($lr->end_date)->gte($date);
+                                            }) : null;
+                                            $approvedHalfDayLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
+                                                return $lr->employee_id == $employeeId
+                                                    && in_array(strtolower(trim((string) $lr->status)), ['approved'], true)
+                                                    && in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true)
+                                                    && in_array(strtolower(trim((string) $lr->half_day_type)), ['first', 'second'], true)
                                                     && \Carbon\Carbon::parse($lr->start_date)->lte($date)
                                                     && \Carbon\Carbon::parse($lr->end_date)->gte($date);
                                             }) : null;
@@ -371,7 +385,17 @@
 
                                                 if ($record->in_time) {
                                                     $inTime = strtotime($dateStr . ' ' . $record->in_time);
-                                                    if ($inTime > ($shiftStart + ($threshold * 60))) {
+                                                    $halfDayRequest = $approvedHalfDayLeave ? [
+                                                        'status' => $approvedHalfDayLeave->status,
+                                                        'half_day_type' => $approvedHalfDayLeave->half_day_type,
+                                                    ] : null;
+                                                    if (\App\Services\Hrms\AttendancePayrollRules::isLateArrival(
+                                                        $shiftStart,
+                                                        $shiftEnd,
+                                                        (float) $threshold,
+                                                        $inTime ?: null,
+                                                        $halfDayRequest
+                                                    )) {
                                                         $isLateIn = true;
                                                         $lateMinutes = (int) round(($inTime - $shiftStart) / 60);
                                                     } else {
@@ -602,4 +626,3 @@
     </script>
 
 @endsection
-

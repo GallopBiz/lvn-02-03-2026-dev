@@ -227,23 +227,18 @@
             <h4 class="mb-3">Recent Attendance</h4>
             <div class="table-responsive">
                 <table class="table">
-                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Present</th><th>Absent</th><th>Leave</th><th>Status</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Total Students</th><th>Present</th><th>Absent</th><th>Leave</th><th>PL</th><th>Action</th></tr></thead>
                     <tbody>
                         @forelse($recentAttendance as $item)
                             <tr>
                                 <td>{{ optional($item->attendance_date)->format('d-m-Y') }}</td>
                                 <td>{{ optional($item->className)->class_name ?: $item->class_name }}</td>
                                 <td>{{ $item->section_name }}</td>
+                                <td>{{ $item->total_students }}</td>
                                 <td>{{ $item->present_count }}</td>
-                                <td>{{ $item->absent_count }}</td>
+                                <td>{{ max(0, $item->absent_count - $item->leave_count) }}</td>
                                 <td>{{ $item->leave_count }}</td>
-                                <td>
-                                    @if($item->is_locked)
-                                        <span class="badge badge-dark">Locked</span>
-                                    @else
-                                        <span class="badge badge-success">Open</span>
-                                    @endif
-                                </td>
+                                <td>{{ $item->pl_count }}</td>
                                 <td>
                                     <div class="d-flex flex-wrap">
                                         @if(!$item->is_locked)
@@ -274,7 +269,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="text-center text-muted">No attendance recorded yet.</td></tr>
+                            <tr><td colspan="9" class="text-center text-muted">No attendance recorded yet.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -309,7 +304,7 @@
         });
         document.getElementById('totalStudents').textContent = total;
         document.getElementById('presentCount').textContent = counts.present;
-        document.getElementById('absentCount').textContent = counts.absent + counts.leave;
+        document.getElementById('absentCount').textContent = counts.absent;
         document.getElementById('leaveCount').textContent = counts.leave;
         if (document.getElementById('halfDayCount')) {
             document.getElementById('halfDayCount').textContent = counts.half_day || 0;

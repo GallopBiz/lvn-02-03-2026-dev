@@ -4,6 +4,38 @@ namespace App\Services\Hrms;
 
 class AttendancePayrollRules
 {
+    public static function isLateArrival(
+        int $shiftStart,
+        int $shiftEnd,
+        float $lateComingThreshold,
+        ?int $inTime,
+        ?array $halfDayRequest
+    ): bool {
+        if (!$inTime) {
+            return false;
+        }
+
+        $isApprovedHalfDay = $halfDayRequest
+            && strtolower(trim((string) ($halfDayRequest['status'] ?? ''))) === 'approved'
+            && in_array(
+                strtolower(trim((string) ($halfDayRequest['half_day_type'] ?? ''))),
+                ['first', 'second'],
+                true
+            );
+
+        if ($isApprovedHalfDay) {
+            $halfDayType = strtolower(trim((string) $halfDayRequest['half_day_type']));
+            if (
+                $halfDayType === 'first'
+                || ($halfDayType === 'second' && $inTime >= $shiftStart + (int) floor(($shiftEnd - $shiftStart) / 2))
+            ) {
+                return false;
+            }
+        }
+
+        return $inTime > ($shiftStart + ($lateComingThreshold * 60));
+    }
+
     public static function evaluateDay(
         int $shiftStart,
         int $shiftEnd,

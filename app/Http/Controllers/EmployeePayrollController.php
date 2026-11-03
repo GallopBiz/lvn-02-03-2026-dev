@@ -35,7 +35,6 @@ use App\Models\PayrollAttendanceConfiguration;
 use App\Models\PayrollStaffAttendanceConfiguration;
 use App\Models\PayrollDepartmentAttendanceConfiguration;
 use App\Services\Hrms\ShiftResolver;
-use App\Services\Hrms\CasualLeaveBalanceService;
 use App\Services\Hrms\AttendancePayrollRules;
 
 
@@ -96,180 +95,91 @@ class EmployeePayrollController extends Controller
 		return false;
 	}
 
-	private function getHalfDayRequestsByDate(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate): array
+	private function getApprovedHalfDayDates(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
 	{
-		$requestsByDate = [];
+		return $employee->leaveRequest
+			->filter(function ($leaveRequest) use ($startDate, $endDate) {
+				$status = strtolower(trim((string) $leaveRequest->status));
+				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
 
+				$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
+				if ($status !== 'approved' || !$isHalfDay || $isPaid == 0) {
+					return false;
+				}
+
+				$leaveStart = Carbon::parse($leaveRequest->start_date);
+				$leaveEnd = Carbon::parse($leaveRequest->end_date);
+				return ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+					|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+					|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
+			})
+			->flatMap(function ($leaveRequest) {
+				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
+				return collect($period)->map(fn ($day) => $day->format('Y-m-d'));
+			})
+			->unique()
+			->values()
+			->toArray();
+	}
+
+	private function getApprovedHalfDayRequestForDate(HrmsEmployee $employee, string $date): ?array
+	{
 		foreach ($employee->leaveRequest as $leaveRequest) {
+			$isHalfDay = in_array(
+				strtolower(trim((string) $leaveRequest->is_half_day)),
+				['1', 'true', 'yes', 'on'],
+				true
+			);
+			$halfDayType = strtolower(trim((string) $leaveRequest->half_day_type));
+
+			if (strtolower(trim((string) $leaveRequest->status)) !== 'approved'
+				|| !$isHalfDay
+				|| !in_array($halfDayType, ['first', 'second'], true)
+				|| Carbon::parse($leaveRequest->start_date)->toDateString() > $date
+				|| Carbon::parse($leaveRequest->end_date)->toDateString() < $date
+			) {
+				continue;
+			}
+
+			return [
+				
+				'status' => 'approved',
+				'half_day_type' => $halfDayType,
+			];
+		}
+
+		return null;
+	}
+	
+	private function getRejectedOrUnpaidHalfDayCount(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
+	{
+		$halfDayCount = 0;
+		foreach ($employee->leaveRequest as $leaveRequest) {
+			$status = strtolower(trim((string) $leaveRequest->status));
 			$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+
 			if (!$isHalfDay) {
 				continue;
 			}
 
-			$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
-			foreach ($period as $day) {
-				$date = $day->format('Y-m-d');
-				if ($day->lt($startDate) || $day->gt($endDate)) {
-					continue;
-				}
+			$leaveStart = Carbon::parse($leaveRequest->start_date);
+			$leaveEnd = Carbon::parse($leaveRequest->end_date);
+			$isWithinRange = ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+				|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+				|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
 
-				$requestsByDate[$date] = [
-					'status' => strtolower(trim((string) $leaveRequest->status)),
-					'half_day_type' => strtolower(trim((string) $leaveRequest->half_day_type)),
-					'cl_days_deducted' => $leaveRequest->cl_days_deducted === null
-						? null
-						: (float) $leaveRequest->cl_days_deducted,
-				];
+			if (!$isWithinRange) {
+				continue;
+			}
+
+			$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
+
+			if ($status === 'rejected' || ($status === 'approved' && $isPaid == 0)) {
+				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
+				$halfDayCount += count(collect($period)) * 0.5;
 			}
 		}
-
-		return $requestsByDate;
-	}
-
-	private function getHalfDayRequestLwp(array $requestsByDate): float
-	{
-		$lwpDays = 0.0;
-		foreach ($requestsByDate as $request) {
-			if (!in_array($request['status'], ['approved', 'rejected'], true)) {
-				continue;
-			}
-
-			if ($request['cl_days_deducted'] !== null) {
-				$lwpDays += max(0.0, 0.5 - $request['cl_days_deducted']);
-			} elseif ($request['status'] === 'rejected') {
-				$lwpDays += 0.5;
-			}
-		}
-
-		return round($lwpDays, 1);
-	}
-
-	private function getBiometricAttendanceAdjustments(
-		HrmsEmployee $employee,
-		$attendanceLogs,
-		array $halfDayRequests,
-		array $holidayDates,
-		float $clBalance
-	): array {
-		$lateComingCount = 0;
-		$automaticLwpDays = 0.0;
-		$deductions = [];
-
-		foreach ($attendanceLogs->sortBy('log_date') as $log) {
-			$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-			$logDay = Carbon::parse($logDate);
-			$isOffDay = in_array($logDate, $holidayDates, true) || $logDay->dayOfWeek === Carbon::SUNDAY;
-
-			$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
-			if (!$employeeShift) {
-				continue;
-			}
-
-			$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
-			$shiftEnd = strtotime($logDate . ' ' . $employeeShift->end_time);
-			if (!$shiftStart || !$shiftEnd || $shiftEnd <= $shiftStart) {
-				continue;
-			}
-
-			$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
-			$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
-			$halfDayRequest = $halfDayRequests[$logDate] ?? null;
-			$dayResult = AttendancePayrollRules::evaluateDay(
-				$shiftStart,
-				$shiftEnd,
-				(float) $employeeShift->late_coming_threshold,
-				$inTime ?: null,
-				$outTime ?: null,
-				$halfDayRequest,
-				$isOffDay
-			);
-			$lateComingCount += $dayResult['late_events'];
-			$automaticAbsenceDays = $dayResult['absence_days'];
-
-			if ($automaticAbsenceDays <= 0) {
-				continue;
-			}
-
-			if ($log->cl_days_deducted !== null && $log->lwp_days !== null) {
-				$deductions[] = [
-					'attendance_id' => $log->id,
-					'cl_days' => (float) $log->cl_days_deducted,
-					'lwp_days' => (float) $log->lwp_days,
-					'persisted' => true,
-				];
-				$automaticLwpDays += (float) $log->lwp_days;
-				continue;
-			}
-
-			$allocation = CasualLeaveBalanceService::allocate($clBalance, $automaticAbsenceDays);
-			$clBalance -= $allocation['cl_days'];
-			$automaticLwpDays += $allocation['lwp_days'];
-			$deductions[] = [
-				'attendance_id' => $log->id,
-				'requested_days' => $automaticAbsenceDays,
-				'cl_days' => $allocation['cl_days'],
-				'lwp_days' => $allocation['lwp_days'],
-				'persisted' => false,
-			];
-		}
-
-		return [
-			'late_coming_count' => $lateComingCount,
-			'lwp_days' => round($automaticLwpDays, 1),
-			'cl_balance' => round($clBalance, 1),
-			'deductions' => $deductions,
-		];
-	}
-
-	private function savePayrollWithAttendanceDeductions(
-		HrmsEmployee $employee,
-		array $attendanceDeductions,
-		array $payrollData
-	): void {
-		DB::transaction(function () use ($employee, $attendanceDeductions, $payrollData) {
-			$casualLeave = app(CasualLeaveBalanceService::class);
-
-			foreach ($attendanceDeductions as $deduction) {
-				if ($deduction['persisted']) {
-					continue;
-				}
-
-				$attendance = DB::table('hrms_employee_attendance')
-					->where('id', $deduction['attendance_id'])
-					->lockForUpdate()
-					->first();
-
-				if (!$attendance) {
-					throw new \UnexpectedValueException('Attendance record disappeared while saving payroll deductions.');
-				}
-
-				if ($attendance->cl_days_deducted !== null && $attendance->lwp_days !== null) {
-					if (
-						abs((float) $attendance->cl_days_deducted - (float) $deduction['cl_days']) >= 0.1 ||
-						abs((float) $attendance->lwp_days - (float) $deduction['lwp_days']) >= 0.1
-					) {
-						throw new \UnexpectedValueException('Attendance leave deduction changed while payroll was being generated.');
-					}
-					continue;
-				}
-
-				$clDays = $casualLeave->deduct($employee, (float) $deduction['requested_days']);
-				if (abs($clDays - (float) $deduction['cl_days']) >= 0.1) {
-					throw new \UnexpectedValueException('Casual leave balance changed while payroll was being generated.');
-				}
-				$lwpDays = round(max(0.0, (float) $deduction['requested_days'] - $clDays), 1);
-
-				DB::table('hrms_employee_attendance')
-					->where('id', $attendance->id)
-					->update([
-						'cl_days_deducted' => $clDays,
-						'lwp_days' => $lwpDays,
-						'updated_at' => now(),
-					]);
-			}
-
-			HrmsPayroll::create($payrollData);
-		});
+		return $halfDayCount;
 	}
 
 	public function GenerateJson(Request $request)
@@ -375,14 +285,48 @@ class EmployeePayrollController extends Controller
 							$holidayDates[] = $day->format('Y-m-d');
 						}
 					}
-					$halfDayRequests = $this->getHalfDayRequestsByDate($employee, $startDate, $endDate);
-					$approvedHalfDayDates = array_keys(array_filter(
-						$halfDayRequests,
-						fn($request) => $request['status'] === 'approved'
-					));
+					$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 					$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
-					$halfDayRequestLwp = $this->getHalfDayRequestLwp($halfDayRequests);
+					$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
 					$lateComingCount = 0;
+					$unapprovedHalfDaysFromBiometric = 0;
+					if ($biometricRequired) {
+						foreach ($EmpAttandanceLog as $log) {
+							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
+							if (in_array($logDate, $holidayDates)) continue;
+							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
+							if (!$employeeShift) continue;
+							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
+							$shiftEnd = strtotime($logDate . ' ' . $employeeShift->end_time);
+							$expectedDuration = max(1, $shiftEnd - $shiftStart);
+							$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
+							$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
+							$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
+							if (AttendancePayrollRules::isLateArrival(
+							$shiftStart,
+							$shiftEnd,
+							(float) $employeeShift->late_coming_threshold,
+							$inTime ?: null,
+							$halfDayRequest
+							)) {
+							$lateComingCount++;
+							}
+
+							if (!in_array($logDate, $approvedHalfDayDates)) {
+							if ($inTime && $outTime) {
+								$actualDuration = $outTime - $inTime;
+									if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
+										$unapprovedHalfDaysFromBiometric += 0.5;
+									}
+								} elseif ($inTime && !$outTime) {
+									$unapprovedHalfDaysFromBiometric += 0.5;
+								}
+							}
+						}
+					}
+					if (!$skipLateComing && $lateComingCount >= 3) {
+						$lwp += floor($lateComingCount / 3);
+					}
 					$unApplyLeave = 0;
 					$workingDays = [];
 					$currentDate = $startDate->copy();
@@ -397,7 +341,7 @@ class EmployeePayrollController extends Controller
 						: $workingDays;
 					$leaveDates = [];
 					foreach ($employee->leaveRequest as $lr) {
-						if (strtolower(trim((string) $lr->status)) === 'approved') {
+						if ($lr->status === 'Approved') {
 							$period = Carbon::parse($lr->start_date)->toPeriod(Carbon::parse($lr->end_date));
 							foreach ($period as $d) {
 								$leaveDates[$d->format('Y-m-d')] = true;
@@ -416,17 +360,7 @@ class EmployeePayrollController extends Controller
 					}
 					$clLeaveBalance = $employee->leaveBalances->where('leave_type_id', $clLeaveTypeId)->first();
 					if ($clLeaveBalance) {
-						$clBalance = (float)$clLeaveBalance->balance;
-					}
-					$attendanceAdjustments = $biometricRequired
-						? $this->getBiometricAttendanceAdjustments($employee, $EmpAttandanceLog, $halfDayRequests, $holidayDates, $clBalance)
-						: ['late_coming_count' => 0, 'lwp_days' => 0.0, 'cl_balance' => $clBalance, 'deductions' => []];
-					$lateComingCount = $attendanceAdjustments['late_coming_count'];
-					$automaticAttendanceLwpDays = $attendanceAdjustments['lwp_days'];
-					$automaticAttendanceDeductions = $attendanceAdjustments['deductions'];
-					$clBalance = $attendanceAdjustments['cl_balance'];
-					if (!$skipLateComing && $lateComingCount >= 3) {
-						$lwp += floor($lateComingCount / 3);
+						$clBalance = (int)$clLeaveBalance->balance;
 					}
 					$allDates = [];
 					$dateCursor = $startDate->copy();
@@ -438,8 +372,6 @@ class EmployeePayrollController extends Controller
 							$allDates[$dateStr] = 'holiday';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
-						} elseif (isset($halfDayRequests[$dateStr])) {
-							$allDates[$dateStr] = 'present';
 						} else {
 							$allDates[$dateStr] = 'absent';
 						}
@@ -494,7 +426,7 @@ class EmployeePayrollController extends Controller
 							}
 						}
 					}
-					$unApplyLeave += $halfDayRequestLwp + $automaticAttendanceLwpDays;
+					$unApplyLeave += $rejectedOrUnpaidHalfDays + $unapprovedHalfDaysFromBiometric;
 					$lwp += $unApplyLeave;
 					$workingDaysRatio = ($monthDays - $lwp) / $monthDays;
 					$esicSalary = round($esicgrossSalary * $workingDaysRatio, 2);
@@ -734,14 +666,53 @@ class EmployeePayrollController extends Controller
 						}
 					}
 
-				$halfDayRequests = $this->getHalfDayRequestsByDate($employee, $startDate, $endDate);
-				$approvedHalfDayDates = array_keys(array_filter(
-					$halfDayRequests,
-					fn($request) => $request['status'] === 'approved'
-				));
+				$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 				$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
-				$halfDayRequestLwp = $this->getHalfDayRequestLwp($halfDayRequests);
+				$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
 				$lateComingCount = 0;
+				$unapprovedHalfDaysFromBiometric = 0;
+
+				if ($biometricRequired) {
+					foreach ($EmpAttandanceLog as $log) {
+						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
+						if (in_array($logDate, $holidayDates)) continue;
+						$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
+						if (!$employeeShift) continue;
+
+						$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
+						$shiftEnd = strtotime($logDate . ' ' . $employeeShift->end_time);
+						$expectedDuration = max(1, $shiftEnd - $shiftStart);
+						$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
+						$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
+						$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
+						if (AttendancePayrollRules::isLateArrival(
+						$shiftStart,
+						$shiftEnd,
+						(float) $employeeShift->late_coming_threshold,
+						$inTime ?: null,
+						$halfDayRequest
+						)) {
+						$lateComingCount++;
+						\Log::info("Late Entry on $logDate: " . round(($inTime - $shiftStart) / 60, 2) . ' minutes.');
+						}
+
+						if (!in_array($logDate, $approvedHalfDayDates)) {
+						if ($inTime && $outTime) {
+								$actualDuration = $outTime - $inTime;
+								if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
+									$unapprovedHalfDaysFromBiometric += 0.5;
+								}
+							} elseif ($inTime && !$outTime) {
+								$unapprovedHalfDaysFromBiometric += 0.5;
+							}
+						}
+					}
+					
+				}
+					if (!$skipLateComing && $lateComingCount >= 3) {
+						\Log::info("Late Coming Count: $lateComingCount, LWP added: " . floor($lateComingCount / 3));
+						$lwp += floor($lateComingCount / 3);
+					}
 					$unApplyLeave = 0;
 					$workingDays = [];
 					$currentDate = $startDate->copy();
@@ -762,7 +733,7 @@ class EmployeePayrollController extends Controller
 
 					$leaveDates = [];
 					foreach ($employee->leaveRequest as $lr) {
-						if (strtolower(trim((string) $lr->status)) === 'approved') {
+						if ($lr->status === 'Approved') {
 							$period = Carbon::parse($lr->start_date)->toPeriod(Carbon::parse($lr->end_date));
 							foreach ($period as $d) {
 								$leaveDates[$d->format('Y-m-d')] = true;
@@ -788,20 +759,9 @@ class EmployeePayrollController extends Controller
 				}
 				$clLeaveBalance = $employee->leaveBalances->where('leave_type_id', $clLeaveTypeId)->first();
 				if ($clLeaveBalance) {
-					$clBalance = (float)$clLeaveBalance->balance;
+					$clBalance = (int)$clLeaveBalance->balance;
 				}
 					\Log::info("CL Balance for Employee ID {$employee->id}: $clBalance");
-					$attendanceAdjustments = $biometricRequired
-						? $this->getBiometricAttendanceAdjustments($employee, $EmpAttandanceLog, $halfDayRequests, $holidayDates, $clBalance)
-						: ['late_coming_count' => 0, 'lwp_days' => 0.0, 'cl_balance' => $clBalance, 'deductions' => []];
-					$lateComingCount = $attendanceAdjustments['late_coming_count'];
-					$automaticAttendanceLwpDays = $attendanceAdjustments['lwp_days'];
-					$automaticAttendanceDeductions = $attendanceAdjustments['deductions'];
-					$clBalance = $attendanceAdjustments['cl_balance'];
-					if (!$skipLateComing && $lateComingCount >= 3) {
-						\Log::info("Late Coming Count: $lateComingCount, LWP added: " . floor($lateComingCount / 3));
-						$lwp += floor($lateComingCount / 3);
-					}
 
 					// Build a day-by-day status array for the month
 					$allDates = [];
@@ -814,8 +774,6 @@ class EmployeePayrollController extends Controller
 							$allDates[$dateStr] = 'holiday';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
-						} elseif (isset($halfDayRequests[$dateStr])) {
-							$allDates[$dateStr] = 'present';
 						} else {
 							$allDates[$dateStr] = 'absent';
 						}
@@ -942,8 +900,7 @@ class EmployeePayrollController extends Controller
 						}
 					}
 
-
-					$unApplyLeave += $halfDayRequestLwp + $automaticAttendanceLwpDays;
+					$unApplyLeave += $rejectedOrUnpaidHalfDays + $unapprovedHalfDaysFromBiometric;
 					$lwp += $unApplyLeave;
 					\Log::info("LWP: $lwp (Late: $lateComingCount, Unapproved Leave: $unApplyLeave)");
 
@@ -962,7 +919,6 @@ class EmployeePayrollController extends Controller
 					} else {
 						$esic = round($esicSalary * (config('payroll.esic_percentage', 0.75) / 100), 2);
 					}
-
 					// PF Salary = (Basic + DA) * (Month Days - LWP) / Month Days
 					$effectivePFSalary = round($PFSalary * $workingDaysRatio, 2);
 					$efpaPercentage = config('payroll.efpa_percentage', 12);
@@ -1005,11 +961,12 @@ class EmployeePayrollController extends Controller
 							2
 						);
 					}
+					
 					// --- Net Salary ---
 					$netSalary = $grossSalary - $totalDeductions - $totalEmiDeduction - $efpa - $esic - $totalLeaveDeduction - $lateDeductionAmount - $unApplyLeaveDeductionAmount;
 
-					// Save payroll and one-time attendance leave deductions atomically.
-					$this->savePayrollWithAttendanceDeductions($employee, $automaticAttendanceDeductions, [
+					// Save payroll record
+					HrmsPayroll::create([
 						'employee_id' => $employee->id,
 						'gross_salary' => $grossSalary,
 						'basic_salary' => $basicSalary,
@@ -1059,8 +1016,6 @@ class EmployeePayrollController extends Controller
 						[$netSalary]
 					);
 
-				} catch (\UnexpectedValueException $e) {
-					throw $e;
 				} catch (\Exception $e) {
 					\Log::error("Error processing Employee ID {$employee->id}: {$e->getMessage()}", ['stack' => $e->getTraceAsString()]);
 				}
@@ -1278,6 +1233,7 @@ class EmployeePayrollController extends Controller
 		$deductions = is_array($deductionsRaw) ? $deductionsRaw : json_decode($deductionsRaw, true) ?? [];
 
 		$monthName = date('F', mktime(0, 0, 0, $report->month, 1));
+
 		$monthStart = Carbon::create($report->year, $report->month, 1)->startOfMonth();
 		$monthEnd = $monthStart->copy()->endOfMonth();
 		$approvedLeaves = 0;

@@ -539,11 +539,13 @@ $i = 0;
         const classSelect = document.getElementById('class_name');
         const sectionSelect = document.getElementById('section_name');
         const subjectSelect = document.getElementById('subject_name');
+        const teacherSelect = document.getElementById('teacher_name');
 
         function showExistingAssignments() {
             const classId = classSelect.value;
             const subjectId = subjectSelect.value;
             const sectionName = sectionSelect.value;
+            const teacherId = teacherSelect.value;
             const matches = existingAssignments.filter(assignment => {
                 if (!classId || assignment.class_id !== classId || assignment.id === currentAssignmentId) {
                     return false;
@@ -565,9 +567,24 @@ $i = 0;
             }
 
             const heading = document.createElement('strong');
-            heading.textContent = subjectId || sectionName
+            let headingText = subjectId || sectionName
                 ? 'Existing assignment for this selection:'
                 : 'Existing assignments for this class:';
+            if (teacherId && subjectId && sectionName && matches.length) {
+                const selectedTeacherAssignments = matches.filter(
+                    assignment => assignment.teacher_id === teacherId
+                );
+                if (selectedTeacherAssignments.length) {
+                    headingText = selectedTeacherAssignments.some(
+                        assignment => assignment.section_name === sectionName || assignment.section_name === 'All'
+                    )
+                        ? 'This assignment already exists for the selected teacher:'
+                        : 'This teacher already has this subject assigned in the selected class:';
+                } else {
+                    headingText = 'This subject is already assigned to another teacher:';
+                }
+            }
+            heading.textContent = headingText;
             assignmentInfo.appendChild(heading);
 
             const list = document.createElement('ul');
@@ -588,9 +605,7 @@ $i = 0;
             assignmentInfo.classList.remove('d-none');
         }
 
-        classSelect.addEventListener('change', showExistingAssignments);
-        sectionSelect.addEventListener('change', showExistingAssignments);
-        subjectSelect.addEventListener('change', showExistingAssignments);
+        $('#class_name, #section_name, #subject_name, #teacher_name').on('change', showExistingAssignments);
         showExistingAssignments();
 
         function fetchSubjects(classId){

@@ -420,6 +420,7 @@ class TeacherSubjectController extends Controller
                 'section_name' => (string) $assignment->section_name,
                 'subject_id' => (string) $assignment->subject_id,
                 'subject_name' => optional($assignment->Subject)->subject_name ?? '',
+                'teacher_id' => (string) $assignment->teacher_id,
                 'teacher_name' => trim((optional($assignment->Teacher)->first_name ?? '') . ' ' . (optional($assignment->Teacher)->last_name ?? '')),
                 'role' => (string) $assignment->role,
             ];
