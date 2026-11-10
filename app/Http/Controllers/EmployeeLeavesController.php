@@ -87,10 +87,16 @@ class EmployeeLeavesController extends Controller
 			->orderBy('last_name')
 			->get();
 		$leaveTypes = HrmsLeaveType::all();
+		$leaveTypesByStaffType = HrmsLeaveStaffAllocation::with('leaveType')
+			->get()
+			->groupBy('hrms_staff_type_id')
+			->map(function ($allocations) {
+				return $allocations->pluck('leaveType')->filter();
+			});
 
 		return view(
 			'backend.HRMS.employeeleaverequests',
-			compact('stream', 'employees', 'leaveTypes')
+			compact('stream', 'employees', 'leaveTypes', 'leaveTypesByStaffType')
 		);
 	}
 

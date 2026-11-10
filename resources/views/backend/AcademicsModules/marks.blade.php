@@ -893,6 +893,12 @@
         $('#studentdatatable').find('input, select, button').prop('disabled', true);
     }
 
+    function applyStudentAbsentState(row) {
+        const isAbsent = row.find('.is_absent').is(':checked');
+        row.find('.mark_theory, .mark_practical, .internal_assessment_mark, .grade-dropdown')
+            .prop('disabled', isAbsent || isCurrentMarksEntryLocked);
+    }
+
     function applyExamLockState(exam) {
         if (!isStaffMarksUser || !exam || Number(exam.is_locked || 0) !== 1) {
             return;
@@ -1714,6 +1720,9 @@
                     } else {
                         updateNonAcademicUiState();
                     }
+                    $('#studentdatatable .student-row').each(function () {
+                        applyStudentAbsentState($(this));
+                    });
                     toastr.success(`Loaded ${data.students.length} student(s).`, "Success");
                 },
                 error: function(xhr, status, error) {
@@ -1839,6 +1848,9 @@
         $('#practical_marks_toggle').on('change', togglePracticalColumns);
         toggleInternalAssessmentColumns();
         togglePracticalColumns();
+        $('#studentdatatable .student-row').each(function () {
+            applyStudentAbsentState($(this));
+        });
         applyMarksEntryLockState();
         filterSubjectDropdownByType();
         updateNonAcademicUiState();
@@ -1854,6 +1866,74 @@
             }
             recalculateStudentTotal($(this).closest('tr'));
         });
+        $(document).on('change', '#studentdatatable .is_absent', function() {
+            applyStudentAbsentState($(this).closest('.student-row'));
+        });
+        window.addEventListener('keydown', function(event) {
+            const fieldSelector = '.mark_theory, .mark_practical, .internal_assessment_mark, .grade-dropdown';
+            const directions = {
+                ArrowLeft: { horizontal: -1 },
+                ArrowRight: { horizontal: 1 },
+                ArrowUp: { vertical: -1 },
+                ArrowDown: { vertical: 1 }
+            };
+            const key = event.key || {
+                37: 'ArrowLeft',
+                38: 'ArrowUp',
+                39: 'ArrowRight',
+                40: 'ArrowDown'
+            }[event.keyCode];
+            const direction = directions[key];
+            const currentField = event.target instanceof Element ? event.target.closest(fieldSelector) : null;
+            if (!direction || !currentField) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const isEditableAndVisible = function(field) {
+                return !field.disabled
+                    && !field.readOnly
+                    && field.getClientRects().length > 0
+                    && window.getComputedStyle(field).visibility !== 'hidden';
+            };
+            const rows = Array.from(document.querySelectorAll('#studentdatatable .student-row'))
+                .filter(row => row.getClientRects().length > 0);
+            const currentRow = currentField.closest('.student-row');
+            const visibleFields = Array.from(document.querySelectorAll('#studentdatatable ' + fieldSelector))
+                .filter(isEditableAndVisible);
+            const currentFieldIndex = visibleFields.indexOf(currentField);
+            const rowIndex = rows.indexOf(currentRow);
+            if (currentFieldIndex < 0 || rowIndex < 0) return;
+
+            let targetField;
+            if (direction.horizontal) {
+                targetField = visibleFields[currentFieldIndex + direction.horizontal];
+            } else {
+                const targetRow = rows[rowIndex + direction.vertical];
+                if (targetRow) {
+                    const targetFields = Array.from(targetRow.querySelectorAll(fieldSelector))
+                        .filter(isEditableAndVisible);
+                    const fieldType = currentField.classList.contains('internal_assessment_mark')
+                        ? currentField.dataset.iaCode
+                        : currentField.classList.contains('grade-dropdown')
+                            ? 'grade-dropdown'
+                            : currentField.classList.contains('mark_practical')
+                                ? 'mark_practical'
+                                : 'mark_theory';
+                    targetField = targetFields.find(field => {
+                        if (currentField.classList.contains('internal_assessment_mark')) {
+                            return field.classList.contains('internal_assessment_mark')
+                                && field.dataset.iaCode === fieldType;
+                        }
+                        return field.classList.contains(fieldType);
+                    });
+                }
+            }
+
+            if (targetField) {
+                targetField.focus();
+            }
+        }, true);
         $(document).on('input change', '.total_marks', function() {
             if (isNonAcademicSelected()) return;
             const row = $(this).closest('tr');
@@ -1872,6 +1952,7 @@
             for (var i = 0; i < bodydata.length; i++) {
                 var row = bodydata[i];
                 row.children[1].children[0].checked = e.target.checked
+                applyStudentAbsentState($(row));
             }
         })
         $('#isAbsentPrToggle').on('change', (e) => {

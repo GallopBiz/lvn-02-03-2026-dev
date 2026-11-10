@@ -23,10 +23,19 @@ class CasteWiseReportController extends Controller
             'class_name' => 'nullable|string|max:100',
         ]);
         $selectedClass = $validated['class_name'] ?? '';
+        $reportAccess = app(\App\Services\StaffReportAccessService::class);
+        $isStaffUser = $reportAccess->isStaffUser();
+        if ($isStaffUser && $selectedClass !== '' && !$reportAccess->canAccess($selectedClass)) {
+            abort(403, 'You are not authorized to access reports for this class.');
+        }
+
         $students = Student_registration::query()
             ->activeForListings()
             ->where('status', 'r')
             ->get(['class_name', 'json_str']);
+        if ($isStaffUser) {
+            $students = $students->filter(fn ($student) => $reportAccess->canAccess((string) $student->class_name));
+        }
 
         $rowsByClass = [];
         foreach ($students as $student) {
@@ -52,6 +61,17 @@ class CasteWiseReportController extends Controller
         }
 
         $classOptions = array_keys($rowsByClass);
+        if ($isStaffUser) {
+            $assignedClassOptions = $reportAccess->assignedClassOptions();
+            $classOptions = collect($classOptions)
+                ->filter(fn ($className) => $assignedClassOptions->contains($className))
+                ->values()
+                ->all();
+
+            // Keep report rows and selector options on the same explicit
+            // teacher_subjects assignment whitelist.
+            $rowsByClass = array_intersect_key($rowsByClass, array_flip($classOptions));
+        }
         usort($classOptions, 'strnatcasecmp');
 
         $rows = array_values($rowsByClass);
@@ -90,6 +110,7 @@ class CasteWiseReportController extends Controller
             'categories' => self::CATEGORIES,
             'selectedClass' => $selectedClass,
             'academicSession' => $academicSession,
+            'reportRouteName' => $isStaffUser ? 'staff.academic.caste-wise-report' : 'academic.caste-wise-report',
         ]);
     }
 

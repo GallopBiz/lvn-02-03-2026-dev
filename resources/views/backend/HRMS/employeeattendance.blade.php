@@ -324,7 +324,7 @@
                                     if (!$employee || !$employeeName) {
                                         continue;
                                     }
-                                    $employeeShift = \App\Services\Hrms\ShiftResolver::getApplicableShift($employee, $startDate);
+                                    $employeeShift = $employeeShifts->get($employeeId);
                                 @endphp
                                 <tr>
                                     <td>
@@ -350,7 +350,7 @@
                                                 ->first();
                                             $isWeekendOff = $date->isSunday();
 
-                                            $shift = $employee ? \App\Services\Hrms\ShiftResolver::getApplicableShift($employee, $date->toDateString()) : null;
+                                            $shift = $employeeShifts->get($employeeId);
 
                                             $approvedLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
                                                 return $lr->employee_id == $employeeId

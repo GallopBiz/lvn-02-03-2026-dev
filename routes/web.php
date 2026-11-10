@@ -250,6 +250,8 @@ Route::middleware(['auth:web,staff'])->group(function () {
 });
 
 Route::middleware(['auth:staff'])->prefix('staff')->name('staff.')->group(function () {
+    Route::get('academic/caste-wise-report', [\App\Http\Controllers\Academic\CasteWiseReportController::class, 'index'])
+        ->name('academic.caste-wise-report');
     Route::get('attendance/monthly-report', [AcademicAttendanceController::class, 'monthlyReport'])->name('attendance.monthly-report');
     Route::get('attendance/monthly-lock', [AcademicAttendanceController::class, 'monthlyReport'])->name('attendance.monthly-lock');
     Route::post('attendance/monthly-lock', [AcademicAttendanceController::class, 'lockMonth'])->name('attendance.monthly-lock.store');

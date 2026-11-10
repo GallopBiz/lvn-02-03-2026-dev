@@ -163,6 +163,7 @@
                                     <th>Half Day Type</th>
                                     <th>Note</th>
                                     <th>Status</th>
+                                    <th>Request Submitted Date</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -189,6 +190,7 @@
                                         </td>
                                         <td>{{ Str::limit($streams->reason, 60) }}</td>
                                         <td class="uperletter">{{ $streams->status }}</td>
+                                        <td>{{ $streams->created_at ? $streams->created_at->format('d-m-Y') : '-' }}</td>
 
                                         <td class="d-flex">
                                             @if ($streams->status === 'Pending')
@@ -201,7 +203,7 @@
 
                                 @if ($stream->isEmpty())
                                     <tr>
-                                        <td colspan="10" class="text-center">No Data Found</td>
+                                        <td colspan="11" class="text-center">No Data Found</td>
                                     </tr>
                                 @endif
                             </tbody>

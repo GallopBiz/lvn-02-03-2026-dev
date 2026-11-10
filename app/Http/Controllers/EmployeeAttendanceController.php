@@ -6,6 +6,7 @@ use App\Models\HrmsAttendanceLock;
 use App\Models\HrmsBiometricDetail;
 use App\Models\HrmsEmployee;
 use App\Models\HrmsEmployeeAttendance;
+use App\Models\HrmsShift;
 use App\Models\TransactionLog;
 use App\Models\Employees;
 use App\Models\Attendance;
@@ -58,6 +59,13 @@ class EmployeeAttendanceController extends Controller
 
         // Fetch all employees in alphabetical order
         $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
+        $shiftsById = HrmsShift::on('dynamic')
+            ->whereIn('id', $employees->pluck('shift_id')->filter()->unique())
+            ->get()
+            ->keyBy('id');
+        $employeeShifts = $employees->mapWithKeys(function ($employee) use ($shiftsById) {
+            return [$employee->id => $shiftsById->get($employee->shift_id)];
+        });
 
         $attendanceData = HrmsEmployeeAttendance::with('employee')
             ->whereNotNull('employee_id')
@@ -78,7 +86,14 @@ class EmployeeAttendanceController extends Controller
             ->when($employeeId, fn($q) => $q->where('employee_id', $employeeId))
             ->get();
 
-        return view('backend.HRMS.employeeattendance', compact('attendanceData', 'employees', 'startDate', 'endDate', 'leaveRequests'));
+        return view('backend.HRMS.employeeattendance', compact(
+            'attendanceData',
+            'employees',
+            'employeeShifts',
+            'startDate',
+            'endDate',
+            'leaveRequests'
+        ));
     }
 
     public function sync(Request $request)

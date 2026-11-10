@@ -160,7 +160,7 @@
                                                                                     <td>{{ $date->format('d-m-Y') }}</td>
                                                                                     <td>
                                                                                         <select name="leave_types[{{ $date->format('Y-m-d') }}]" class="form-select" required>
-                                                                                            @foreach ($leaveTypes as $type)
+                                                                                            @foreach ($leaveTypesByStaffType->get($streams->employee->staff_type_id, collect()) as $type)
                                                                                                 <option value="{{ $type->id }}">{{ $type->name }}</option>
                                                                                             @endforeach
                                                                                         </select>

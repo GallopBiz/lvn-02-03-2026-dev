@@ -1102,10 +1102,51 @@ private function processEmployeeRow($row)
 	public function exportEmployeesCsv(Request $request)
 	{
 		$employeeStatus = $request->input('employee_status');
+		$availableColumns = [
+			'sr_no' => 'Sr. No',
+			'employee_id' => 'Employee ID',
+			'name' => 'Name',
+			'email' => 'Email',
+			'phone' => 'Phone',
+			'date_of_birth' => 'Date of Birth',
+			'department' => 'Department',
+			'staff_type' => 'Staff Type',
+			'position' => 'Position',
+			'permanent_address' => 'Permanent Address',
+			'bank_name' => 'Bank Name',
+			'account_number' => 'Account Number',
+			'biometric_id' => 'Biometric ID',
+			'highest_education' => 'Highest Education',
+			'institution' => 'Institution',
+			'experience_years' => 'Experience Years',
+			'emergency_contact_name' => 'Emergency Contact Name',
+			'emergency_contact_phone' => 'Emergency Contact Phone',
+			'pan' => 'PAN',
+			'aadhar' => 'Aadhar',
+			'esic_number' => 'ESIC Number',
+			'uan_number' => 'UAN Number',
+			'samagra_id' => 'Samagra ID',
+			'ayushman_number' => 'Ayushman Number',
+			'joining_date' => 'Joining Date',
+			'confirmation_date' => 'Confirmation Date',
+			'employment_status' => 'Employment Status',
+			'is_vacation' => 'Is Vacation',
+		];
+		$requestedColumns = $request->input('columns', array_keys($availableColumns));
+		$selectedColumns = array_values(array_intersect(
+			is_array($requestedColumns) ? $requestedColumns : [],
+			array_keys($availableColumns)
+		));
+
+		if (empty($selectedColumns)) {
+			return redirect()->route('employee', array_filter(['employee_status' => $employeeStatus]))
+				->with('error', 'Please select at least one column to export.');
+		}
 
 		$employees = HrmsEmployee::with([
 			'department',
 			'staffType',
+			'position',
 			'addresses',
 			'bankDetails',
 			'biometricDetails',
@@ -1126,20 +1167,12 @@ private function processEmployeeRow($row)
 			'Content-Disposition' => "attachment; filename=$filename",
 		];
 
-		$callback = function () use ($employees) {
+		$callback = function () use ($employees, $selectedColumns, $availableColumns) {
 			$file = fopen('php://output', 'w');
 
-			// Header row
-			fputcsv($file, [
-				'Sr. No', 'Employee ID', 'Name', 'Email', 'Phone', 'Date of Birth', 'Department', 'Staff Type',
-				'Permanent Address',
-				'Bank Name', 'Account Number',
-				'Biometric ID',
-				'Highest Education', 'Institution',
-				'Experience Years',
-				'Emergency Contact Name', 'Emergency Contact Phone',
-				'PAN', 'Aadhar', 'ESIC Number', 'UAN Number', 'Joining Date', 'Confirmation Date', 'Employement Status', 'Is Vacation'
-			]);
+			fputcsv($file, array_map(function ($column) use ($availableColumns) {
+				return $availableColumns[$column];
+			}, $selectedColumns));
 
 			foreach ($employees as $index => $emp) {
 
@@ -1151,36 +1184,40 @@ private function processEmployeeRow($row)
 				$emergency = $emp->emergencyContacts->first();
 				$statutory = $emp->statutoryInformation;
 
-				fputcsv($file, [
-					$index + 1,
-					$emp->id,
-					$emp->first_name . ' ' . $emp->last_name,
-					$emp->email,
-					$emp->contact_number,
-					$emp->date_of_birth,
-					$emp->department->department_name ?? '',
-					$emp->staffType->staff_type_name ?? '',
-					$address->address_line ?? '',
-					$bank->bank_name ?? '',
-					$bank->account_number ?? '',
-					$biometric->ess_emp_code ?? '',
-					$edu->qualification ?? '',
-					$edu->institution_name ?? '',
-					$exp->total_experience ?? '',
-					$emergency->contact_name ?? '',
-					$emergency->phone_number ?? '',
-					$statutory->pan_number ?? '',
-					$statutory->aadhar_number ?? '',
-					$statutory->esic_number ?? '',
-					$statutory->uan_number ?? '',
-					$emp->date_of_joining,
-					$emp->confirmation_date,
-					$emp->employee_status,
-					$emp->is_vacation,
-					
-					
-					
-				]);
+				$values = [
+					'sr_no' => $index + 1,
+					'employee_id' => $emp->id,
+					'name' => trim($emp->first_name . ' ' . $emp->last_name),
+					'email' => $emp->email,
+					'phone' => $emp->contact_number,
+					'date_of_birth' => $emp->date_of_birth,
+					'department' => $emp->department->department_name ?? '',
+					'staff_type' => $emp->staffType->staff_type_name ?? '',
+					'position' => $emp->position->position_name ?? '',
+					'permanent_address' => $address->address_line ?? '',
+					'bank_name' => $bank->bank_name ?? '',
+					'account_number' => $bank->account_number ?? '',
+					'biometric_id' => $biometric->ess_emp_code ?? '',
+					'highest_education' => $edu->qualification ?? '',
+					'institution' => $edu->institution_name ?? '',
+					'experience_years' => $exp->total_experience ?? '',
+					'emergency_contact_name' => $emergency->contact_name ?? '',
+					'emergency_contact_phone' => $emergency->phone_number ?? '',
+					'pan' => $statutory->pan_number ?? '',
+					'aadhar' => $statutory->aadhar_number ?? '',
+					'esic_number' => $statutory->esic_number ?? '',
+					'uan_number' => $statutory->uan_number ?? '',
+					'samagra_id' => $statutory->samagra_id ?? '',
+					'ayushman_number' => $statutory->ayushman_number ?? '',
+					'joining_date' => $emp->date_of_joining,
+					'confirmation_date' => $emp->confirmation_date,
+					'employment_status' => $emp->employee_status,
+					'is_vacation' => $emp->is_vacation,
+				];
+
+				fputcsv($file, array_map(function ($column) use ($values) {
+					return $values[$column];
+				}, $selectedColumns));
 			}
 
 

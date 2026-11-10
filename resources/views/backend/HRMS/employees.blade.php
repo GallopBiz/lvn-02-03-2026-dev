@@ -1023,8 +1023,52 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Filter</button>
                     <a href="{{ route('employee') }}" class="btn btn-secondary">Reset</a>
-                    <a href="{{ route('employees.export.csv', array_filter(request()->only('employee_status'))) }}" class="btn btn-success">Export Employees CSV</a>
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#employeeExportColumnsModal">Export Employees CSV</button>
                 </form>
+
+                <div class="modal fade" id="employeeExportColumnsModal" tabindex="-1" aria-labelledby="employeeExportColumnsModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <form method="GET" action="{{ route('employees.export.csv') }}" class="modal-content">
+                            @if(request('employee_status'))
+                                <input type="hidden" name="employee_status" value="{{ request('employee_status') }}">
+                            @endif
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="employeeExportColumnsModalLabel">Choose CSV Columns</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <p class="mb-0 text-muted">Select the employee details to include in the CSV.</p>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleEmployeeExportColumns">Clear all</button>
+                                </div>
+                                @php
+                                    $employeeExportColumns = [
+                                        'sr_no' => 'Sr. No', 'employee_id' => 'Employee ID', 'name' => 'Name', 'email' => 'Email', 'phone' => 'Phone',
+                                        'date_of_birth' => 'Date of Birth', 'department' => 'Department', 'staff_type' => 'Staff Type', 'position' => 'Position', 'permanent_address' => 'Permanent Address',
+                                        'bank_name' => 'Bank Name', 'account_number' => 'Account Number', 'biometric_id' => 'Biometric ID', 'highest_education' => 'Highest Education',
+                                        'institution' => 'Institution', 'experience_years' => 'Experience Years', 'emergency_contact_name' => 'Emergency Contact Name',
+                                        'emergency_contact_phone' => 'Emergency Contact Phone', 'pan' => 'PAN', 'aadhar' => 'Aadhar', 'esic_number' => 'ESIC Number',
+                                        'uan_number' => 'UAN Number', 'samagra_id' => 'Samagra ID', 'ayushman_number' => 'Ayushman Number', 'joining_date' => 'Joining Date', 'confirmation_date' => 'Confirmation Date', 'employment_status' => 'Employment Status', 'is_vacation' => 'Is Vacation',
+                                    ];
+                                @endphp
+                                <div class="row">
+                                    @foreach($employeeExportColumns as $key => $label)
+                                        <div class="col-md-4 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input employee-export-column" type="checkbox" name="columns[]" value="{{ $key }}" id="employee_export_{{ $key }}" checked>
+                                                <label class="form-check-label" for="employee_export_{{ $key }}">{{ $label }}</label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success">Download CSV</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
 
             </div>
             <div class="separator-breadcrumb border-top"></div>
@@ -1717,6 +1761,23 @@
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const exportColumnToggle = document.getElementById('toggleEmployeeExportColumns');
+
+            if (exportColumnToggle) {
+                exportColumnToggle.addEventListener('click', function () {
+                    const checkboxes = document.querySelectorAll('.employee-export-column');
+                    const shouldSelectAll = Array.from(checkboxes).some(function (checkbox) {
+                        return !checkbox.checked;
+                    });
+
+                    checkboxes.forEach(function (checkbox) {
+                        checkbox.checked = shouldSelectAll;
+                    });
+
+                    exportColumnToggle.textContent = shouldSelectAll ? 'Clear all' : 'Select all';
+                });
+            }
+
             const statusSelect = document.getElementById('employee_status');
             const dateWrapper = document.getElementById('status_date_wrapper');
             const statusDate = document.getElementById('employee_status_date');

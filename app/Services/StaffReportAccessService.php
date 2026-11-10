@@ -202,6 +202,45 @@ class StaffReportAccessService
         })->values();
     }
 
+    /**
+     * Return the actual class names assigned to the authenticated staff member.
+     *
+     * This is intentionally based on teacher_subjects.class_id rather than the
+     * report's student data, so an unrelated class can never enter a staff
+     * dropdown because of an alias or a stale client-side selection.
+     */
+    public function assignedClassOptions(): Collection
+    {
+        if (!$this->isStaffUser()) {
+            return collect();
+        }
+
+        $classIds = $this->staffAssignments()
+            ->pluck('class_id')
+            ->filter(fn ($classId) => $classId !== null && $classId !== '')
+            ->unique()
+            ->values();
+
+        if ($classIds->isEmpty()) {
+            return collect();
+        }
+
+        $classNames = DB::connection('dynamic')->table('class_name')
+            ->whereIn('id', $classIds)
+            ->pluck('class_name', 'id');
+        $classNamesFromClasses = DB::connection('dynamic')->table('classes')
+            ->whereIn('id', $classIds)
+            ->pluck('class_name', 'id');
+
+        return $classIds
+            ->map(function ($classId) use ($classNames, $classNamesFromClasses) {
+                return trim((string) ($classNames[$classId] ?? $classNamesFromClasses[$classId] ?? ''));
+            })
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
     public function allowedSections($class): ?array
     {
         if (!$this->isStaffUser()) {

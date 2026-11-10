@@ -248,7 +248,7 @@ return [
                 'title' => 'Reports',
                 'icon' => 'i-Bar-Chart',
                 'children' => [
-                    [ 'title' => 'Caste-wise Strength Report', 'route' => 'academic.caste-wise-report', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Caste-wise Strength Report', 'route' => 'academic.caste-wise-report', 'staff_route' => 'staff.academic.caste-wise-report', 'roles' => ['Admin', 'Academic Staff (Teacher)', 'Staff'] ],
                 ],
             ],
             [

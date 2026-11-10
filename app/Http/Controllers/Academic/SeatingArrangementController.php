@@ -708,19 +708,8 @@ class SeatingArrangementController extends Controller
         $combinationOrder = [];
         foreach ($students as $index => $student) {
             $streamKey = strtoupper(trim((string) ($student->academic_stream ?? '')));
-            $combinationId = $student->combination_id ?? null;
-            $combinationName = strtolower(preg_replace('/\s+/', ' ', trim((string) ($student->combination_name ?? ''))));
-            $optionalSubject = strtolower(trim((string) ($student->optional_subject ?? '')));
-
-            if (!empty($combinationId)) {
-                $combinationKey = $streamKey . '|id:' . $combinationId;
-            } elseif ($combinationName !== '') {
-                $combinationKey = $streamKey . '|name:' . $combinationName;
-            } elseif ($optionalSubject !== '') {
-                $combinationKey = $streamKey . '|optional:' . $optionalSubject;
-            } else {
-                $combinationKey = $streamKey . '|unassigned';
-            }
+            $optionalSubject = strtoupper(preg_replace('/\s+/', ' ', trim((string) ($student->optional_subject ?? ''))));
+            $combinationKey = $streamKey . '|optional:' . $optionalSubject;
 
             $student->sequence_combination_key = $combinationKey;
             $combinationStrength[$combinationKey] = ($combinationStrength[$combinationKey] ?? 0) + 1;
@@ -742,7 +731,7 @@ class SeatingArrangementController extends Controller
                 }
             }
 
-            // 2. Rank complete subject combinations by student strength, without alphabetical combination sorting.
+            // 2. Rank Main Stream + Optional Subject groups by student strength.
             $combinationKeyA = $a->sequence_combination_key;
             $combinationKeyB = $b->sequence_combination_key;
             $strengthCmp = ($combinationStrength[$combinationKeyB] ?? 0) <=> ($combinationStrength[$combinationKeyA] ?? 0);
@@ -754,7 +743,7 @@ class SeatingArrangementController extends Controller
                 return ($combinationOrder[$combinationKeyA] ?? 0) <=> ($combinationOrder[$combinationKeyB] ?? 0);
             }
 
-            // 3. Within each stream and subject combination, arrange students alphabetically by name.
+            // 3. Within each stream and optional subject group, arrange students alphabetically by name.
             $nameA = trim((string) ($a->student_name ?? ''));
             $nameB = trim((string) ($b->student_name ?? ''));
             $nameCmp = strnatcasecmp($nameA, $nameB);

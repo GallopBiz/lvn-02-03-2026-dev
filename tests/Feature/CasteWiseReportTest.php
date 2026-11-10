@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Models\Staff;
 use App\Models\User;
 use Tests\TestCase;
 
@@ -142,6 +143,74 @@ class CasteWiseReportTest extends TestCase
         $this->actingAs($staff, 'web')
             ->get(route('academic.caste-wise-report'))
             ->assertRedirect(route('admin.dashboard'));
+    }
+
+    public function test_staff_only_sees_assigned_classes_in_caste_report(): void
+    {
+        $this->createStaffAssignmentTables();
+        $this->addStaffClassAssignment(6, 123);
+        $this->addStudent('06', 'r', false, null, ['gender' => 'Male', 'category' => 'SC']);
+        $this->addStudent('07', 'r', false, null, ['gender' => 'Female', 'category' => 'OBC']);
+
+        $staff = (new Staff())->forceFill(['employee_id' => 123]);
+        $this->actingAs($staff, 'staff')
+            ->get(route('staff.academic.caste-wise-report'))
+            ->assertOk()
+            ->assertViewHas('classOptions', ['06'])
+            ->assertViewHas('rows', function (array $rows) {
+                $this->assertSame(['06'], array_column($rows, 'class_name'));
+                $this->assertSame(1, $rows[0]['overall']['total']);
+                return true;
+            });
+    }
+
+    public function test_staff_cannot_request_caste_report_for_unassigned_class(): void
+    {
+        $this->createStaffAssignmentTables();
+        $this->addStaffClassAssignment(6, 123);
+        $staff = (new Staff())->forceFill(['employee_id' => 123]);
+
+        $this->actingAs($staff, 'staff')
+            ->get(route('staff.academic.caste-wise-report', ['class_name' => '07']))
+            ->assertForbidden();
+    }
+
+    private function createStaffAssignmentTables(): void
+    {
+        Schema::connection('dynamic')->create('class_name', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('class_name');
+        });
+        Schema::connection('dynamic')->create('classes', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('class_name');
+        });
+        Schema::connection('dynamic')->create('teacher_subjects', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('class_id');
+            $table->string('section_name')->nullable();
+            $table->string('subject_id')->nullable();
+            $table->unsignedInteger('teacher_id');
+            $table->string('role')->nullable();
+            $table->boolean('is_delete')->default(false);
+        });
+
+        DB::connection('dynamic')->table('class_name')->insert([
+            'id' => 6,
+            'class_name' => '06',
+        ]);
+    }
+
+    private function addStaffClassAssignment(int $classId, int $employeeId): void
+    {
+        DB::connection('dynamic')->table('teacher_subjects')->insert([
+            'class_id' => $classId,
+            'section_name' => 'A',
+            'subject_id' => null,
+            'teacher_id' => $employeeId,
+            'role' => 'Class Teacher',
+            'is_delete' => false,
+        ]);
     }
 
     private function addStudent(

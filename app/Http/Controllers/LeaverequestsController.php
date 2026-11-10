@@ -35,7 +35,10 @@ class LeaverequestsController extends Controller
         {
             $user = auth()->guard('staff')->user();
             $employeeId = $user->employee_id;
-            $leaveTypes = HrmsLeaveType::all();
+            $employee = HrmsEmployee::findOrFail($employeeId);
+            $leaveTypeIds = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)
+                ->pluck('leave_type_id');
+            $leaveTypes = HrmsLeaveType::whereIn('id', $leaveTypeIds)->get();
             foreach ($leaveTypes as $leaveType) {
                 if (!$leaveType->is_paid) {
                     continue;

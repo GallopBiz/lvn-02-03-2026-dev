@@ -82,7 +82,7 @@
         </div>
 
         <div class="caste-report-controls no-print">
-            <form method="GET" action="{{ route('academic.caste-wise-report') }}" class="caste-report-filter">
+            <form method="GET" action="{{ route($reportRouteName) }}" class="caste-report-filter">
                 <div>
                     <label for="casteReportClass">Class</label>
                     <select class="form-control" name="class_name" id="casteReportClass">
@@ -93,7 +93,7 @@
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary">Show Report</button>
-                <a href="{{ route('academic.caste-wise-report') }}" class="btn btn-outline-secondary">Reset</a>
+                <a href="{{ route($reportRouteName) }}" class="btn btn-outline-secondary">Reset</a>
             </form>
             <button type="button" class="btn btn-dark" onclick="window.print(); return false;">Print / Save PDF</button>
         </div>

@@ -87,6 +87,8 @@ class CheckMenuPermission
                 'staff-logout',
                 'staff.login',
                 'staff.login.perform',
+                'staff/academic/caste-wise-report',
+                'staff.academic.caste-wise-report',
                 'leaverequests-staff',
                 'leaverequests.staff',
                 'compoffrequests-staff',

@@ -52,6 +52,11 @@
             {{ $nonWorkingDay['label'] }}. Attendance cannot be marked for this date.
         </div>
     @endif
+    @if($isFutureDate)
+        <div class="alert alert-warning">
+            Attendance cannot be marked for a future date.
+        </div>
+    @endif
 
     <div class="summary-grid mb-3">
         <div class="summary-card"><span>Total Students</span><strong id="totalStudents">{{ $summary['total_students'] }}</strong></div>
@@ -66,7 +71,7 @@
             <div class="row">
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Date</label>
-                    <input type="date" name="date" value="{{ $filters['date'] }}" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                    <input type="date" name="date" value="{{ $filters['date'] }}" max="{{ now()->toDateString() }}" class="form-control" onchange="document.getElementById('filterForm').submit()">
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Academic Session</label>
@@ -177,7 +182,7 @@
                 </table>
             </div>
             <div class="text-right mt-3">
-                <button class="btn btn-primary" type="submit" @disabled($students->isEmpty() || $nonWorkingDay)>Save Attendance</button>
+                <button class="btn btn-primary" type="submit" @disabled($students->isEmpty() || $nonWorkingDay || $isFutureDate)>Save Attendance</button>
             </div>
         </div>
     </form>

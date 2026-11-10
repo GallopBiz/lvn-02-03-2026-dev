@@ -86,6 +86,7 @@ class AttendanceController extends Controller
             ? $this->summaryFromDetails($editingAttendance->details)
             : $this->emptySummary($students->count());
         $nonWorkingDay = $this->nonWorkingDayInfo($filters['date']);
+        $isFutureDate = $this->isFutureAttendanceDate($filters['date']);
 
         return view('backend.AcademicsModules.dailyattandence', [
             'statuses' => self::STATUSES,
@@ -99,6 +100,7 @@ class AttendanceController extends Controller
             'editingAttendance' => $editingAttendance,
             'summary' => $summary,
             'nonWorkingDay' => $nonWorkingDay,
+            'isFutureDate' => $isFutureDate,
         ]);
     }
 
@@ -151,6 +153,10 @@ class AttendanceController extends Controller
         if (empty($validated['class_name'])) {
             $classObj = $this->resolveClass($validated['class_id']);
             $validated['class_name'] = optional($classObj)->class_name ?: (string) $validated['class_id'];
+        }
+
+        if ($this->isFutureAttendanceDate($validated['attendance_date'])) {
+            return back()->withInput()->with('error', 'Attendance cannot be marked for a future date.');
         }
 
         $nonWorkingDay = $this->nonWorkingDayInfo($validated['attendance_date']);
@@ -1679,6 +1685,11 @@ class AttendanceController extends Controller
         }
 
         return null;
+    }
+
+    private function isFutureAttendanceDate(?string $date): bool
+    {
+        return !empty($date) && Carbon::parse($date)->startOfDay()->gt(Carbon::today());
     }
 
     private function applyWorkingDayOnlyFilter($query): void
