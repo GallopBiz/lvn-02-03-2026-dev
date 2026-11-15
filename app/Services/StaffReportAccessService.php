@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class StaffReportAccessService
 {
@@ -241,6 +242,128 @@ class StaffReportAccessService
             ->values();
     }
 
+    public function classTeacherAssignments(): Collection
+    {
+        if (!$this->isStaffUser()) {
+            return collect();
+        }
+
+        return $this->staffAssignments()->filter(function ($assignment) {
+            return strcasecmp(trim((string) $assignment->role), 'Class Teacher') === 0;
+        })->values();
+    }
+
+    public function isClassTeacher(): bool
+    {
+        return $this->isStaffUser() && $this->classTeacherAssignments()->isNotEmpty();
+    }
+
+    public function assignedClassTeacherClassOptions(): Collection
+    {
+        if (!$this->isStaffUser()) {
+            return collect();
+        }
+
+        $classIds = $this->classTeacherAssignments()
+            ->pluck('class_id')
+            ->filter(fn ($classId) => $classId !== null && $classId !== '')
+            ->unique()
+            ->values();
+
+        if ($classIds->isEmpty()) {
+            return collect();
+        }
+
+        $classNames = DB::connection('dynamic')->table('class_name')
+            ->whereIn('id', $classIds)
+            ->pluck('class_name', 'id');
+        $classNamesFromClasses = DB::connection('dynamic')->table('classes')
+            ->whereIn('id', $classIds)
+            ->pluck('class_name', 'id');
+
+        return $classIds
+            ->map(function ($classId) use ($classNames, $classNamesFromClasses) {
+                $name = trim((string) ($classNames[$classId] ?? $classNamesFromClasses[$classId] ?? ''));
+                return $name !== '' ? $name : trim((string) $classId);
+            })
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    public function canAccessAsClassTeacher($class, $section = null): bool
+    {
+        if (!$this->isStaffUser()) {
+            return true;
+        }
+
+        if ($class === null || is_array($class) || is_array($section)) {
+            return false;
+        }
+
+        $assignments = $this->classTeacherAssignments();
+        if ($assignments->isEmpty()) {
+            return false;
+        }
+
+        $classAliases = $this->classAliases((string) $class);
+        if (!$classAliases) {
+            return false;
+        }
+
+        $matchingClassRows = $assignments->filter(function ($assignment) use ($classAliases) {
+            return $this->aliasesIntersect($classAliases, $this->classAliases((string) $assignment->class_id));
+        });
+
+        if ($matchingClassRows->isEmpty()) {
+            return false;
+        }
+
+        if ($section === null) {
+            return true;
+        }
+
+        return $matchingClassRows->contains(function ($assignment) use ($section) {
+            return $this->sameValue($assignment->section_name, $section)
+                || strcasecmp(trim((string) $assignment->section_name), 'All') === 0;
+        });
+    }
+
+    public function classTeacherScope(): Collection
+    {
+        if (!$this->isStaffUser()) {
+            return collect();
+        }
+
+        return $this->classTeacherAssignments()
+            ->map(function ($assignment) {
+                $classId = trim((string) $assignment->class_id);
+                $classAliases = $this->classAliases($classId);
+
+                $className = null;
+                $classesTable = DB::connection('dynamic')->table('classes');
+                $classRow = $classesTable->where('id', $classId)->value('class_name');
+                if (!$classRow) {
+                    $classRow = DB::connection('dynamic')->table('class_name')->where('id', $classId)->value('class_name');
+                }
+                $className = $classRow ? trim((string) $classRow) : ($classAliases ? end($classAliases) : $classId);
+
+                return [
+                    'class_id' => $classId,
+                    'class_name' => $className,
+                    'class_aliases' => $classAliases,
+                    'section_name' => trim((string) $assignment->section_name),
+                    'role' => trim((string) $assignment->role),
+                ];
+            })
+            ->values();
+    }
+
+    public function aliasesMatch(string $class1, string $class2): bool
+    {
+        return $this->aliasesIntersect($this->classAliases($class1), $this->classAliases($class2));
+    }
+
     public function allowedSections($class): ?array
     {
         if (!$this->isStaffUser()) {
@@ -341,26 +464,30 @@ class StaffReportAccessService
 
         $aliases = [$this->normalize($value)];
 
-        $classesTable = DB::connection('dynamic')->table('classes');
-        $classRows = $classesTable
-            ->where('id', $value)
-            ->orWhere('class_name', $value)
-            ->get(['id', 'class_name']);
+        if (Schema::connection('dynamic')->hasTable('classes')) {
+            $classesTable = DB::connection('dynamic')->table('classes');
+            $classRows = $classesTable
+                ->where('id', $value)
+                ->orWhere('class_name', $value)
+                ->get(['id', 'class_name']);
 
-        foreach ($classRows as $row) {
-            $aliases[] = $this->normalize((string) $row->id);
-            $aliases[] = $this->normalize((string) $row->class_name);
+            foreach ($classRows as $row) {
+                $aliases[] = $this->normalize((string) $row->id);
+                $aliases[] = $this->normalize((string) $row->class_name);
+            }
         }
 
-        $classNamesTable = DB::connection('dynamic')->table('class_name');
-        $classNameRows = $classNamesTable
-            ->where('id', $value)
-            ->orWhere('class_name', $value)
-            ->get(['id', 'class_name']);
+        if (Schema::connection('dynamic')->hasTable('class_name')) {
+            $classNamesTable = DB::connection('dynamic')->table('class_name');
+            $classNameRows = $classNamesTable
+                ->where('id', $value)
+                ->orWhere('class_name', $value)
+                ->get(['id', 'class_name']);
 
-        foreach ($classNameRows as $row) {
-            $aliases[] = $this->normalize((string) $row->id);
-            $aliases[] = $this->normalize((string) $row->class_name);
+            foreach ($classNameRows as $row) {
+                $aliases[] = $this->normalize((string) $row->id);
+                $aliases[] = $this->normalize((string) $row->class_name);
+            }
         }
 
         return $this->classAliasesCache[$value] = array_values(array_unique(array_filter($aliases)));
@@ -373,6 +500,10 @@ class StaffReportAccessService
         }
 
         $aliases = [$this->normalize($value)];
+        if (!Schema::connection('dynamic')->hasTable('subjectmaster')) {
+            return $this->subjectAliasesCache[$value] = $aliases;
+        }
+
         $subjectRows = DB::connection('dynamic')->table('subjectmaster')
             ->where('id', $value)
             ->orWhere('subject_name', $value)
@@ -413,7 +544,7 @@ class StaffReportAccessService
         return $this->normalize((string) $left) === $this->normalize((string) $right);
     }
 
-    private function normalize(string $value): string
+    public function normalize(string $value): string
     {
         return strtolower(trim($value));
     }

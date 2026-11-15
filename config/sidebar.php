@@ -82,6 +82,7 @@ return [
                     [ 'title' => 'Fees Type Master', 'route' => 'fees-types-master', 'roles' => ['Admin'] ],
                     [ 'title' => 'Bus Fees Master', 'route' => 'bus-fees-master', 'roles' => ['Admin'] ],
                     [ 'title' => 'Late Fees Master', 'route' => 'late-fees-master', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Late Fee Adjustments', 'route' => 'late-fee-adjustments', 'roles' => ['Admin'] ],
                     [ 'title' => 'Advance Next Year Fees', 'route' => 'advance-next-year-fees', 'roles' => ['Admin'] ],
                     [ 'title' => 'Course Fees Head Order', 'route' => 'course-fees-head-orders', 'roles' => ['Admin'] ],
                     [ 'title' => 'Generate Fees Due Chart', 'route' => 'generate-due-chart', 'roles' => ['Admin'] ],
@@ -306,6 +307,7 @@ return [
                     [ 'title' => 'Employee Leave Balance', 'route' => 'employee-leave-balances', 'roles' => ['Admin'] ],
                     [ 'title' => 'Leave Requests', 'route' => 'leaverequests', 'roles' => ['Admin'] ],
                     [ 'title' => 'Admin Leave Requests', 'route' => 'employeeleaves', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Advance Leave Report', 'route' => 'advance.leave.report', 'roles' => ['Admin'] ],
                     [ 'title' => 'Employee Wise Leave Report', 'route' => 'employee-leave-report', 'roles' => ['Admin'] ],
                     // Staff menu item
                     [ 'title' => 'My Leave Requests', 'route' => 'leaverequests-staff', 'roles' => ['Academic Staff (Teacher)', 'Staff'] ],
@@ -354,6 +356,7 @@ return [
                     [ 'title' => 'Employee Wise Deductions Report', 'route' => 'employee-deduction-report', 'roles' => ['Admin'] ],
                     [ 'title' => 'Employee Wise Leave Report', 'route' => 'employee-leave-report', 'roles' => ['Admin'] ],
                     [ 'title' => 'Date Wise Employee Leave Report', 'route' => 'employee-leave-report-date-wise', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Advance Leave Report', 'route' => 'advance.leave.report', 'roles' => ['Admin'] ],
                 ],
             ],
         ],

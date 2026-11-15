@@ -358,7 +358,11 @@ class PublicController extends Controller
             
             // override fees if late fee is there
             if($feeReceipts->isEmpty()){
-                $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                if($auto_late_fee > 0 && $late_fee == 0){
+                    $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                }
                 if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                     $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                     $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;
@@ -370,7 +374,11 @@ class PublicController extends Controller
                 $fee_receipt_detail_key = $fee->sub_json_data['account_name'][$key]."_".$fee->sub_json_data['term'][$key];
                 if(isset($feeReceiptDetails[$fee_receipt_detail_key])){
                     if($feeReceiptDetails[$fee_receipt_detail_key]["allocated_amount_sum"]<=0){
-                        $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                        $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                        $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                        if($auto_late_fee > 0 && $late_fee == 0){
+                            $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                        }
                         if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                             $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                             $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;
@@ -380,7 +388,11 @@ class PublicController extends Controller
                         }
                     }
                 }else{
-                    $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                    $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                    $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                    if($auto_late_fee > 0 && $late_fee == 0){
+                        $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                    }
                     if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                         $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                         $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;
@@ -833,6 +845,18 @@ class PublicController extends Controller
         return $lateFee;
     }
 
+    /**
+     * Resolve effective late fee for student and term, checking admin adjustments first.
+     */
+    public function resolveLateFeeForStudent($studentId, $term, $dueDate) {
+        $autoLateFee = $this->calculateLateFee($dueDate);
+        try {
+            return \App\Models\StudentLateFeeAdjustment::resolveLateFee($studentId, $term, $autoLateFee);
+        } catch (\Throwable $e) {
+            return $autoLateFee;
+        }
+    }
+
     public function customPayment(Request $request) {
         $scholar_id = $request->input('scholar_id');
         // $fee_structure = false;
@@ -921,7 +945,11 @@ class PublicController extends Controller
                 
                 // override fees if late fee is there
                 if($feeReceipts->isEmpty()){
-                    $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                    $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                    $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                    if($auto_late_fee > 0 && $late_fee == 0){
+                        $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                    }
                     if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                         $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                         $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;
@@ -933,7 +961,11 @@ class PublicController extends Controller
                     $fee_receipt_detail_key = $fee->sub_json_data['account_name'][$key]."_".$fee->sub_json_data['term'][$key];
                     if(isset($feeReceiptDetails[$fee_receipt_detail_key])){
                         if($feeReceiptDetails[$fee_receipt_detail_key]["allocated_amount_sum"]<=0){
-                            $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                            $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                            $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                            if($auto_late_fee > 0 && $late_fee == 0){
+                                $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                            }
                             if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                                 $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                                 $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;
@@ -943,7 +975,11 @@ class PublicController extends Controller
                             }
                         }
                     }else{
-                        $late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                        $late_fee = $this->resolveLateFeeForStudent($student->id, $fee->sub_json_data['term'][$key], $fee->sub_json_data['due_date'][$key]);
+                        $auto_late_fee = $this->calculateLateFee($fee->sub_json_data['due_date'][$key]);
+                        if($auto_late_fee > 0 && $late_fee == 0){
+                            $fee_headwise[$key_fee_headwise]["late_fee_waived_flag"] = 1;
+                        }
                         if(!$dis_applied && $fee->sub_json_data['account_name'][$key]=="TUITION FEES" && $late_fee>0){
                             $fee_headwise[$key_fee_headwise]["orig_fees"] = $orig_fees;
                             $fee_headwise[$key_fee_headwise]["fees"] = $fees_exempted+$late_fee;

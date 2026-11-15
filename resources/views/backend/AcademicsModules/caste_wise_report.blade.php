@@ -76,6 +76,14 @@
         <div class="caste-report-heading">
             <h2>Lokmanya Vidya Niketan</h2>
             <p>Caste Wise Strength of Institute</p>
+            @if(!empty($isStaffUser) && !empty($rows))
+                @php
+                    $assignedSectionsSummary = collect($rows)->pluck('section_name')->filter()->unique()->implode(', ');
+                @endphp
+                @if($assignedSectionsSummary)
+                    <p class="text-primary font-weight-bold mb-0">Class Teacher Report &bull; Section: {{ $assignedSectionsSummary }}</p>
+                @endif
+            @endif
             @if($academicSession)
                 <p>Academic Session: {{ $academicSession }}</p>
             @endif
@@ -119,7 +127,7 @@
                 <tbody>
                     @forelse($rows as $row)
                         <tr>
-                            <td class="class-cell">{{ $displayClassName($row['class_name']) }}</td>
+                            <td class="class-cell">{{ $displayClassName($row['class_name']) }}@if(!empty($row['section_name'])) <span class="d-block text-muted small font-weight-normal">({{ $row['section_name'] }})</span>@endif</td>
                             <td>{{ $row['overall']['boys'] }}</td>
                             <td>{{ $row['overall']['girls'] }}</td>
                             <td>{{ $row['overall']['total'] }}</td>
@@ -132,7 +140,11 @@
                     @empty
                         <tr>
                             <td class="caste-report-empty" colspan="{{ 1 + (count($categories) + 1) * 3 }}">
-                                No active registered students found for this selection.
+                                @if(!empty($isStaffUser) && empty($classOptions))
+                                    You are not currently assigned as a Class Teacher. Caste-wise reports are only visible to assigned Class Teachers.
+                                @else
+                                    No active registered students found for this selection.
+                                @endif
                             </td>
                         </tr>
                     @endforelse

@@ -2,7 +2,7 @@
 @section('main-container')
 @php
     $detailByStudent = $editingAttendance ? $editingAttendance->details->keyBy('student_id') : collect();
-    $isStaffAttendanceUser = auth()->guard('staff')->check() && !auth()->guard('web')->check();
+    $isStaffAttendanceUser = isset($isStaffAttendanceUser) ? $isStaffAttendanceUser : (auth()->guard('staff')->check() && !auth()->guard('web')->check());
 @endphp
 <style>
     .attendance-page { color: #24324b; }
@@ -23,6 +23,7 @@
     .table thead th { white-space: nowrap; background: #f4f7fb; color: #41516a; border-bottom: 1px solid #e3e9f2; }
     .table td { vertical-align: middle; }
     .student-search { max-width: 320px; }
+    .attendance-panel .pagination { margin-bottom: 0; }
     @media (max-width: 991px) { .summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
     @media (max-width: 575px) { .summary-grid { grid-template-columns: 1fr; } .attendance-panel { padding: 14px; } }
 </style>
@@ -58,6 +59,31 @@
         </div>
     @endif
 
+    <div id="attendanceAlreadyMarkedContainer">
+        @if(isset($existingAttendance) && $existingAttendance)
+            <div class="alert alert-danger d-flex justify-content-between align-items-center flex-wrap shadow-sm mb-3" id="attendanceAlreadyMarkedAlert" role="alert">
+                <div class="d-flex align-items-center mr-3 my-1">
+                    <i class="i-Information mr-2 font-weight-bold" style="font-size: 24px;"></i>
+                    <div>
+                        <strong class="d-block" style="font-size: 15px;">Attendance has already been submitted for this date.</strong>
+                        <span class="small">
+                            Attendance for <strong>{{ optional($selectedClass)->class_name ?: $filters['class_id'] }} (Section: {{ $filters['section_name'] ?: 'All' }})</strong> on <strong>{{ \Carbon\Carbon::parse($filters['date'])->format('d-m-Y') }}</strong> was already submitted on {{ optional($existingAttendance->created_at)->format('d-m-Y h:i A') ?: '-' }}.
+                        </span>
+                    </div>
+                </div>
+                <div class="my-1">
+                    @if(!$existingAttendance->is_locked)
+                        <a href="{{ route('dailyattandenceUpdate', $existingAttendance->id) }}" class="btn btn-danger btn-sm font-weight-bold shadow-sm">
+                            <i class="i-Pen-2 mr-1"></i> Edit Existing Attendance
+                        </a>
+                    @else
+                        <span class="badge badge-dark p-2 font-weight-bold">Locked</span>
+                    @endif
+                </div>
+            </div>
+        @endif
+    </div>
+
     <div class="summary-grid mb-3">
         <div class="summary-card"><span>Total Students</span><strong id="totalStudents">{{ $summary['total_students'] }}</strong></div>
         <div class="summary-card"><span>Present</span><strong id="presentCount">{{ $summary['present'] }}</strong></div>
@@ -71,7 +97,7 @@
             <div class="row">
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Date</label>
-                    <input type="date" name="date" value="{{ $filters['date'] }}" max="{{ now()->toDateString() }}" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                    <input type="date" name="date" id="attendanceDateInput" value="{{ $filters['date'] }}" max="{{ now()->toDateString() }}" class="form-control" onchange="checkAttendanceBeforeSubmit(this)">
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Academic Session</label>
@@ -79,7 +105,7 @@
                 </div>
                 <div class="col-lg-3 col-md-4 form-group">
                     <label>Class</label>
-                    <select name="class_id" class="form-control" onchange="var sec = this.form.querySelector('[name=section_name]'); if(sec) sec.value = ''; this.form.submit();">
+                    <select name="class_id" id="classSelectInput" class="form-control" onchange="var sec = this.form.querySelector('[name=section_name]'); if(sec) sec.value = ''; checkAttendanceBeforeSubmit(this);">
                         <option value="">Select class</option>
                         @foreach($classes as $class)
                             <option value="{{ $class->id }}" data-name="{{ $class->class_name }}" @selected((string)$filters['class_id'] === (string)$class->id || (optional($selectedClass)->class_name === $class->class_name))>{{ $class->class_name }}</option>
@@ -88,7 +114,7 @@
                 </div>
                 <div class="col-lg-2 col-md-4 form-group">
                     <label>Section</label>
-                    <select name="section_name" class="form-control" onchange="document.getElementById('filterForm').submit()">
+                    <select name="section_name" id="sectionSelectInput" class="form-control" onchange="checkAttendanceBeforeSubmit(this)">
                         <option value="">Select section</option>
                         @foreach($sections as $section)
                             <option value="{{ $section }}" @selected($filters['section_name'] === $section)>{{ $section }}</option>
@@ -144,6 +170,12 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary mb-1" onclick="clearAll()">Clear (Blank)</button>
             </div>
 
+            @if(isset($existingAttendance) && $existingAttendance)
+                <div class="alert alert-warning mb-3">
+                    <i class="i-Information mr-1 font-weight-bold"></i> <strong>Attendance already marked:</strong> Duplicate attendance submission is disabled for this date. Click <strong>Edit Existing Attendance</strong> above to make changes.
+                </div>
+            @endif
+
             <div class="table-responsive">
                 <table class="table table-hover" id="attendanceTable">
                     <thead>
@@ -168,12 +200,12 @@
                                 <td>
                                     @foreach($statuses as $key => $label)
                                         <label class="status-pill status-{{ $key }}" title="{{ $key === 'pl' ? 'Preparation Leave' : $label }}">
-                                            <input type="radio" name="attendance[{{ $student->id }}]" value="{{ $key }}" @checked($selected === $key)>
+                                            <input type="radio" name="attendance[{{ $student->id }}]" value="{{ $key }}" @checked($selected === $key) @disabled(isset($existingAttendance) && $existingAttendance)>
                                             {{ $label }}
                                         </label>
                                     @endforeach
                                 </td>
-                                <td><input type="text" name="remarks[{{ $student->id }}]" value="{{ old("remarks.$student->id", optional($detail)->remarks) }}" class="form-control" placeholder="Optional"></td>
+                                <td><input type="text" name="remarks[{{ $student->id }}]" value="{{ old("remarks.$student->id", optional($detail)->remarks) }}" class="form-control" placeholder="Optional" @disabled(isset($existingAttendance) && $existingAttendance)></td>
                             </tr>
                         @empty
                             <tr><td colspan="5" class="text-center text-muted">Choose class and section to load students.</td></tr>
@@ -182,7 +214,7 @@
                 </table>
             </div>
             <div class="text-right mt-3">
-                <button class="btn btn-primary" type="submit" @disabled($students->isEmpty() || $nonWorkingDay || $isFutureDate)>Save Attendance</button>
+                <button class="btn btn-primary" id="saveAttendanceBtn" type="submit" @disabled($students->isEmpty() || $nonWorkingDay || $isFutureDate || (isset($existingAttendance) && $existingAttendance))>Save Attendance</button>
             </div>
         </div>
     </form>
@@ -229,21 +261,75 @@
 
     @if(!$editingAttendance)
         <div class="attendance-panel">
-            <h4 class="mb-3">Recent Attendance</h4>
+            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+                <div class="mb-2">
+                    <h4 class="mb-1">Recent Attendance</h4>
+                    <span class="text-muted small">Arranged by date. Check already filled attendance by date or search.</span>
+                </div>
+                <form method="GET" action="{{ route('dailyattandence') }}" class="d-flex align-items-center flex-wrap mb-2" style="gap: 10px;">
+                    @if(request('class_id'))
+                        <input type="hidden" name="class_id" value="{{ request('class_id') }}">
+                    @endif
+                    @if(request('section_name'))
+                        <input type="hidden" name="section_name" value="{{ request('section_name') }}">
+                    @endif
+                    @if(request('per_page'))
+                        <input type="hidden" name="per_page" value="{{ request('per_page') }}">
+                    @endif
+                    <div class="d-flex align-items-center">
+                        <label class="mr-2 mb-0 small font-weight-bold text-muted text-nowrap">Date:</label>
+                        <input type="date" name="history_date" value="{{ request('history_date', request('filter_date')) }}" class="form-control form-control-sm" style="width: 155px;" onchange="this.form.submit()">
+                    </div>
+                    @if(request('history_date') || request('filter_date'))
+                        <a href="{{ route('dailyattandence', array_filter(['class_id' => request('class_id'), 'section_name' => request('section_name'), 'per_page' => request('per_page')])) }}" class="btn btn-outline-danger btn-sm text-nowrap" title="Clear Date Filter">
+                            <i class="i-Close mr-1"></i> Clear Date
+                        </a>
+                    @endif
+                    <div class="d-flex align-items-center">
+                        <input type="search" id="recentAttendanceSearch" class="form-control form-control-sm" style="width: 210px;" placeholder="Instant search...">
+                    </div>
+                </form>
+            </div>
             <div class="table-responsive">
-                <table class="table">
-                    <thead><tr><th>Date</th><th>Class</th><th>Section</th><th>Total Students</th><th>Present</th><th>Absent</th><th>Leave</th><th>PL</th><th>Action</th></tr></thead>
+                <table class="table" id="recentAttendanceTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Class</th>
+                            <th>Section</th>
+                            <th>Marked By</th>
+                            <th>Total Students</th>
+                            <th>Present</th>
+                            <th>Absent</th>
+                            <th>Leave</th>
+                            <th>PL</th>
+                            <th>Submitted Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         @forelse($recentAttendance as $item)
                             <tr>
                                 <td>{{ optional($item->attendance_date)->format('d-m-Y') }}</td>
                                 <td>{{ optional($item->className)->class_name ?: $item->class_name }}</td>
                                 <td>{{ $item->section_name }}</td>
+                                <td>
+                                    @if(optional($item->teacher)->first_name)
+                                        <span class="font-weight-bold">{{ trim($item->teacher->first_name . ' ' . $item->teacher->last_name) }}</span>
+                                    @else
+                                        <span class="text-muted">Admin / School</span>
+                                    @endif
+                                </td>
                                 <td>{{ $item->total_students }}</td>
                                 <td>{{ $item->present_count }}</td>
                                 <td>{{ max(0, $item->absent_count - $item->leave_count) }}</td>
                                 <td>{{ $item->leave_count }}</td>
                                 <td>{{ $item->pl_count }}</td>
+                                <td>
+                                    <span class="badge badge-light border text-muted px-2 py-1" style="font-size: 11px;">
+                                        <i class="i-Clock mr-1"></i>{{ optional($item->created_at)->format('d-m-Y h:i A') ?: '-' }}
+                                    </span>
+                                </td>
                                 <td>
                                     <div class="d-flex flex-wrap">
                                         @if(!$item->is_locked)
@@ -274,11 +360,68 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="text-center text-muted">No attendance recorded yet.</td></tr>
+                            <tr>
+                                <td colspan="11" class="text-center text-muted py-4">
+                                    @if(request('history_date') || request('filter_date'))
+                                        No attendance recorded for {{ \Carbon\Carbon::parse(request('history_date', request('filter_date')))->format('d-m-Y') }}.
+                                    @else
+                                        No attendance recorded yet.
+                                    @endif
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
+
+            @if(method_exists($recentAttendance, 'links'))
+                <div class="d-flex justify-content-between align-items-center flex-wrap mt-3 pt-3 border-top" style="gap: 12px;">
+                    <div class="d-flex align-items-center flex-wrap" style="gap: 15px;">
+                        <form method="GET" action="{{ route('dailyattandence') }}" class="d-inline-flex align-items-center mb-0">
+                            @if(request('history_date'))
+                                <input type="hidden" name="history_date" value="{{ request('history_date') }}">
+                            @endif
+                            @if(request('filter_date'))
+                                <input type="hidden" name="filter_date" value="{{ request('filter_date') }}">
+                            @endif
+                            @if(request('class_id'))
+                                <input type="hidden" name="class_id" value="{{ request('class_id') }}">
+                            @endif
+                            @if(request('section_name'))
+                                <input type="hidden" name="section_name" value="{{ request('section_name') }}">
+                            @endif
+                            <label class="mr-2 mb-0 small text-muted font-weight-bold text-nowrap">Show:</label>
+                            <select name="per_page" class="form-control form-control-sm" style="width: 70px;" onchange="this.form.submit()">
+                                <option value="5" @selected(request('per_page', 5) == 5)>5</option>
+                                <option value="10" @selected(request('per_page') == 10)>10</option>
+                                <option value="25" @selected(request('per_page') == 25)>25</option>
+                                <option value="50" @selected(request('per_page') == 50)>50</option>
+                            </select>
+                            <span class="ml-2 small text-muted text-nowrap">entries</span>
+                        </form>
+                        <span class="text-muted small text-nowrap">
+                            @if($recentAttendance->total() > 0)
+                                Showing {{ $recentAttendance->firstItem() ?? 1 }} to {{ $recentAttendance->lastItem() ?? $recentAttendance->total() }} of {{ $recentAttendance->total() }} records
+                            @else
+                                Showing 0 records
+                            @endif
+                        </span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        @if($recentAttendance->hasPages())
+                            {!! $recentAttendance->links('pagination::bootstrap-4') !!}
+                        @else
+                            <nav aria-label="Attendance pagination">
+                                <ul class="pagination mb-0">
+                                    <li class="page-item disabled" aria-disabled="true"><span class="page-link">&lsaquo;</span></li>
+                                    <li class="page-item active" aria-current="page"><span class="page-link">1</span></li>
+                                    <li class="page-item disabled" aria-disabled="true"><span class="page-link">&rsaquo;</span></li>
+                                </ul>
+                            </nav>
+                        @endif
+                    </div>
+                </div>
+            @endif
         </div>
     @endif
 </div>
@@ -327,9 +470,130 @@
         });
         updateCounts();
     });
+    document.getElementById('recentAttendanceSearch')?.addEventListener('input', function(e) {
+        var term = e.target.value.toLowerCase();
+        document.querySelectorAll('#recentAttendanceTable tbody tr').forEach(function(row) {
+            row.style.display = row.textContent.toLowerCase().indexOf(term) > -1 ? '' : 'none';
+        });
+    });
     updateCounts();
 
+    function checkAttendanceBeforeSubmit(triggerElement) {
+        var form = document.getElementById('filterForm');
+        var dateInput = form.querySelector('[name="date"]');
+        var dateVal = dateInput ? dateInput.value : '';
+        var classSelect = form.querySelector('[name="class_id"]');
+        var secSelect = form.querySelector('[name="section_name"]');
+        var classId = classSelect ? classSelect.value : '';
+        var sectionName = secSelect ? secSelect.value : '';
+        var sessionInput = form.querySelector('[name="academic_session"]');
+        var sessionVal = sessionInput ? sessionInput.value : '';
+
+        if (!dateVal || !classId) {
+            form.submit();
+            return;
+        }
+
+        var checkUrl = "{{ route('dailyattandence.check-marked') }}?date=" + encodeURIComponent(dateVal) +
+            "&class_id=" + encodeURIComponent(classId) +
+            "&section_name=" + encodeURIComponent(sectionName) +
+            "&academic_session=" + encodeURIComponent(sessionVal);
+
+        fetch(checkUrl, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.already_marked) {
+                renderAlreadyMarkedAlert(data);
+                form.submit();
+            } else {
+                clearAlreadyMarkedAlert();
+                form.submit();
+            }
+        })
+        .catch(function() {
+            form.submit();
+        });
+    }
+
+    function renderAlreadyMarkedAlert(data) {
+        var container = document.getElementById('attendanceAlreadyMarkedContainer');
+        if (!container) return;
+        var editBtnHtml = data.edit_url && !data.is_locked
+            ? '<a href="' + data.edit_url + '" class="btn btn-danger btn-sm font-weight-bold shadow-sm"><i class="i-Pen-2 mr-1"></i> Edit Existing Attendance</a>'
+            : (data.is_locked ? '<span class="badge badge-dark p-2 font-weight-bold">Locked</span>' : '');
+
+        container.innerHTML = '<div class="alert alert-danger d-flex justify-content-between align-items-center flex-wrap shadow-sm mb-3" id="attendanceAlreadyMarkedAlert" role="alert">' +
+            '<div class="d-flex align-items-center mr-3 my-1">' +
+                '<i class="i-Information mr-2 font-weight-bold" style="font-size: 24px;"></i>' +
+                '<div>' +
+                    '<strong class="d-block" style="font-size: 15px;">' + (data.message || 'Attendance has already been submitted for this date.') + '</strong>' +
+                    '<span class="small">Attendance for <strong>' + (data.class_name || '') + ' (' + (data.section_name || 'All') + ')</strong> on <strong>' + (data.attendance_date || '') + '</strong> was already submitted' + (data.submitted_at ? ' on ' + data.submitted_at : '') + '.</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="my-1">' + editBtnHtml + '</div>' +
+        '</div>';
+
+        var saveBtn = document.getElementById('saveAttendanceBtn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        document.querySelectorAll('#attendanceTable input[type="radio"]').forEach(function(r) {
+            r.disabled = true;
+        });
+    }
+
+    function clearAlreadyMarkedAlert() {
+        var container = document.getElementById('attendanceAlreadyMarkedContainer');
+        if (container) container.innerHTML = '';
+        var saveBtn = document.getElementById('saveAttendanceBtn');
+        if (saveBtn) saveBtn.disabled = false;
+        document.querySelectorAll('#attendanceTable input[type="radio"]').forEach(function(r) {
+            r.disabled = false;
+        });
+    }
+
+    var dateCheckTimeout = null;
+    document.getElementById('attendanceDateInput')?.addEventListener('input', function() {
+        var input = this;
+        clearTimeout(dateCheckTimeout);
+        dateCheckTimeout = setTimeout(function() {
+            var dateVal = input.value;
+            if (!dateVal || dateVal.length < 10) return;
+            var form = document.getElementById('filterForm');
+            var classSelect = form.querySelector('[name="class_id"]');
+            var secSelect = form.querySelector('[name="section_name"]');
+            var classId = classSelect ? classSelect.value : '';
+            var sectionName = secSelect ? secSelect.value : '';
+            var sessionInput = form.querySelector('[name="academic_session"]');
+            var sessionVal = sessionInput ? sessionInput.value : '';
+
+            var checkUrl = "{{ route('dailyattandence.check-marked') }}?date=" + encodeURIComponent(dateVal) +
+                "&class_id=" + encodeURIComponent(classId) +
+                "&section_name=" + encodeURIComponent(sectionName) +
+                "&academic_session=" + encodeURIComponent(sessionVal);
+
+            fetch(checkUrl, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.already_marked) {
+                    renderAlreadyMarkedAlert(data);
+                } else {
+                    clearAlreadyMarkedAlert();
+                }
+            })
+            .catch(function() {});
+        }, 200);
+    });
+
     document.getElementById('attendanceForm')?.addEventListener('submit', function(e) {
+        if (document.getElementById('attendanceAlreadyMarkedAlert')) {
+            e.preventDefault();
+            alert('Attendance has already been submitted for this date.');
+            return false;
+        }
         var checked = document.querySelectorAll('#attendanceTable input[type="radio"]:checked');
         if (checked.length === 0) {
             e.preventDefault();

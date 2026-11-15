@@ -15,6 +15,7 @@ class Attendance extends Model
 
     protected $fillable = [
         'teacher_id',
+        'Teacher_id',
         'class_id',
         'class_name',
         'section_name',
@@ -38,6 +39,17 @@ class Attendance extends Model
         'locked_at' => 'datetime',
     ];
 
+    public function getTeacherIdAttribute()
+    {
+        return $this->attributes['Teacher_id'] ?? $this->attributes['teacher_id'] ?? null;
+    }
+
+    public function setTeacherIdAttribute($value)
+    {
+        $this->attributes['Teacher_id'] = $value;
+        unset($this->attributes['teacher_id']);
+    }
+
     public function details()
     {
         return $this->hasMany(AttendanceDetail::class, 'attendance_id');
@@ -50,6 +62,6 @@ class Attendance extends Model
 
     public function teacher()
     {
-        return $this->belongsTo(HrmsEmployee::class, 'teacher_id');
+        return $this->belongsTo(HrmsEmployee::class, 'Teacher_id');
     }
 }

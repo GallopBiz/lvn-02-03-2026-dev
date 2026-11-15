@@ -34,6 +34,18 @@ class AttendanceController extends Controller
     {
         $filters = $this->filters($request);
         $isStaffUser = $this->isStaffAttendanceUser();
+
+        if ($isStaffUser && empty($filters['class_id'])) {
+            $assignedSubjects = $this->accessibleTeacherSubjects(true)->get();
+            if ($assignedSubjects->isNotEmpty()) {
+                $firstAssignment = $assignedSubjects->first();
+                $filters['class_id'] = $firstAssignment->class_id;
+                if (empty($filters['section_name'])) {
+                    $filters['section_name'] = $firstAssignment->section_name;
+                }
+            }
+        }
+
         $classes = $this->classes($isStaffUser);
         $selectedClass = $filters['class_id'] ? $this->resolveClass($filters['class_id']) : null;
         $sections = $this->sections($filters['class_id'], $isStaffUser);
@@ -75,12 +87,38 @@ class AttendanceController extends Controller
             $selectedClass = $this->resolveClass($filters['class_id']);
         }
 
-        $recentAttendance = $this->accessibleAttendanceQuery()->with('teacher', 'className')
-            ->where('is_delete', 0)
-            ->latest('attendance_date')
-            ->latest('id')
-            ->limit(25)
-            ->get();
+        $existingAttendance = null;
+        if (!$editingAttendance && !empty($filters['date']) && !empty($filters['class_id'])) {
+            $existingAttendance = $this->findExistingAttendance(
+                $filters['date'],
+                $filters['class_id'],
+                $filters['section_name'],
+                $filters['academic_session']
+            );
+        }
+
+        $recentAttendanceQuery = $this->accessibleAttendanceQuery()->with('teacher', 'className')
+            ->where('is_delete', 0);
+
+        $filterDate = $request->query('history_date', $request->query('filter_date'));
+        if (!empty($filterDate)) {
+            $recentAttendanceQuery->where(function ($query) use ($filterDate) {
+                $query->whereDate('attendance_date', $filterDate)
+                    ->orWhereDate('created_at', $filterDate);
+            });
+        }
+
+        $perPage = $request->integer('per_page', 5);
+        if ($perPage <= 0 || $perPage > 100) {
+            $perPage = 5;
+        }
+
+        $recentAttendance = $recentAttendanceQuery
+            ->orderByDesc('attendance_date')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
 
         $summary = $editingAttendance
             ? $this->summaryFromDetails($editingAttendance->details)
@@ -98,10 +136,98 @@ class AttendanceController extends Controller
             'filters' => $filters,
             'recentAttendance' => $recentAttendance,
             'editingAttendance' => $editingAttendance,
+            'existingAttendance' => $existingAttendance,
             'summary' => $summary,
             'nonWorkingDay' => $nonWorkingDay,
             'isFutureDate' => $isFutureDate,
+            'isStaffAttendanceUser' => $isStaffUser,
         ]);
+    }
+
+    public function checkMarked(Request $request)
+    {
+        $date = $request->query('date', $request->query('attendance_date'));
+        $classId = $request->query('class_id');
+        $sectionName = $request->query('section_name');
+        $session = $request->query('academic_session', $this->defaultSession($request));
+        $isStaffUser = $this->isStaffAttendanceUser();
+
+        if ($isStaffUser) {
+            if (empty($classId)) {
+                $assignment = $this->accessibleTeacherSubjects(true)->first();
+                if ($assignment) {
+                    $classId = $assignment->class_id;
+                    if (empty($sectionName)) {
+                        $sectionName = $assignment->section_name;
+                    }
+                }
+            } elseif ($sectionName && !$this->canStaffAccessClassSection($classId, $sectionName, true)) {
+                return response()->json([
+                    'already_marked' => false,
+                    'allowed' => false,
+                    'message' => 'You are not assigned as class teacher for this class/section.',
+                ]);
+            }
+        }
+
+        if (empty($date) || empty($classId)) {
+            return response()->json([
+                'already_marked' => false,
+            ]);
+        }
+
+        $existing = $this->findExistingAttendance($date, $classId, $sectionName, $session);
+
+        if ($existing) {
+            $class = $this->resolveClass($classId);
+            $className = optional($class)->class_name ?: (string) $classId;
+            return response()->json([
+                'already_marked' => true,
+                'message' => 'Attendance has already been submitted for this date.',
+                'attendance_id' => $existing->id,
+                'attendance_date' => optional($existing->attendance_date)->format('d-m-Y'),
+                'class_name' => $className,
+                'section_name' => $existing->section_name,
+                'submitted_at' => optional($existing->created_at)->format('d-m-Y h:i A'),
+                'is_locked' => (bool) $existing->is_locked,
+                'edit_url' => route('dailyattandenceUpdate', $existing->id),
+            ]);
+        }
+
+        return response()->json([
+            'already_marked' => false,
+        ]);
+    }
+
+    public function findExistingAttendance(?string $date, $classId, ?string $sectionName = null, ?string $session = null, ?int $excludeId = null): ?Attendance
+    {
+        if (empty($date) || empty($classId)) {
+            return null;
+        }
+
+        $class = $this->resolveClass($classId);
+        $className = optional($class)->class_name ?: (string) $classId;
+        $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->filter()->unique()->values();
+
+        return Attendance::query()
+            ->where('is_delete', 0)
+            ->whereDate('attendance_date', $date)
+            ->where(function ($q) use ($classIds, $className, $classId) {
+                $q->whereIn('class_id', $classIds)
+                    ->orWhere('class_id', $className)
+                    ->orWhere('class_id', (string) $classId)
+                    ->orWhere('class_name', $className);
+            })
+            ->when(!empty($sectionName), function ($q) use ($sectionName) {
+                $q->where(function ($inner) use ($sectionName) {
+                    $inner->where('section_name', $sectionName)
+                        ->orWhere('section_name', 'All');
+                });
+            })
+            ->when($excludeId, function ($q) use ($excludeId) {
+                $q->where('id', '!=', $excludeId);
+            })
+            ->first();
     }
 
     public function students(Request $request)
@@ -203,27 +329,27 @@ class AttendanceController extends Controller
             return back()->withInput()->with('error', $this->lockedMonthlyAttendanceMessage());
         }
 
-        $duplicate = Attendance::query()
-            ->where('is_delete', 0)
-            ->where('class_id', $validated['class_id'])
-            ->where('section_name', $validated['section_name'])
-            ->whereDate('attendance_date', $validated['attendance_date'])
-            ->where('academic_session', $validated['academic_session'])
-            ->when($attendanceId, fn ($query) => $query->where('id', '!=', $attendanceId))
-            ->exists();
+        $duplicate = $this->findExistingAttendance(
+            $validated['attendance_date'],
+            $validated['class_id'],
+            $validated['section_name'],
+            $validated['academic_session'],
+            $attendanceId ? (int) $attendanceId : null
+        );
 
         if ($duplicate) {
-            return back()->withInput()->with('error', 'Attendance is already recorded for this class, section, session and date.');
+            return back()->withInput()->with('error', 'Attendance has already been submitted for this date.');
         }
 
         $counts = collect($validated['attendance'])->countBy();
         $leaveCount = (int) ($counts['leave'] ?? 0);
+        $teacherId = $this->isStaffAttendanceUser() ? ($this->staffEmployeeId() ?: ($validated['teacher_id'] ?? null)) : ($validated['teacher_id'] ?? null);
 
-        DB::transaction(function () use ($validated, $request, $attendanceId, $counts, $leaveCount) {
+        DB::transaction(function () use ($validated, $request, $attendanceId, $counts, $leaveCount, $teacherId) {
             $attendance = Attendance::updateOrCreate(
                 ['id' => $attendanceId],
                 [
-                    'teacher_id' => $validated['teacher_id'] ?? null,
+                    'teacher_id' => $teacherId,
                     'class_id' => $validated['class_id'],
                     'class_name' => $validated['class_name'] ?? null,
                     'section_name' => $validated['section_name'],
@@ -1709,6 +1835,10 @@ class AttendanceController extends Controller
 
     private function isStaffAttendanceUser(): bool
     {
+        if (class_exists(\App\Services\PermissionService::class) && \App\Services\PermissionService::isAdmin()) {
+            return false;
+        }
+
         return Auth::guard('staff')->check()
             && (
                 request()->cookie('auth_portal') === 'staff'
@@ -1750,14 +1880,14 @@ class AttendanceController extends Controller
         return $query;
     }
 
-    private function accessibleAttendanceQuery()
+    private function accessibleAttendanceQuery(bool $classTeacherOnly = true)
     {
         $query = Attendance::query();
 
         if ($this->isStaffAttendanceUser()) {
-            $subjects = $this->accessibleTeacherSubjects()
-            ->get(['class_id', 'section_name'])
-            ->groupBy('class_id');
+            $subjects = $this->accessibleTeacherSubjects($classTeacherOnly)
+                ->get(['class_id', 'section_name'])
+                ->groupBy('class_id');
 
             if ($subjects->isEmpty()) {
                 return $query->whereRaw('1 = 0');
@@ -1765,9 +1895,18 @@ class AttendanceController extends Controller
 
             $query->where(function ($outer) use ($subjects) {
                 foreach ($subjects as $classId => $rows) {
+                    $class = $this->resolveClass($classId);
+                    $className = optional($class)->class_name ?: (string) $classId;
+                    $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->unique()->values();
                     $sections = $rows->pluck('section_name')->filter()->unique()->values();
-                    $outer->orWhere(function ($inner) use ($classId, $sections) {
-                        $inner->where('class_id', $classId);
+
+                    $outer->orWhere(function ($inner) use ($classIds, $className, $classId, $sections) {
+                        $inner->where(function ($classQuery) use ($classIds, $className, $classId) {
+                            $classQuery->whereIn('class_id', $classIds)
+                                ->orWhere('class_id', $className)
+                                ->orWhere('class_id', $classId)
+                                ->orWhere('class_name', $className);
+                        });
                         if ($sections->isNotEmpty() && !$sections->contains('All')) {
                             $inner->whereIn('section_name', $sections);
                         }

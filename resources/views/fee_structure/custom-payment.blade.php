@@ -234,6 +234,8 @@
                     <td class="highlight-2"><s>{{ $fee['orig_fees'] ?? "" }}</s> {{ $fee['fees'] ?? "" }} <span>({{ $fee['percentage'] }}% Discount)</span></td>
                     @elseif(($fee['late_fee_flag'] ?? -1) > 0)
                     <td class="highlight-2"><s>{{ $fee['orig_fees'] ?? "" }}</s> {{ $fee['fees'] ?? "" }} <span>({{ $fee['late_fee'] }} Late Fee )</span></td>
+                    @elseif(!empty($fee['late_fee_waived_flag']))
+                    <td class="highlight-2">{{ $fee['fees'] ?? "" }} <span class="badge" style="background-color: #10b981; color: #ffffff; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 600;">(Late Fee Waived)</span></td>
                     @else
                     <td class="highlight-2">{{ $fee['fees'] ?? "" }}</td>
                     @endif

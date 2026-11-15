@@ -47,6 +47,7 @@
                                     <a href="{{ 'fees-types-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Fees Type Master</span></div></a>
                                     <a href="{{ 'bus-fees-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Bus Fees Master</span></div></a>
                                     <a href="{{ 'late-fees-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Late Fees Master</span></div></a>
+                                    <a href="{{ route('late-fee-adjustments.index') }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Late Fee Adjustments</span></div></a>
                                     <a href="{{ 'create-course-fees-structure-master' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Course Fees Structure Master</span></div></a>
                                     <a href="{{ 'terms' }}"><div class="ul-widget-app__browser-list-1 mb-2"><span class="text-18">Terms Master</span></div></a>
                                 </div>

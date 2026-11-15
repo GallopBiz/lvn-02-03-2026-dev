@@ -527,6 +527,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
         Route::delete('academic/attendance-manual/{collective}', [AcademicManualAttendanceController::class, 'destroy'])->name('academic.attendance.manual.delete');
     });
     Route::get('dailyattandence',[AcademicAttendanceController::class, 'daily'])->name('dailyattandence');
+    Route::get('dailyattandence-check-marked',[AcademicAttendanceController::class, 'checkMarked'])->name('dailyattandence.check-marked');
     Route::post('dailyattandence',[AcademicAttendanceController::class, 'store'])->name('dailyattandence');
     Route::get('dailyattandence-update/{id}',[AcademicAttendanceController::class, 'daily'])->name('dailyattandenceUpdate');
     Route::post('dailyattandence-updateinfo',[AcademicAttendanceController::class, 'store'])->name('dailyattandenceUpdateInfo');
@@ -1009,6 +1010,13 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('late-fees-limit',[LateFeesLimit::class, 'index'])->name('late-fees-limit');
     Route::post('update-late-fees-limit', [LateFeesLimit::class, 'update_late_fees_limit']);
 
+    // Student Late Fee Adjustments & Waivers
+    Route::get('late-fee-adjustments', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'index'])->name('late-fee-adjustments.index');
+    Route::get('late-fee-adjustments/export-csv', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'exportCSV'])->name('late-fee-adjustments.export-csv');
+    Route::get('late-fee-adjustments/student-info', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'getStudentFeeInfo'])->name('late-fee-adjustments.student_info');
+    Route::post('late-fee-adjustments/save', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'saveAdjustment'])->name('late-fee-adjustments.save');
+    Route::post('late-fee-adjustments/reset/{id}', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'resetAdjustment'])->name('late-fee-adjustments.reset');
+
     Route::get('fees-types-master', [FeesTypesMasterController::class, 'index'])->name('fees-types-master');
     Route::post('save-fees-types-master', [FeesTypesMasterController::class, 'create']);
     Route::get('fees-types-master-edit/{id}', [FeesTypesMasterController::class, 'edit']);
@@ -1072,6 +1080,8 @@ Route::post('change_password', [Changepassword::class, 'create']);
 
     Route::get('fees_receipt_challan',[FeesreceiptchallanController::class, 'index'])->name('fees_receipt_challan');
     Route::get('fees_receipt_challan_new',[FeesreceiptchallanController::class, 'fees_receipt_challan_new'])->name('fees_receipt_challan_new');
+    Route::post('get_student_fees_struct_new', [FeesreceiptchallanController::class, 'get_student_fees_struct_new'])->name('get_student_fees_struct_new');
+    Route::post('save_feesreceipt_challan_new', [FeesreceiptchallanController::class, 'save_feesreceipt_challan_new'])->name('save_feesreceipt_challan_new');
     Route::post('search_student_name', [FeesreceiptchallanController::class, 'search_student_name']);
     Route::post('get_student_info', [FeesreceiptchallanController::class, 'get_student_info']);
     Route::post('save_feesreceipt_challan', [FeesreceiptchallanController::class, 'save_feesreceipt_challan']);
@@ -1294,6 +1304,17 @@ Route::get(
     'hrms/employee-leave-report/datewise/export-csv',
     [LeaverequestsController::class, 'exportDateWiseLeaveCsv']
 )->name('employee.leave.report.datewise.csv');
+
+// Advance Leave Report
+Route::get(
+    'advance-leave-report',
+    [\App\Http\Controllers\backend\AdvanceLeaveReportController::class, 'index']
+)->name('advance.leave.report');
+
+Route::get(
+    'advance-leave-report/export-csv',
+    [\App\Http\Controllers\backend\AdvanceLeaveReportController::class, 'exportCsv']
+)->name('advance.leave.report.csv');
 
 
 

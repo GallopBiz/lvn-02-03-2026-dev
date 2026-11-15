@@ -38,12 +38,26 @@ class Student_registration extends Model
 
     public function scopeActiveForListings($query)
     {
-        return $query->where(function ($q) {
-            $q->where('is_archived', 0)->orWhereNull('is_archived');
-        })->where(function ($q) {
-            $q->whereNull('status')->orWhere('status', '!=', 't');
-        })->where(function ($q) {
-            $q->whereNull('transfer_status')->orWhere('transfer_status', '!=', 'transferred');
+        $connection = $query->getConnection();
+        $schema = \Illuminate\Support\Facades\Schema::connection($connection->getName());
+        $table = $this->getTable();
+        $hasArchived = $schema->hasColumn($table, 'is_archived');
+        $hasTransferStatus = $schema->hasColumn($table, 'transfer_status');
+
+        return $query->where(function ($q) use ($hasArchived, $hasTransferStatus) {
+            if ($hasArchived) {
+                $q->where(function ($sub) {
+                    $sub->where('is_archived', 0)->orWhereNull('is_archived');
+                });
+            }
+            $q->where(function ($sub) {
+                $sub->whereNull('status')->orWhere('status', '!=', 't');
+            });
+            if ($hasTransferStatus) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('transfer_status')->orWhere('transfer_status', '!=', 'transferred');
+                });
+            }
         });
     }
 

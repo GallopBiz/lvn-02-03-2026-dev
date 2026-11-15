@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Student_registration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
 
 class CasteWiseReportController extends Controller
 {
@@ -25,16 +26,97 @@ class CasteWiseReportController extends Controller
         $selectedClass = $validated['class_name'] ?? '';
         $reportAccess = app(\App\Services\StaffReportAccessService::class);
         $isStaffUser = $reportAccess->isStaffUser();
-        if ($isStaffUser && $selectedClass !== '' && !$reportAccess->canAccess($selectedClass)) {
-            abort(403, 'You are not authorized to access reports for this class.');
+
+        $teacherScope = collect();
+        if ($isStaffUser) {
+            // Staff members MUST be assigned as Class Teacher to access caste-wise reports.
+            // If they are not a Class Teacher, deny any class filtering with 403,
+            // or show an empty report state.
+            if (!$reportAccess->isClassTeacher()) {
+                if ($selectedClass !== '') {
+                    abort(403, 'You are not authorized to access reports for this class.');
+                }
+
+                return view('backend.AcademicsModules.caste_wise_report', [
+                    'classOptions' => [],
+                    'rows' => [],
+                    'totals' => [
+                        'overall' => $this->emptyCounts(),
+                        'categories' => array_fill_keys(array_keys(self::CATEGORIES), $this->emptyCounts()),
+                    ],
+                    'categories' => self::CATEGORIES,
+                    'selectedClass' => '',
+                    'academicSession' => $this->academicSession(),
+                    'reportRouteName' => 'staff.academic.caste-wise-report',
+                    'isStaffUser' => true,
+                ]);
+            }
+
+            if ($selectedClass !== '' && !$reportAccess->canAccessAsClassTeacher($selectedClass)) {
+                abort(403, 'You are not authorized to access reports for this class.');
+            }
+
+            $teacherScope = $reportAccess->classTeacherScope();
+        }
+
+        $connection = config('database.connections.dynamic.database') ? 'dynamic' : null;
+        $schema = Schema::connection($connection ?: 'dynamic');
+
+        $columns = ['class_name', 'json_str'];
+        if ($schema->hasColumn('student_registration', 'section_name')) {
+            $columns[] = 'section_name';
+        }
+        if ($schema->hasColumn('student_registration', 'class_id')) {
+            $columns[] = 'class_id';
         }
 
         $students = Student_registration::query()
             ->activeForListings()
             ->where('status', 'r')
-            ->get(['class_name', 'json_str']);
+            ->get($columns);
+
         if ($isStaffUser) {
-            $students = $students->filter(fn ($student) => $reportAccess->canAccess((string) $student->class_name));
+            $students = $students->filter(function ($student) use ($teacherScope, $reportAccess, $schema) {
+                $studentClassName = trim((string) $student->class_name);
+                $studentClassId = isset($student->class_id) ? trim((string) $student->class_id) : '';
+
+                $details = json_decode($student->json_str ?? '', true);
+                $details = is_array($details) ? $details : [];
+                $studentSection = trim((string) ($student->section_name ?? ($details['section_name'] ?? ($details['section'] ?? ''))));
+
+                $hasSectionInfo = ($studentSection !== '')
+                    || $schema->hasColumn('student_registration', 'section_name')
+                    || isset($details['section_name'])
+                    || isset($details['section']);
+
+                foreach ($teacherScope as $scope) {
+                    $classMatches = false;
+                    if ($studentClassName !== '' && in_array($reportAccess->normalize($studentClassName), $scope['class_aliases'], true)) {
+                        $classMatches = true;
+                    } elseif ($studentClassId !== '' && in_array($reportAccess->normalize($studentClassId), $scope['class_aliases'], true)) {
+                        $classMatches = true;
+                    }
+
+                    if (!$classMatches) {
+                        continue;
+                    }
+
+                    $assignedSection = $scope['section_name'];
+                    if ($assignedSection === '' || strcasecmp($assignedSection, 'All') === 0) {
+                        return true;
+                    }
+
+                    if ($studentSection !== '' && strcasecmp($studentSection, $assignedSection) === 0) {
+                        return true;
+                    }
+
+                    if (!$hasSectionInfo) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
         }
 
         $rowsByClass = [];
@@ -47,8 +129,22 @@ class CasteWiseReportController extends Controller
             $gender = $this->genderKey($details['gender'] ?? '');
 
             if (!isset($rowsByClass[$className])) {
+                $sectionLabel = '';
+                if ($isStaffUser) {
+                    $sections = $teacherScope
+                        ->filter(fn ($s) => in_array($reportAccess->normalize($className), $s['class_aliases'], true))
+                        ->pluck('section_name')
+                        ->filter()
+                        ->unique()
+                        ->values();
+                    if ($sections->isNotEmpty() && !$sections->contains('All')) {
+                        $sectionLabel = $sections->implode(', ');
+                    }
+                }
+
                 $rowsByClass[$className] = [
                     'class_name' => $className,
+                    'section_name' => $sectionLabel,
                     'overall' => $this->emptyCounts(),
                     'categories' => array_fill_keys(array_keys(self::CATEGORIES), $this->emptyCounts()),
                 ];
@@ -62,14 +158,33 @@ class CasteWiseReportController extends Controller
 
         $classOptions = array_keys($rowsByClass);
         if ($isStaffUser) {
-            $assignedClassOptions = $reportAccess->assignedClassOptions();
-            $classOptions = collect($classOptions)
-                ->filter(fn ($className) => $assignedClassOptions->contains($className))
-                ->values()
-                ->all();
+            $assignedClassOptions = $reportAccess->assignedClassTeacherClassOptions();
+            $classOptions = $assignedClassOptions->isNotEmpty()
+                ? $assignedClassOptions->all()
+                : array_keys($rowsByClass);
 
-            // Keep report rows and selector options on the same explicit
-            // teacher_subjects assignment whitelist.
+            // Ensure empty assigned class row is present if no students registered yet
+            foreach ($classOptions as $assignedClass) {
+                if (!isset($rowsByClass[$assignedClass])) {
+                    $sections = $teacherScope
+                        ->filter(fn ($s) => in_array($reportAccess->normalize($assignedClass), $s['class_aliases'], true))
+                        ->pluck('section_name')
+                        ->filter()
+                        ->unique()
+                        ->values();
+                    $sectionLabel = ($sections->isNotEmpty() && !$sections->contains('All'))
+                        ? $sections->implode(', ')
+                        : '';
+
+                    $rowsByClass[$assignedClass] = [
+                        'class_name' => $assignedClass,
+                        'section_name' => $sectionLabel,
+                        'overall' => $this->emptyCounts(),
+                        'categories' => array_fill_keys(array_keys(self::CATEGORIES), $this->emptyCounts()),
+                    ];
+                }
+            }
+
             $rowsByClass = array_intersect_key($rowsByClass, array_flip($classOptions));
         }
         usort($classOptions, 'strnatcasecmp');
@@ -98,20 +213,24 @@ class CasteWiseReportController extends Controller
             }
         }
 
-        $databaseName = (string) Config::get('database.connections.dynamic.database', '');
-        $academicSession = preg_match('/^\d{4}_\d{4}$/', $databaseName)
-            ? str_replace('_', '-', $databaseName)
-            : $databaseName;
-
         return view('backend.AcademicsModules.caste_wise_report', [
             'classOptions' => $classOptions,
             'rows' => $rows,
             'totals' => $totals,
             'categories' => self::CATEGORIES,
             'selectedClass' => $selectedClass,
-            'academicSession' => $academicSession,
+            'academicSession' => $this->academicSession(),
             'reportRouteName' => $isStaffUser ? 'staff.academic.caste-wise-report' : 'academic.caste-wise-report',
+            'isStaffUser' => $isStaffUser,
         ]);
+    }
+
+    private function academicSession(): string
+    {
+        $databaseName = (string) Config::get('database.connections.dynamic.database', '');
+        return preg_match('/^\d{4}_\d{4}$/', $databaseName)
+            ? str_replace('_', '-', $databaseName)
+            : $databaseName;
     }
 
     private function emptyCounts(): array
