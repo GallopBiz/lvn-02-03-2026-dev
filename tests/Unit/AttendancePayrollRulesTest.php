@@ -219,4 +219,36 @@ class AttendancePayrollRulesTest extends TestCase
 
         $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
     }
+
+    public function test_holiday_and_weekly_off_suppress_late_arrival(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 11:30:00'),
+            null,
+            true
+        );
+
+        $this->assertFalse($isLate);
+    }
+
+    public function test_invalid_shift_duration_suppresses_late_arrival(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $end,
+            $start,
+            15,
+            strtotime('2026-03-02 11:30:00'),
+            null,
+            false
+        );
+
+        $this->assertFalse($isLate);
+    }
 }

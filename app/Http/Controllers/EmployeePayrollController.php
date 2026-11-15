@@ -189,6 +189,18 @@ class EmployeePayrollController extends Controller
 			$month = $request->input('month');
 			$year = $request->input('year');
 			$skipLateComing = $request->boolean('skip_late_coming');
+			$skipLateComingType = $request->input('skip_late_coming_type', 'entire_month');
+			$skipLateComingDates = (array) $request->input('skip_late_coming_dates', []);
+			if (is_string($skipLateComingDates)) {
+				$skipLateComingDates = array_filter(array_map('trim', explode(',', $skipLateComingDates)));
+			}
+			$skipLateComingDates = array_values(array_unique(array_filter(array_map(function ($d) {
+				try {
+					return Carbon::parse($d)->format('Y-m-d');
+				} catch (\Exception $e) {
+					return trim((string) $d);
+				}
+			}, $skipLateComingDates))));
 
 			$attendanceLockRequired = $this->selectedEmployeesRequireBiometric($employeeIds, $month);
 
@@ -292,8 +304,10 @@ class EmployeePayrollController extends Controller
 					$unapprovedHalfDaysFromBiometric = 0;
 					if ($biometricRequired) {
 						foreach ($EmpAttandanceLog as $log) {
-							$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-							if (in_array($logDate, $holidayDates)) continue;
+							$logCarbon = Carbon::parse($log->log_date);
+							$logDate = $logCarbon->format('Y-m-d');
+							$isOffDay = $logCarbon->isSunday() || in_array($logDate, $holidayDates);
+							if ($isOffDay) continue;
 							$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
 							if (!$employeeShift) continue;
 							$shiftStart = strtotime($logDate . ' ' . $employeeShift->start_time);
@@ -302,12 +316,21 @@ class EmployeePayrollController extends Controller
 							$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
 							$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
 							$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
-							if (AttendancePayrollRules::isLateArrival(
+							$isLateSkippedForDate = false;
+							if ($skipLateComing) {
+								if ($skipLateComingType === 'entire_month') {
+									$isLateSkippedForDate = true;
+								} elseif ($skipLateComingType === 'specific_dates' && in_array($logDate, $skipLateComingDates, true)) {
+									$isLateSkippedForDate = true;
+								}
+							}
+							if (!$isLateSkippedForDate && AttendancePayrollRules::isLateArrival(
 							$shiftStart,
 							$shiftEnd,
 							(float) $employeeShift->late_coming_threshold,
 							$inTime ?: null,
-							$halfDayRequest
+							$halfDayRequest,
+							$isOffDay
 							)) {
 							$lateComingCount++;
 							}
@@ -324,7 +347,8 @@ class EmployeePayrollController extends Controller
 							}
 						}
 					}
-					if (!$skipLateComing && $lateComingCount >= 3) {
+					$isFullMonthLateSkipped = $skipLateComing && $skipLateComingType === 'entire_month';
+					if (!$isFullMonthLateSkipped && $lateComingCount >= 3) {
 						$lwp += floor($lateComingCount / 3);
 					}
 					$unApplyLeave = 0;
@@ -466,7 +490,7 @@ class EmployeePayrollController extends Controller
 					$totalLeaveDeduction = $halfDayLeaveDeductionAmount;
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);
 					$lateDeductionAmount = 0;
-					if (!$skipLateComing) {
+					if (!$isFullMonthLateSkipped) {
 						$lateDeductionAmount = round(
 							floor($lateComingCount / 3) * ($grossSalary / $monthDays),
 							2
@@ -553,6 +577,18 @@ class EmployeePayrollController extends Controller
 			$month = $request->input('month');
 			$year = $request->input('year');
 			$skipLateComing = $request->boolean('skip_late_coming');
+			$skipLateComingType = $request->input('skip_late_coming_type', 'entire_month');
+			$skipLateComingDates = (array) $request->input('skip_late_coming_dates', []);
+			if (is_string($skipLateComingDates)) {
+				$skipLateComingDates = array_filter(array_map('trim', explode(',', $skipLateComingDates)));
+			}
+			$skipLateComingDates = array_values(array_unique(array_filter(array_map(function ($d) {
+				try {
+					return Carbon::parse($d)->format('Y-m-d');
+				} catch (\Exception $e) {
+					return trim((string) $d);
+				}
+			}, $skipLateComingDates))));
 
 
 			$attendanceLockRequired = $this->selectedEmployeesRequireBiometric($employeeIds, $month);
@@ -674,8 +710,10 @@ class EmployeePayrollController extends Controller
 
 				if ($biometricRequired) {
 					foreach ($EmpAttandanceLog as $log) {
-						$logDate = Carbon::parse($log->log_date)->format('Y-m-d');
-						if (in_array($logDate, $holidayDates)) continue;
+						$logCarbon = Carbon::parse($log->log_date);
+						$logDate = $logCarbon->format('Y-m-d');
+						$isOffDay = $logCarbon->isSunday() || in_array($logDate, $holidayDates);
+						if ($isOffDay) continue;
 						$employeeShift = ShiftResolver::getApplicableShift($employee, $logDate);
 						if (!$employeeShift) continue;
 
@@ -685,12 +723,23 @@ class EmployeePayrollController extends Controller
 						$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
 						$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
 						$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
-						if (AttendancePayrollRules::isLateArrival(
+
+						$isLateSkippedForDate = false;
+						if ($skipLateComing) {
+							if ($skipLateComingType === 'entire_month') {
+								$isLateSkippedForDate = true;
+							} elseif ($skipLateComingType === 'specific_dates' && in_array($logDate, $skipLateComingDates, true)) {
+								$isLateSkippedForDate = true;
+							}
+						}
+
+						if (!$isLateSkippedForDate && AttendancePayrollRules::isLateArrival(
 						$shiftStart,
 						$shiftEnd,
 						(float) $employeeShift->late_coming_threshold,
 						$inTime ?: null,
-						$halfDayRequest
+						$halfDayRequest,
+						$isOffDay
 						)) {
 						$lateComingCount++;
 						\Log::info("Late Entry on $logDate: " . round(($inTime - $shiftStart) / 60, 2) . ' minutes.');
@@ -709,7 +758,8 @@ class EmployeePayrollController extends Controller
 					}
 					
 				}
-					if (!$skipLateComing && $lateComingCount >= 3) {
+					$isFullMonthLateSkipped = $skipLateComing && $skipLateComingType === 'entire_month';
+					if (!$isFullMonthLateSkipped && $lateComingCount >= 3) {
 						\Log::info("Late Coming Count: $lateComingCount, LWP added: " . floor($lateComingCount / 3));
 						$lwp += floor($lateComingCount / 3);
 					}
@@ -955,7 +1005,7 @@ class EmployeePayrollController extends Controller
 					$unApplyLeaveDeductionAmount = round($unApplyLeave * ($grossSalary / $monthDays), 2);
 					$lateDeductionAmount = 0;
 
-					if (!$skipLateComing) {
+					if (!$isFullMonthLateSkipped) {
 						$lateDeductionAmount = round(
 							floor($lateComingCount / 3) * ($grossSalary / $monthDays),
 							2

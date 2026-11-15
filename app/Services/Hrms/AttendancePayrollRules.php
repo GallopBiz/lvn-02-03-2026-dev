@@ -9,9 +9,10 @@ class AttendancePayrollRules
         int $shiftEnd,
         float $lateComingThreshold,
         ?int $inTime,
-        ?array $halfDayRequest
+        ?array $halfDayRequest,
+        bool $isOffDay = false
     ): bool {
-        if (!$inTime) {
+        if ($isOffDay || !$inTime || $shiftEnd <= $shiftStart) {
             return false;
         }
 

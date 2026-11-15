@@ -349,6 +349,7 @@
                                                 ->whereDate('HolidayEndDate', '>=', $date)
                                                 ->first();
                                             $isWeekendOff = $date->isSunday();
+                                            $isOffDay = $isWeekendOff || !empty($holiday);
 
                                             $shift = $employeeShifts->get($employeeId);
 
@@ -377,7 +378,7 @@
                                             $isOnTimeOut = false;
                                             $missingOut = false;
 
-                                            if ($record && $shift && $shift->start_time && $shift->end_time) {
+                                            if ($record && $shift && $shift->start_time && $shift->end_time && !$isOffDay) {
                                                 $dateStr = $date->toDateString();
                                                 $shiftStart = strtotime($dateStr . ' ' . $shift->start_time);
                                                 $shiftEnd = strtotime($dateStr . ' ' . $shift->end_time);
@@ -394,7 +395,8 @@
                                                         $shiftEnd,
                                                         (float) $threshold,
                                                         $inTime ?: null,
-                                                        $halfDayRequest
+                                                        $halfDayRequest,
+                                                        $isOffDay
                                                     )) {
                                                         $isLateIn = true;
                                                         $lateMinutes = (int) round(($inTime - $shiftStart) / 60);
@@ -431,7 +433,10 @@
                                             $tooltipText = "Employee: " . ($employeeName ?: '--') . " | Date: " . $date->format('d M Y (D)');
                                             if ($record) {
                                                 $tooltipText .= "\nStatus: " . ucfirst($record->status);
-                                                if ($shift && $shift->start_time && $shift->end_time) {
+                                                if ($isOffDay) {
+                                                    $tooltipText .= $isWeekendOff ? " (Weekly Off Work)" : " (Holiday Work: " . ($holiday->HolidayName ?? 'Holiday') . ")";
+                                                }
+                                                if ($shift && $shift->start_time && $shift->end_time && !$isOffDay) {
                                                     $tooltipText .= "\nShift: " . $shift->start_time . ' - ' . $shift->end_time;
                                                 }
                                                 $tooltipText .= "\nIn: " . ($record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : 'N/A');

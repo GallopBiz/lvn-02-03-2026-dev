@@ -21,9 +21,11 @@ class SeatingArrangementController extends Controller
 
         $dynamicConnectionName = 'dynamic';
         $dynamicConfig = Config::get("database.connections.{$dynamicConnectionName}");
-        $dynamicConfig['database'] = $dbName;
-        Config::set('database.connections.dynamic', $dynamicConfig);
-        DB::reconnect('dynamic');
+        if (($dynamicConfig['driver'] ?? '') !== 'sqlite') {
+            $dynamicConfig['database'] = $dbName;
+            Config::set('database.connections.dynamic', $dynamicConfig);
+            DB::reconnect('dynamic');
+        }
     }
 
     public function index(Request $request)
@@ -401,7 +403,7 @@ class SeatingArrangementController extends Controller
 
     public function downloadRollNumbers(Request $request, $className, $sectionName, $sessionName): StreamedResponse
     {
-        $sessionName = $this->resolveActiveSessionName();
+        $sessionName = $this->resolveActiveSessionName() ?: (string) $sessionName;
         $examId = $request->query('exam_id');
 
         $students = $this->getClassSectionStudents($className, $sectionName, $sessionName);
@@ -420,22 +422,39 @@ class SeatingArrangementController extends Controller
             })->values();
         }
 
+        $isSenior = $this->isSeniorClass($className)
+            || $students->contains(fn ($student) => !empty($student->combination_name));
+
         $filename = 'roll_numbers_' . $className . '_' . $sectionName . '_' . str_replace(['/', '\\', ' '], '-', $sessionName) . '.csv';
 
-        return response()->streamDownload(function () use ($students, $rollMap, $className, $sectionName) {
+        return response()->streamDownload(function () use ($students, $rollMap, $className, $sectionName, $isSenior) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Sr. No.', 'Student Name', 'Scholar No.', 'Roll No.', 'Class', 'Section']);
+
+            $headers = ['Sr. No.', 'Student Name', 'Scholar No.', 'Roll No.', 'Class', 'Section'];
+            if ($isSenior) {
+                $headers[] = 'Subject Combination';
+            }
+            fputcsv($handle, $headers);
 
             $srNo = 1;
             foreach ($students as $student) {
-                fputcsv($handle, [
+                $row = [
                     $srNo++,
                     $student->student_name,
                     $student->scholar_no ?? '',
                     $rollMap->get($student->id, ''),
                     $className,
                     $sectionName,
-                ]);
+                ];
+
+                if ($isSenior) {
+                    $combination = !empty($student->combination_name)
+                        ? $student->combination_name
+                        : (!empty($student->academic_stream) ? $student->academic_stream : '');
+                    $row[] = $combination;
+                }
+
+                fputcsv($handle, $row);
             }
 
             fclose($handle);
@@ -555,13 +574,20 @@ class SeatingArrangementController extends Controller
             return $activeDb;
         }
 
-        return DB::connection('dynamic')->table('student_registration')
+        $fromDb = DB::connection('dynamic')->table('student_registration')
             ->where(function ($query) {
                 $query->where('is_archived', 0)->orWhereNull('is_archived');
             })
             ->whereNotNull('session_name')
             ->orderByDesc('session_name')
             ->value('session_name');
+
+        if (!empty($fromDb)) {
+            return $fromDb;
+        }
+
+        $configDb = Config::get('database.connections.dynamic.database');
+        return (!empty($configDb) && $configDb !== ':memory:') ? $configDb : '2025_2026';
     }
 
     private function resolveClassCode(string $className): string
@@ -616,8 +642,12 @@ class SeatingArrangementController extends Controller
                 ->orWhere(function ($q2) use ($className, $sectionName) {
                     $q2->where('sr.class_name', $className)
                        ->where(function ($q3) use ($sectionName) {
-                           $q3->where('sr.section_name', $sectionName)
-                              ->orWhereJsonContains('sr.json_str->section_name', $sectionName);
+                           $q3->where('sr.section_name', $sectionName);
+                           if (DB::connection('dynamic')->getDriverName() === 'sqlite') {
+                               $q3->orWhere('sr.json_str', 'like', '%"section_name":"' . $sectionName . '"%');
+                           } else {
+                               $q3->orWhereJsonContains('sr.json_str->section_name', $sectionName);
+                           }
                        });
                 });
             })
@@ -647,7 +677,7 @@ class SeatingArrangementController extends Controller
             return false;
         }
 
-        $seniorNames = ['11', '12', 'CLASS 11', 'CLASS 12', 'XI', 'XII', 'CLASS XI', 'CLASS XII', '011', '012'];
+        $seniorNames = ['11', '12', 'CLASS 11', 'CLASS 12', 'XI', 'XII', 'CLASS XI', 'CLASS XII', '011', '012', '11TH', '12TH', 'CLASS 11TH', 'CLASS 12TH'];
         $upper = strtoupper(trim($className));
         if (in_array($upper, $seniorNames, true)) {
             return true;
