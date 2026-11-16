@@ -1026,7 +1026,8 @@ class Term1MarksheetController extends Controller
         }
 
         if (Schema::connection('dynamic')->hasTable('hrms_holidays')) {
-            $holidays = Holidays::whereDate('HolidayStartDate', '<=', $term1ExamDate)
+            $holidays = Holidays::forAcademic()
+                ->whereDate('HolidayStartDate', '<=', $term1ExamDate)
                 ->where(function ($q) use ($sessionStartDate) {
                     $q->whereDate('HolidayEndDate', '>=', $sessionStartDate)
                       ->orWhereNull('HolidayEndDate');

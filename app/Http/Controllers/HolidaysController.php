@@ -28,8 +28,27 @@ class HolidaysController extends Controller
                 ->withErrors($validator)
                 ->withInput();
         }
-        Holidays::create($request->post());
-        return redirect()->route('holidays')->with('success','  holidays has been created successfully.');
+
+        $forHrms = $request->boolean('for_hrms') ? 1 : 0;
+        $forAcademic = $request->boolean('for_academic') ? 1 : 0;
+
+        if (!$forHrms && !$forAcademic) {
+            return redirect()->back()
+                ->withErrors(['holiday_type' => 'Please select at least one holiday type (For HRMS Only or Academic).'])
+                ->withInput();
+        }
+
+        $data = [
+            'HolidayName' => $request->HolidayName,
+            'HolidayStartDate' => $request->HolidayStartDate,
+            'HolidayEndDate' => $request->HolidayEndDate,
+            'HolidayDescription' => $request->HolidayDescription,
+            'for_hrms' => $forHrms,
+            'for_academic' => $forAcademic,
+        ];
+
+        Holidays::create($data);
+        return redirect()->route('holidays')->with('success','Holidays has been created successfully.');
     }
 
     public function view($id){
@@ -51,15 +70,27 @@ class HolidaysController extends Controller
                 ->withErrors($validator)
                 ->withInput();
         }
+
+        $forHrms = $request->boolean('for_hrms') ? 1 : 0;
+        $forAcademic = $request->boolean('for_academic') ? 1 : 0;
+
+        if (!$forHrms && !$forAcademic) {
+            return redirect()->back()
+                ->withErrors(['holiday_type' => 'Please select at least one holiday type (For HRMS Only or Academic).'])
+                ->withInput();
+        }
+
         $data = [
             'HolidayName' => $request->HolidayName,
             'HolidayStartDate' => $request->HolidayStartDate,
             'HolidayEndDate' => $request->HolidayEndDate,
-            'HolidayDescription' => $request->HolidayDescription
+            'HolidayDescription' => $request->HolidayDescription,
+            'for_hrms' => $forHrms,
+            'for_academic' => $forAcademic,
         ];
         // Attendance::whereId($request->id)->update($data);
         Holidays::where('HolidayID',$request->id)->update($data);
-        return redirect()->route('holidays')->with('success','holidays has been Updated successfully.');
+        return redirect()->route('holidays')->with('success','Holidays has been updated successfully.');
     }
 
     public function holidays_delete($id)

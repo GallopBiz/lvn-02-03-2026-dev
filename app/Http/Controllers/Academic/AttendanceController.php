@@ -1396,7 +1396,8 @@ class AttendanceController extends Controller
             }
         }
 
-        $holidays = Holidays::whereDate('HolidayStartDate', '<=', $end)
+        $holidays = Holidays::forAcademic()
+            ->whereDate('HolidayStartDate', '<=', $end)
             ->where(function ($query) use ($start) {
                 $query->whereDate('HolidayEndDate', '>=', $start)
                     ->orWhereNull('HolidayEndDate');
@@ -1796,7 +1797,8 @@ class AttendanceController extends Controller
             ];
         }
 
-        $holiday = Holidays::whereDate('HolidayStartDate', '<=', $attendanceDate)
+        $holiday = Holidays::forAcademic()
+            ->whereDate('HolidayStartDate', '<=', $attendanceDate)
             ->where(function ($query) use ($attendanceDate) {
                 $query->whereDate('HolidayEndDate', '>=', $attendanceDate)
                     ->orWhereNull('HolidayEndDate');
@@ -1825,6 +1827,7 @@ class AttendanceController extends Controller
                 $subQuery->select(DB::raw(1))
                     ->from('hrms_holidays')
                     ->whereNull('hrms_holidays.deleted_at')
+                    ->where('hrms_holidays.for_academic', 1)
                     ->whereRaw('hrms_holidays.HolidayStartDate <= academic_attendance.attendance_date')
                     ->where(function ($query) {
                         $query->whereRaw('hrms_holidays.HolidayEndDate >= academic_attendance.attendance_date')

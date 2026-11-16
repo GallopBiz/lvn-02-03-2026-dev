@@ -284,7 +284,7 @@ class EmployeePayrollController extends Controller
 							->whereBetween('log_date', [$startDate, $endDate])
 							->get();
 					}
-					$holidays = Holidays::where(function ($q) use ($startDate, $endDate) {
+					$holidays = Holidays::forHrms()->where(function ($q) use ($startDate, $endDate) {
 						$q->whereBetween('HolidayStartDate', [$startDate, $endDate])
 							->orWhereBetween('HolidayEndDate', [$startDate, $endDate])
 							->orWhere(fn($sq) => $sq->where('HolidayStartDate', '<=', $startDate)
@@ -687,7 +687,7 @@ class EmployeePayrollController extends Controller
 							->get();
 					}
 
-					$holidays = Holidays::where(function ($q) use ($startDate, $endDate) {
+					$holidays = Holidays::forHrms()->where(function ($q) use ($startDate, $endDate) {
 						$q->whereBetween('HolidayStartDate', [$startDate, $endDate])
 							->orWhereBetween('HolidayEndDate', [$startDate, $endDate])
 							->orWhere(fn($sq) => $sq->where('HolidayStartDate', '<=', $startDate)

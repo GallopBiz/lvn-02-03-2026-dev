@@ -9,6 +9,18 @@
 
     @php
         $i = 0;
+        $selectedHoliday = (!empty($stream_master) && count($stream_master) > 0) ? (is_array($stream_master) ? $stream_master[0] : $stream_master->first()) : null;
+        $isPost = request()->isMethod('post');
+        if ($isPost) {
+            $checkedHrms = old('for_hrms') ? true : false;
+            $checkedAcademic = old('for_academic') ? true : false;
+        } elseif ($selectedHoliday) {
+            $checkedHrms = (bool) $selectedHoliday->for_hrms;
+            $checkedAcademic = (bool) $selectedHoliday->for_academic;
+        } else {
+            $checkedHrms = true;
+            $checkedAcademic = false;
+        }
     @endphp
     <div class="main-content">
         <div class="form_section1_div">
@@ -41,7 +53,7 @@
                     <label for="HolidayName"> HolidayName</label>
                     <input class="form-control uperletter" id="HolidayName" name="HolidayName" type="text"
                         @if (!empty($stream_master)) @foreach ($stream_master as $streammaster)
-                      value=" {{ $streammaster->HolidayName }}"
+                      value="{{ $streammaster->HolidayName }}"
                     @endforeach
                   @else
                     value="" @endif
@@ -81,7 +93,28 @@
                 <div class="col-md-3 form-group mb-3">
                     <label for="HolidayDescription">Holiday Description</label>
                     <textarea class="form-control" id="HolidayDescription" name="HolidayDescription" rows="3"
-                        placeholder="Holiday Description">{{ $streammaster->HolidayDescription ?? '' }}</textarea>
+                        placeholder="Holiday Description">{{ $selectedHoliday->HolidayDescription ?? ($streammaster->HolidayDescription ?? '') }}</textarea>
+                </div>
+
+                <div class="col-md-12 form-group mb-3">
+                    <label class="d-block font-weight-bold mb-2">Apply Holiday To: <span class="text-danger">*</span></label>
+                    <div class="form-check form-check-inline me-4">
+                        <input class="form-check-input" type="checkbox" name="for_hrms" id="for_hrms" value="1" {{ $checkedHrms ? 'checked' : '' }}>
+                        <label class="form-check-label font-weight-bold" for="for_hrms">
+                            For HRMS Only
+                        </label>
+                        <span class="text-muted d-block small">(Staff biometric not mandatory, no salary deduction. Teachers can still mark attendance)</span>
+                    </div>
+                    <div class="form-check form-check-inline me-4">
+                        <input class="form-check-input" type="checkbox" name="for_academic" id="for_academic" value="1" {{ $checkedAcademic ? 'checked' : '' }}>
+                        <label class="form-check-label font-weight-bold" for="for_academic">
+                            Academic
+                        </label>
+                        <span class="text-muted d-block small">(School holiday, blocks academic attendance, excluded from working days)</span>
+                    </div>
+                    @error('holiday_type')
+                        <div class="text-danger mt-1 small font-weight-bold">{{ $message }}</div>
+                    @enderror
                 </div>
 
                 <div class="col-md-12">
@@ -120,6 +153,7 @@
                                         <th>Holiday Name</th>
                                         <th>Holiday Start Date</th>
                                         <th>Holiday End Date</th>
+                                        <th>Applicable For</th>
                                         <th>Description</th>
                                         <th>Action </th>
                                         <!-- <th>Section</th>
@@ -137,6 +171,17 @@
                                                 {{-- <td>{{$streams->HolidayDate}}</td>  --}}
                                                 <td>{{ date('d-m-Y', strtotime($streams->HolidayStartDate)) }}</td>
                                                 <td>{{ date('d-m-Y', strtotime($streams->HolidayEndDate)) }}</td>
+                                                <td>
+                                                    @if($streams->for_hrms && $streams->for_academic)
+                                                        <span class="badge bg-primary text-white">HRMS & Academic</span>
+                                                    @elseif($streams->for_academic)
+                                                        <span class="badge bg-info text-dark">Academic</span>
+                                                    @elseif($streams->for_hrms)
+                                                        <span class="badge bg-secondary text-white">For HRMS Only</span>
+                                                    @else
+                                                        <span class="badge bg-light text-dark">Not Set</span>
+                                                    @endif
+                                                </td>
                                                 <td>{{ $streams->HolidayDescription }}</td>
                                                 <td class='d-flex'>
                                                     <a class="btn btn-primary m-1"
@@ -156,7 +201,7 @@
                                         @endforeach
                                     @else
                                         <tr>
-                                            <td colspan="9" class="text-center">No Data Found</td>
+                                            <td colspan="7" class="text-center">No Data Found</td>
                                         </tr>
                                     @endif
                                 </tbody>
@@ -225,6 +270,8 @@
                 $("#HolidayStartDate").val("");
                 $("#HolidayEndDate").val("");
                 $("#HolidayDescription").val("");
+                $("#for_hrms").prop("checked", true);
+                $("#for_academic").prop("checked", false);
             });
 
             setupDateRange('HolidayStartDate', 'HolidayEndDate');

@@ -694,7 +694,7 @@ class LeaverequestsController extends Controller
 
     // Holidays
     $holidayDates = [];
-    $holidays = Holidays::whereDate('HolidayStartDate', '<=', $toDate)
+    $holidays = Holidays::forHrms()->whereDate('HolidayStartDate', '<=', $toDate)
         ->whereDate('HolidayEndDate', '>=', $fromDate)
         ->get();
     foreach ($holidays as $holiday) {
@@ -805,7 +805,7 @@ public function exportDateWiseLeaveCsv(Request $request)
 
     /* Holidays */
     $holidayDates = [];
-    $holidays = Holidays::whereDate('HolidayStartDate', '<=', $toDate)
+    $holidays = Holidays::forHrms()->whereDate('HolidayStartDate', '<=', $toDate)
         ->whereDate('HolidayEndDate', '>=', $fromDate)
         ->get();
 

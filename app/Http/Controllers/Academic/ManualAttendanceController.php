@@ -645,7 +645,8 @@ class ManualAttendanceController extends Controller
             }
         }
 
-        $holidays = Holidays::whereDate('HolidayStartDate', '<=', $end)
+        $holidays = Holidays::forAcademic()
+            ->whereDate('HolidayStartDate', '<=', $end)
             ->where(function ($query) use ($start) {
                 $query->whereDate('HolidayEndDate', '>=', $start)
                     ->orWhereNull('HolidayEndDate');

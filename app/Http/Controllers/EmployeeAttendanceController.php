@@ -284,7 +284,7 @@ class EmployeeAttendanceController extends Controller
         $employeeName = Employees::where('is_delete', 0)->get();
 
         // Fetch holidays
-        $holidays = Holidays::pluck('HolidayStartDate')->toArray();
+        $holidays = Holidays::forHrms()->pluck('HolidayStartDate')->toArray();
         $holidays = array_map(function ($date) {
             return Carbon::parse($date)->format('Y-m-d');
         }, $holidays);
