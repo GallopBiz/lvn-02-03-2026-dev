@@ -245,7 +245,7 @@ class EmployeePayrollController extends Controller
 				'staffType',
 				'leaveBalances'
 			])->whereIn('id', $employeeIds)
-			  ->where(fn($q) => $q->where('employee_status', 'active')->orWhereNull('employee_status'))
+			  ->where('employee_status', 'active')
 			  ->get();
 
 			$payrollResults = [];
@@ -635,7 +635,7 @@ class EmployeePayrollController extends Controller
 			'staffType',
 			'leaveBalances'
 			])->whereIn('id', $employeeIds)
-			  ->where(fn($q) => $q->where('employee_status', 'active')->orWhereNull('employee_status'))
+			  ->where('employee_status', 'active')
 			  ->get();
 
 			foreach ($employees as $employee) {

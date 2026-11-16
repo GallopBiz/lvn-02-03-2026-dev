@@ -195,7 +195,7 @@ class EmployeeLeaveBalanceController extends Controller
     public function sample()
     {
         $employees = HrmsEmployee::with('leaveBalances')
-            ->where(fn($query) => $query->where('employee_status', 'active')->orWhereNull('employee_status'))
+            ->where('employee_status', 'active')
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get();

@@ -57,8 +57,13 @@ class EmployeeAttendanceController extends Controller
         // $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $employeeId = $request->input('employee_id');
 
-        // Fetch all employees in alphabetical order
-        $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
+        // Fetch active employees in alphabetical order (retaining selected employee if specified)
+        $employees = HrmsEmployee::where(function ($q) use ($employeeId) {
+            $q->where('employee_status', 'active');
+            if ($employeeId) {
+                $q->orWhere('id', $employeeId);
+            }
+        })->orderBy('first_name')->orderBy('last_name')->get();
         $shiftsById = HrmsShift::on('dynamic')
             ->whereIn('id', $employees->pluck('shift_id')->filter()->unique())
             ->get()

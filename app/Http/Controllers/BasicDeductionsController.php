@@ -100,7 +100,7 @@ class BasicDeductionsController extends Controller
             }
         }
         $months = $months->sortDesc()->values();
-        $employees = HrmsEmployee::with([
+        $employees = HrmsEmployee::active()->with([
             'employeeDeductions' => function ($query) {
                 $query->whereHas('salary', function ($salaryQuery) {
                     $salaryQuery->where('is_active', 1); // Assuming active salary is marked with `is_active = 1`
@@ -166,7 +166,7 @@ class BasicDeductionsController extends Controller
     public function fetchDeductions(Request $request)
 	{
 		$selectedMonth = $request->month ?? now()->format('Y-m');
-		$employees = HrmsEmployee::with([
+		$employees = HrmsEmployee::active()->with([
 			'employeeDeductions' => function ($query) {
 				$query->whereHas('salary', function ($salaryQuery) {
 					$salaryQuery->where('is_active', 1);
@@ -197,7 +197,7 @@ class BasicDeductionsController extends Controller
 	
 	public function appliedDeductionsReport()
 	{
-		$employees = HrmsEmployee::with(['employeeDeductions.basicDeduction', 'biometricDetail'])->get();
+		$employees = HrmsEmployee::active()->with(['employeeDeductions.basicDeduction', 'biometricDetail'])->get();
 
 		// Collect all unique deductions applied to any employee
 		$uniqueDeductions = HrmsBasicDeduction::whereIn(
@@ -210,7 +210,7 @@ class BasicDeductionsController extends Controller
 
 	public function exportDeductions()
 	{
-		$employees = HrmsEmployee::with(['employeeDeductions.basicDeduction', 'biometricDetail'])->get();
+		$employees = HrmsEmployee::active()->with(['employeeDeductions.basicDeduction', 'biometricDetail'])->get();
 
 		$deductionHeads = HrmsBasicDeduction::whereIn(
 			'id',

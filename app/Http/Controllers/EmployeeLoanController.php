@@ -18,7 +18,7 @@ class EmployeeLoanController extends Controller
     public function index()
     {
         $stream = HrmsEmployeeLoan::with('employee')->get();
-        $employeeName = HrmsEmployee::all();
+        $employeeName = HrmsEmployee::active()->orderBy('first_name')->orderBy('last_name')->get();
         return view('backend.HRMS.employeeloan', compact('stream', 'employeeName'));
     }
 
@@ -223,7 +223,12 @@ class EmployeeLoanController extends Controller
         $stream_master = HrmsEmployeeLoan::with('emis')->findOrFail($id);
         // $stream = HrmsEmployeeLoan::orderBy('HolidayID','desc')->paginate(5);
         $stream = HrmsEmployeeLoan::with('employee')->get();
-        $employeeName = HrmsEmployee::all();
+        $employeeName = HrmsEmployee::where(function($q) use ($stream_master) {
+            $q->where('employee_status', 'active');
+            if ($stream_master && $stream_master->employee_id) {
+                $q->orWhere('id', $stream_master->employee_id);
+            }
+        })->orderBy('first_name')->orderBy('last_name')->get();
         return view('backend.HRMS.employeeloan', compact('stream_master', 'stream', 'employeeName'));
     }
 

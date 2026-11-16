@@ -83,7 +83,8 @@ class EmployeeLeavesController extends Controller
 			]
 		);
 
-		$employees = HrmsEmployee::orderBy('first_name')
+		$employees = HrmsEmployee::active()
+			->orderBy('first_name')
 			->orderBy('last_name')
 			->get();
 		$leaveTypes = HrmsLeaveType::all();
@@ -180,7 +181,12 @@ class EmployeeLeavesController extends Controller
     public function view($id) {
         $stream_master = HrmsLeaveRequest::where('id',$id)->first();
         $stream = HrmsLeaveRequest::orderBy('id','desc')->paginate(5); 
-        $employees = HrmsEmployee::all();
+        $employees = HrmsEmployee::where(function($q) use ($stream_master) {
+            $q->where('employee_status', 'active');
+            if ($stream_master && $stream_master->employee_id) {
+                $q->orWhere('id', $stream_master->employee_id);
+            }
+        })->orderBy('first_name')->orderBy('last_name')->get();
 
         $employee = HrmsEmployee::where('id', $stream_master->employee_id)->first();
         $leaveAllocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)->get();

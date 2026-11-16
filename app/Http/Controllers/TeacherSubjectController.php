@@ -27,7 +27,7 @@ class TeacherSubjectController extends Controller
         //$pre_studentsessions = $studentsession;
         //$datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $employee = HrmsEmployee::with('biometricDetails')->get();
+        $employee = HrmsEmployee::active()->with('biometricDetails')->orderBy('first_name')->orderBy('last_name')->get();
         $existingAssignments = $this->existingAssignmentOptions($teachersubjects);
         $currentAssignmentId = '';
         return view('backend.AcademicsModules.teachersubject', compact(
@@ -142,7 +142,12 @@ class TeacherSubjectController extends Controller
             $query->where('academic_class_subject.class_id', $class_id);
         })->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $employee = HrmsEmployee::with('biometricDetails')->get();
+        $employee = HrmsEmployee::where(function($q) use ($teacher_subject) {
+            $q->where('employee_status', 'active');
+            if ($teacher_subject && $teacher_subject->teacher_id) {
+                $q->orWhere('id', $teacher_subject->teacher_id);
+            }
+        })->with('biometricDetails')->orderBy('first_name')->orderBy('last_name')->get();
         //dd($employee[0]->biometricDetails->ess_emp_code);
         return view('backend.AcademicsModules.teachersubject', compact(
             'teacher_subject',
@@ -404,8 +409,10 @@ class TeacherSubjectController extends Controller
     public function fetchTeachers(Request $request)
     {
         $departmentId = $request->departmentId;
-        $employee = HrmsEmployee::with('biometricDetails')
+        $employee = HrmsEmployee::active()
+            ->with('biometricDetails')
             ->when($departmentId, fn ($query) => $query->where('department_id', $departmentId))
+            ->orderBy('first_name')
             ->get();
         return $employee;
     }

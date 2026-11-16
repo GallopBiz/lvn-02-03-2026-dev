@@ -43,7 +43,7 @@ class UserController extends Controller
     {
         $roles = Role::pluck('name','name')->all();
         $assignedEmployeeIds = StaffUser::whereNotNull('employee_id')->pluck('employee_id')->toArray();
-        $employees = \App\Models\HrmsEmployee::with('biometricDetail')
+        $employees = \App\Models\HrmsEmployee::active()->with('biometricDetail')
             ->whereNotIn('id', $assignedEmployeeIds)
             ->select('id', 'first_name', 'last_name')
             ->get()
@@ -220,7 +220,12 @@ class UserController extends Controller
         $user = StaffUser::find($id);
         $roles = Role::pluck('name','name')->all();
         $userRole = [$user->role];
-        $employees = \App\Models\HrmsEmployee::with('biometricDetail')
+        $employees = \App\Models\HrmsEmployee::where(function($q) use ($user) {
+                $q->where('employee_status', 'active');
+                if ($user && $user->employee_id) {
+                    $q->orWhere('id', $user->employee_id);
+                }
+            })->with('biometricDetail')
             ->select('id', 'first_name', 'last_name')
             ->get()
             ->mapWithKeys(function($emp) {

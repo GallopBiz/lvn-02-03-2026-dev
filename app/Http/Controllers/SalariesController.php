@@ -24,7 +24,7 @@ class SalariesController extends Controller
     {
         $stream = HrmsSalary::all();
 
-        $employeeName = HrmsEmployee::all();
+        $employeeName = HrmsEmployee::active()->orderBy('first_name')->orderBy('last_name')->get();
         $basicDeduction = HrmsBasicDeduction::all();
         $students = Student_registration::all();
         return view('backend.HRMS.salaries', compact('stream', 'employeeName', 'basicDeduction', 'students'));
@@ -213,7 +213,12 @@ class SalariesController extends Controller
 
         $stream_master = HrmsSalary::where('id', $id)->first();
         $stream = HrmsSalary::all();
-        $employeeName = HrmsEmployee::all();
+        $employeeName = HrmsEmployee::where(function($q) use ($stream_master) {
+            $q->where('employee_status', 'active');
+            if ($stream_master && $stream_master->employee_id) {
+                $q->orWhere('id', $stream_master->employee_id);
+            }
+        })->orderBy('first_name')->orderBy('last_name')->get();
         $basicDeduction = HrmsBasicDeduction::all();
         $students = Student_registration::all();
         $manualDeductions = $stream_master->employeeDeductions->pluck('manual_amount', 'basic_deduction_id');

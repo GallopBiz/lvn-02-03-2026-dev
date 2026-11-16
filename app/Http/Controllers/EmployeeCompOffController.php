@@ -14,7 +14,7 @@ class EmployeeCompOffController extends Controller
     public function index()
     {
         $requests = HrmsCompOffRequest::with(['employee', 'approver', 'leaveType'])->orderBy('start_date', 'desc')->get();
-        $employees = HrmsEmployee::all();
+        $employees = HrmsEmployee::active()->orderBy('first_name')->orderBy('last_name')->get();
         $leaveTypes = HrmsLeaveType::all();
 
         return view('backend.HRMS.employee_comp_off_requests', compact('requests', 'employees', 'leaveTypes'));

@@ -11,8 +11,8 @@ class EmployeeDeductionReportController extends Controller
 {
     public function index(Request $request)
     {
-        // Fetch employees for filter dropdown
-        $employees = HrmsEmployee::with('position')->get();
+        // Fetch active employees for filter dropdown
+        $employees = HrmsEmployee::active()->with('position')->orderBy('first_name')->orderBy('last_name')->get();
 
         // Prepare years for filter dropdown (last 5 years)
         $currentYear = now()->year;

@@ -12,8 +12,7 @@ class ManualAttendanceController extends Controller
 {
     public function index(Request $request)
     {
-        $employees = HrmsEmployee::orderBy('first_name')->get();
-		$employees = HrmsEmployee::with('biometricDetail')->orderBy('first_name')->get();
+		$employees = HrmsEmployee::active()->with('biometricDetail')->orderBy('first_name')->get();
         $selectedEmployee = $request->input('employee_id');
         $month = $request->input('month', now()->format('m'));
         $year = $request->input('year', now()->format('Y'));

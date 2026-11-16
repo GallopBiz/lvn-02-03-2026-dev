@@ -5,6 +5,20 @@
     .uperletter {
         text-transform: capitalize;
     }
+    .select2-container .select2-selection--single {
+        height: 34px !important;
+        border: 1px solid #ced4da !important;
+        border-radius: 4px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 32px !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 32px !important;
+        padding-left: 8px !important;
+    }
 </style>
 
 <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -47,7 +61,7 @@
 
                 <div class="col-md-3 form-group mb-3">
                     <label for="employee_id">Employee</label>
-                    <select name="employee_id" id="employee_id" class="form-control">
+                    <select name="employee_id" id="employee_id" class="form-control select2" data-placeholder="Select Employee">
                         <option value="">Select Employee</option>
                         @foreach ($employees as $employee)
                             <option value="{{ $employee->id }}"
@@ -267,7 +281,12 @@
         document.getElementById("reason").value = "";
         document.getElementById("start_date").value = "";
         document.getElementById("end_date").value = "";
-        document.getElementById("employee_id").value = "";
+        if (window.jQuery && $('#employee_id').data('select2')) {
+            $('#employee_id').val('').trigger('change');
+        } else {
+            const empEl = document.getElementById("employee_id");
+            if (empEl) empEl.value = "";
+        }
         document.getElementById("leave_type_id").innerHTML = '<option value="">Select Leave Type</option>';
     });
 
@@ -319,10 +338,26 @@
             loadLeaveTypes(this.value);
         });
 
+        if (window.jQuery) {
+            $(employeeSelect).on('change', function () {
+                loadLeaveTypes(this.value);
+            });
+        }
+
         loadLeaveTypes(employeeSelect.value);
     }
 
     setupDynamicLeaveTypeUpdate('employee_id', 'leave_type_id');
+
+    if (window.jQuery && $.fn.select2) {
+        if (!$('#employee_id').data('select2')) {
+            $('#employee_id').select2({
+                width: '100%',
+                placeholder: 'Select Employee',
+                allowClear: true
+            });
+        }
+    }
 </script>
 
 @endsection

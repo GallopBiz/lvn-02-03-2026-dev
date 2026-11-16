@@ -12,7 +12,7 @@ class EmployeeSecurityDepositController extends Controller
 {
     public function index()
     {
-        $employees = HrmsEmployee::on('dynamic')->get();
+        $employees = HrmsEmployee::active()->orderBy('first_name')->orderBy('last_name')->get();
         $deposits = HrmsEmployeeSecurityDeposit::on('dynamic')
             ->with('employee')
             ->orderByDesc('id')

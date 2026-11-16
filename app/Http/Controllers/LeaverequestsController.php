@@ -67,7 +67,7 @@ class LeaverequestsController extends Controller
             // Admin panel: paginate all leave requests
             $user = auth()->user();
             $stream = HrmsLeaveRequest::orderByDesc('id')->paginate(20);
-            $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
+            $employees = HrmsEmployee::active()->orderBy('first_name')->orderBy('last_name')->get();
             $leaveTypes = HrmsLeaveType::all();
             return view('backend.HRMS.leaverequests', compact('stream','employees','leaveTypes'));
         }
@@ -269,7 +269,12 @@ class LeaverequestsController extends Controller
     public function view($id){
         $stream_master = HrmsLeaveRequest::where('id',$id)->first();
         $stream = HrmsLeaveRequest::orderBy('id','desc')->paginate(5); 
-        $employees = HrmsEmployee::orderBy('first_name')->orderBy('last_name')->get();
+        $employees = HrmsEmployee::where(function($q) use ($stream_master) {
+            $q->where('employee_status', 'active');
+            if ($stream_master && $stream_master->employee_id) {
+                $q->orWhere('id', $stream_master->employee_id);
+            }
+        })->orderBy('first_name')->orderBy('last_name')->get();
 
         $employee=HrmsEmployee::where('id', $stream_master->employee_id)->first();
         $leaveAllocated=HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)->get();
@@ -507,7 +512,7 @@ class LeaverequestsController extends Controller
 		$employeeFilter = $request->employee_id;
 
 		/* ---------- Employees ---------- */
-		$employees = HrmsEmployee::with('biometricDetail')
+		$employees = HrmsEmployee::active()->with('biometricDetail')
 			->when($employeeFilter, fn ($q) => $q->where('id', $employeeFilter))
 			->orderBy('first_name')
 			->get();
@@ -575,7 +580,7 @@ class LeaverequestsController extends Controller
 		$leaveTypeFilter = $request->leave_type_id;
 
 		// Employees
-		$employeesQuery = HrmsEmployee::with('biometricDetail')->orderBy('first_name');
+		$employeesQuery = HrmsEmployee::active()->with('biometricDetail')->orderBy('first_name');
 		if ($employeeFilter) {
 			$employeesQuery->where('id', $employeeFilter);
 		}
@@ -682,7 +687,7 @@ class LeaverequestsController extends Controller
         ->toArray();
 
     // Employees
-    $employees = HrmsEmployee::with('biometricDetails')
+    $employees = HrmsEmployee::active()->with('biometricDetails')
         ->orderBy('first_name')
         ->when($employeeId, fn($q) => $q->where('id', $employeeId))
         ->get();
@@ -792,7 +797,7 @@ public function exportDateWiseLeaveCsv(Request $request)
         ->toArray();
 
     /* Employees */
-    $employeesQuery = HrmsEmployee::with('biometricDetails')->orderBy('first_name');
+    $employeesQuery = HrmsEmployee::active()->with('biometricDetails')->orderBy('first_name');
     if ($employeeFilter) {
         $employeesQuery->where('id', $employeeFilter);
     }
