@@ -189,6 +189,9 @@ class ExamMasterController extends Controller
         $classSubjects = ClassSubject::with(['subject' => function ($query) {
                 $query->where('is_delete', 0);
             }])
+            ->whereHas('subject', function ($query) {
+                $query->where('is_delete', 0);
+            })
             ->where('class_id', $request->class_id);
         if (!empty($streamId)) {
             $classSubjects->where('stream_id', $streamId);

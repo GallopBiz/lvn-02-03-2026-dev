@@ -379,10 +379,10 @@ $i = 0;
                                 @foreach ($teachersubjects as $teachersubject)
                                 <tr>
                                     <td>{{ ++$i }}</td>
-                                    <td>{{ $teachersubject->Class->class_name }}</td>
+                                    <td>{{ $teachersubject->Class->class_name ?? '' }}</td>
                                     <td>{{ $teachersubject->section_name }}</td>
-                                    <td>{{ $teachersubject->Subject->subject_name }}</td>
-                                    <td>{{ $teachersubject->Teacher->first_name }} {{$teachersubject->Teacher->last_name}}</td>
+                                    <td>{{ $teachersubject->Subject->subject_name ?? '' }}</td>
+                                    <td>{{ optional($teachersubject->Teacher)->first_name }} {{ optional($teachersubject->Teacher)->last_name }}</td>
                                     <td>{{ $teachersubject->role }}</td>
                                     {{-- <td>{{ date('d-m-Y', strtotime($teachersubject->updated_at)) }}</td> --}}
                                     {{-- <td>{{ $teachersubject->session_name }}</td> --}}

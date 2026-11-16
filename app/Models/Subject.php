@@ -21,6 +21,18 @@ class Subject extends Model
         'is_delete',
     ];
 
+    protected static function booted()
+    {
+        static::addGlobalScope('active', function ($builder) {
+            $builder->where('subjectmaster.is_delete', 0);
+        });
+    }
+
+    public function scopeWithDeletedSubjects($query)
+    {
+        return $query->withoutGlobalScope('active');
+    }
+
     public function isSpecialFormattingForClass($classId = null, $className = null): bool
     {
         return \App\Academic\AcademicHelper::isSpecialFormattingForClass($this, $classId, $className);

@@ -15,6 +15,7 @@ class Classname extends Model
 
     public function subjects()
     {
-        return $this->belongsToMany(Subject::class, 'academic_class_subject', 'class_id', 'subject_id');
+        return $this->belongsToMany(Subject::class, 'academic_class_subject', 'class_id', 'subject_id')
+            ->where('subjectmaster.is_delete', 0);
     }
 }

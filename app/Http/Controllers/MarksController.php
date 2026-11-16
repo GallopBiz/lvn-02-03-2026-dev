@@ -325,25 +325,57 @@ class MarksController extends Controller
             $markObj->roll_no = $saved->roll_no ?? $rollMap->get($student->id, '');
             $markObj->is_absent = $saved->is_absent ?? 0;
             $markObj->is_absent_pr = $saved->is_absent_pr ?? 0;
-            $markObj->mark_theory = $saved->mark_theory ?? ($saved->subject_marks ?? 0);
-            $markObj->mark_practical = $saved->mark_practical ?? 0;
+
+            $savedTheory = $saved ? ($saved->mark_theory ?? $saved->subject_marks ?? null) : null;
+            $savedPractical = $saved ? ($saved->mark_practical ?? null) : null;
+            $savedTotal = $saved ? ($saved->total_marks ?? null) : null;
+
+            $markObj->mark_theory = ($savedTheory !== null && $savedTheory !== '') ? $savedTheory : '';
+            $markObj->mark_practical = ($savedPractical !== null && $savedPractical !== '') ? $savedPractical : '';
             $markObj->internal_assessment_marks = $saved->internal_assessment_marks ?? null;
-            $totalMarks = is_numeric($saved->total_marks ?? null)
-                ? (float) $saved->total_marks
-                : (float) (($markObj->mark_theory ?? 0) + ($markObj->mark_practical ?? 0));
-            $totalMarks = $this->roundHalfUp($totalMarks);
-            $markObj->total_marks = $totalMarks;
+
+            $hasAnyMark = ($markObj->mark_theory !== '') || ($markObj->mark_practical !== '');
+            if (!$hasAnyMark && !empty($markObj->internal_assessment_marks)) {
+                $decodedIa = is_string($markObj->internal_assessment_marks)
+                    ? json_decode($markObj->internal_assessment_marks, true)
+                    : $markObj->internal_assessment_marks;
+                if (!empty($decodedIa) && is_array($decodedIa)) {
+                    foreach ($decodedIa as $v) {
+                        if ($v !== null && $v !== '') {
+                            $hasAnyMark = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if ($savedTotal !== null && $savedTotal !== '') {
+                $totalMarks = $this->roundHalfUp((float) $savedTotal);
+                $markObj->total_marks = $totalMarks;
+            } elseif ($hasAnyMark) {
+                $totalMarks = $this->roundHalfUp((float) ($markObj->mark_theory ?: 0) + (float) ($markObj->mark_practical ?: 0));
+                $markObj->total_marks = $totalMarks;
+            } else {
+                $totalMarks = null;
+                $markObj->total_marks = '';
+            }
+
             if ($isNonAcademic) {
                 $markObj->grade = $saved->grade ?? $saved->overall_grade ?? '';
                 $markObj->overall_grade = $markObj->grade;
             } else {
-                $calculatedGrade = $this->gradeFromMaster($totalMarks, $examMaxMarks);
-                if (empty($saved->grade) || $saved->grade === '' || $saved->grade !== $calculatedGrade) {
-                    $markObj->grade = $calculatedGrade;
-                    $markObj->overall_grade = $calculatedGrade;
+                if ($totalMarks !== null) {
+                    $calculatedGrade = $this->gradeFromMaster($totalMarks, $examMaxMarks);
+                    if (empty($saved->grade) || $saved->grade === '' || $saved->grade !== $calculatedGrade) {
+                        $markObj->grade = $calculatedGrade;
+                        $markObj->overall_grade = $calculatedGrade;
+                    } else {
+                        $markObj->grade = $saved->grade;
+                        $markObj->overall_grade = $saved->overall_grade ?? $saved->grade;
+                    }
                 } else {
-                    $markObj->grade = $saved->grade;
-                    $markObj->overall_grade = $saved->overall_grade ?? $saved->grade;
+                    $markObj->grade = $saved->grade ?? '';
+                    $markObj->overall_grade = $saved->overall_grade ?? $markObj->grade;
                 }
             }
             return $markObj;

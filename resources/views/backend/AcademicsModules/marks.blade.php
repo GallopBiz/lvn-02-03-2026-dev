@@ -437,8 +437,8 @@
                                                 <input type="hidden" class="student_id" value="{{ $marks->student_id }}" />
                                                 <input type="hidden" class="roll_no" value="{{ $marks->roll_no ?? '' }}" />
                                             </td>
-                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_theory" value="{{ $marks->mark_theory ?? $marks->subject_marks ?? 0 }}" /></td>
-                                            <td class="practical-column academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_practical" value="{{ $marks->mark_practical ?? 0 }}" /></td>
+                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_theory" value="{{ ($marks->mark_theory !== null && $marks->mark_theory !== '') ? $marks->mark_theory : ($marks->subject_marks ?? '') }}" /></td>
+                                            <td class="practical-column academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control mark_practical" value="{{ ($marks->mark_practical !== null && $marks->mark_practical !== '') ? $marks->mark_practical : '' }}" /></td>
                                             @php
                                                 $rawIaMarks = $marks->internal_assessment_marks ?? null;
                                                 $decodedIaMarks = is_string($rawIaMarks) ? json_decode($rawIaMarks, true) : $rawIaMarks;
@@ -456,7 +456,7 @@
                                                     <input type="number" step="any" min="0" max="5" class="form-control internal_assessment_mark" data-ia-code="{{ $assessment->assessment_code }}" value="{{ $iaMarks[$assessment->assessment_code] ?? ($loop->first ? $singleIaMark : '') }}" />
                                                 </td>
                                             @endforeach
-                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control total_marks" value="{{ $marks->total_marks ?? $marks->subject_marks ?? 0 }}" readonly /></td>
+                                            <td class="academic-column {{ $isNonAcademicEntry ? 'd-none' : '' }}"><input type="text" class="form-control total_marks" value="{{ ($marks->total_marks !== null && $marks->total_marks !== '') ? $marks->total_marks : ($marks->subject_marks ?? '') }}" readonly /></td>
                                             <td class="grade-cell">
                                                 @if($isNonAcademicEntry)
                                                     @php
@@ -856,14 +856,31 @@
         if (isNonAcademicSelected()) {
             return;
         }
-        const theory = numericValue(row.find('.mark_theory').val());
-        const practical = isPracticalEnabled() ? numericValue(row.find('.mark_practical').val()) : 0;
+        const theoryVal = row.find('.mark_theory').val()?.trim();
+        const practicalVal = isPracticalEnabled() ? row.find('.mark_practical').val()?.trim() : '';
+        const isTheoryEntered = theoryVal !== undefined && theoryVal !== '';
+        const isPracticalEntered = isPracticalEnabled() && practicalVal !== undefined && practicalVal !== '';
+        let anyIaEntered = false;
         let internalAssessmentTotal = 0;
         if (isInternalAssessmentEnabled()) {
             row.find('.internal_assessment_mark').each(function () {
-                internalAssessmentTotal += numericValue($(this).val());
+                const val = $(this).val()?.trim();
+                if (val !== undefined && val !== '') {
+                    anyIaEntered = true;
+                    internalAssessmentTotal += numericValue(val);
+                }
             });
         }
+
+        const hasAnyMark = isTheoryEntered || isPracticalEntered || anyIaEntered;
+        if (!hasAnyMark) {
+            row.find('.total_marks').val('');
+            row.find('.grade').val('');
+            return;
+        }
+
+        const theory = isTheoryEntered ? numericValue(theoryVal) : 0;
+        const practical = isPracticalEntered ? numericValue(practicalVal) : 0;
         const rawTotal = theory + practical + internalAssessmentTotal;
         const total = roundHalfUp(rawTotal);
         row.find('.total_marks').val(total);
@@ -895,8 +912,21 @@
 
     function applyStudentAbsentState(row) {
         const isAbsent = row.find('.is_absent').is(':checked');
-        row.find('.mark_theory, .mark_practical, .internal_assessment_mark, .grade-dropdown')
-            .prop('disabled', isAbsent || isCurrentMarksEntryLocked);
+        const isAbsentPr = row.find('.is_absent_pr').is(':checked');
+
+        row.find('.mark_theory').prop('disabled', isAbsent || isCurrentMarksEntryLocked);
+        if (isAbsent) {
+            row.find('.mark_theory').val('');
+        }
+
+        row.find('.mark_practical').prop('disabled', isAbsentPr || isCurrentMarksEntryLocked);
+        if (isAbsentPr) {
+            row.find('.mark_practical').val('');
+        }
+
+        row.find('.internal_assessment_mark, .grade-dropdown').prop('disabled', isCurrentMarksEntryLocked);
+
+        recalculateStudentTotal(row);
     }
 
     function applyExamLockState(exam) {
@@ -927,7 +957,7 @@
     function togglePracticalColumns() {
         $('.practical-column').toggleClass('d-none', !isPracticalEnabled());
         if (!isPracticalEnabled()) {
-            $('.mark_practical').val(0);
+            $('.mark_practical').val('');
             $('.is_absent_pr').prop('checked', false);
             $('#isAbsentPrToggle').prop('checked', false);
         }
@@ -1700,10 +1730,10 @@
                                 <input type="hidden" class="student_id" value="${item.id}" />
                                 <input type="hidden" class="roll_no" value="${item.roll_no || ''}" />
                             </td>
-                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_theory" value="0" /></td>
-                            <td class="practical-column academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_practical" value="0" /></td>
+                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_theory" value="" /></td>
+                            <td class="practical-column academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control mark_practical" value="" /></td>
                             ${internalAssessmentCells()}
-                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control total_marks" value="0" readonly /></td>
+                            <td class="academic-column ${isNonAcad ? 'd-none' : ''}"><input type="text" class="form-control total_marks" value="" readonly /></td>
                             <td class="grade-cell">${isNonAcad ? renderGradeSelectHtml('') : renderGradeInputHtml('')}</td>
                             <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteRowData(event)">Delete</button></td>
                         </tr>`;
@@ -1869,6 +1899,14 @@
         $(document).on('change', '#studentdatatable .is_absent', function() {
             applyStudentAbsentState($(this).closest('.student-row'));
         });
+        $(document).on('change', '#studentdatatable .is_absent_pr', function() {
+            applyStudentAbsentState($(this).closest('.student-row'));
+        });
+        $(document).on('focus', '.mark_theory, .mark_practical, .internal_assessment_mark', function() {
+            if (typeof this.select === 'function') {
+                this.select();
+            }
+        });
         window.addEventListener('keydown', function(event) {
             const fieldSelector = '.mark_theory, .mark_practical, .internal_assessment_mark, .grade-dropdown';
             const directions = {
@@ -1932,6 +1970,9 @@
 
             if (targetField) {
                 targetField.focus();
+                if (typeof targetField.select === 'function') {
+                    targetField.select();
+                }
             }
         }, true);
         $(document).on('input change', '.total_marks', function() {
@@ -1956,12 +1997,16 @@
             }
         })
         $('#isAbsentPrToggle').on('change', (e) => {
-            let bodydata = document.getElementById("studentdatatable").children
+            let bodydata = document.getElementById("studentdatatable").children;
             for (var i = 0; i < bodydata.length; i++) {
                 var row = bodydata[i];
-                row.children[2].children[0].checked = e.target.checked
+                const chk = row.querySelector('.is_absent_pr');
+                if (chk) {
+                    chk.checked = e.target.checked;
+                    applyStudentAbsentState($(row));
+                }
             }
-        })
+        });
     function handleSubmitData(event) {
         event.preventDefault();
         if (!validateObtainedMarks()) {

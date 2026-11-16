@@ -19,7 +19,7 @@ class SubjectCombinationController extends Controller
     {
         $stream = SubjectCombination::where('is_delete', 0)->get();
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $subjects = Subject::all();
+        $subjects = Subject::where('is_delete', 0)->get();
         $nonAcademicSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Non Academic')->get();
         $skilledSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Skilled')->get();
         $streamlist = Stream::where('is_delete', 0)->distinct()->get();
@@ -42,7 +42,7 @@ class SubjectCombinationController extends Controller
     public function view($id)
     {
         $studentclasses = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
-        $subjects = Subject::all();
+        $subjects = Subject::where('is_delete', 0)->get();
         $nonAcademicSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Non Academic')->get();
         $skilledSubjects = Subject::where('is_delete', 0)->where('subject_type', 'Skilled')->get();
         $streamlist = Stream::select(['id','streams'])->distinct()->get();

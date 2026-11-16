@@ -22,7 +22,12 @@ class TeacherSubjectController extends Controller
         //$subjects = Subject::select('id','subject_name')->distinct('subject_name')->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         //$session = Student_registration::select('id','session_name')->distinct('session_name')->get();
-        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])->where('is_delete', 0)->get();
+        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])
+            ->where('is_delete', 0)
+            ->whereHas('Subject', function ($query) {
+                $query->where('is_delete', 0);
+            })
+            ->get();
         //$teachersession = Student_registration::all();
         //$pre_studentsessions = $studentsession;
         //$datas = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
@@ -123,7 +128,12 @@ class TeacherSubjectController extends Controller
 
     public function view($id){
         $teacher_subject = TeacherSubject::whereId($id)->first();
-        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])->where('is_delete', 0)->get();
+        $teachersubjects = TeacherSubject::with(['Class', 'Subject', 'Teacher'])
+            ->where('is_delete', 0)
+            ->whereHas('Subject', function ($query) {
+                $query->where('is_delete', 0);
+            })
+            ->get();
         $existingAssignments = $this->existingAssignmentOptions($teachersubjects);
         $currentAssignmentId = (string) $teacher_subject->id;
         // $teachersubjects = TeacherSubject::orderBy('id','desc');
@@ -138,9 +148,10 @@ class TeacherSubjectController extends Controller
         //$classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         //$teacherlist = Teachers::select('teacher_name')->distinct()->get();
         $class_id = $teacher_subject->class_id;
-        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id) {
-            $query->where('academic_class_subject.class_id', $class_id);
-        })->get();
+        $subjects = Subject::where('subjectmaster.is_delete', 0)
+            ->whereHas('Classname', function ($query) use ($class_id) {
+                $query->where('academic_class_subject.class_id', $class_id);
+            })->get();
         $classlist = Classname::select('id','class_name')->where('is_delete', 0)->distinct()->get();
         $employee = HrmsEmployee::where(function($q) use ($teacher_subject) {
             $q->where('employee_status', 'active');
@@ -197,6 +208,9 @@ class TeacherSubjectController extends Controller
         $rawAssignments = TeacherSubject::with(['Class', 'Subject'])
             ->where("teacher_id", $teacher)
             ->where('is_delete', 0)
+            ->whereHas('Subject', function ($query) {
+                $query->where('is_delete', 0);
+            })
             ->get();
 
         $classes = $rawAssignments->pluck('Class')
@@ -259,6 +273,9 @@ class TeacherSubjectController extends Controller
             ->where('teacher_id', $teacher)
             ->where('class_id', $class_name)
             ->where('is_delete', 0)
+            ->whereHas('Subject', function ($query) {
+                $query->where('is_delete', 0);
+            })
             ->get();
 
         $expandedAssignments = [];
@@ -400,9 +417,10 @@ class TeacherSubjectController extends Controller
     {
         $class_id = $request->class_id;
 
-        $subjects = Subject::whereHas('Classname', function ($query) use ($class_id) {
-            $query->where('academic_class_subject.class_id', $class_id); // Explicit table name
-        })->get();
+        $subjects = Subject::where('subjectmaster.is_delete', 0)
+            ->whereHas('Classname', function ($query) use ($class_id) {
+                $query->where('academic_class_subject.class_id', $class_id); // Explicit table name
+            })->get();
         return $subjects;
     }
     // created by Nirmal
@@ -419,7 +437,9 @@ class TeacherSubjectController extends Controller
 
     private function existingAssignmentOptions($assignments): array
     {
-        return $assignments->map(function ($assignment) {
+        return $assignments
+            ->filter(fn ($assignment) => !empty($assignment->Subject))
+            ->map(function ($assignment) {
             return [
                 'id' => (string) $assignment->id,
                 'class_id' => (string) $assignment->class_id,
