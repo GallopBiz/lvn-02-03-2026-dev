@@ -95,7 +95,7 @@ class AttendancePayrollRulesTest extends TestCase
         $this->assertFalse($isLate);
     }
 
-    public function test_approved_second_half_leave_checks_late_arrival_during_first_half(): void
+    public function test_approved_second_half_leave_exempts_late_arrival(): void
     {
         [$start, $end] = $this->shiftTimes();
 
@@ -107,7 +107,7 @@ class AttendancePayrollRulesTest extends TestCase
             ['status' => 'approved', 'half_day_type' => 'second']
         );
 
-        $this->assertTrue($isLate);
+        $this->assertFalse($isLate);
     }
 
     public function test_approved_second_half_leave_does_not_count_late_arrival_during_second_half(): void
@@ -141,9 +141,9 @@ class AttendancePayrollRulesTest extends TestCase
     }
 
     /**
-     * @dataProvider nonApprovedHalfDayRequests
+     * @dataProvider allHalfDayRequestCombinations
      */
-    public function test_pending_or_rejected_half_day_request_keeps_normal_late_calculation(string $status, string $halfDayType): void
+    public function test_any_half_day_request_exempts_late_coming(string $status, string $halfDayType): void
     {
         [$start, $end] = $this->shiftTimes();
 
@@ -155,16 +155,80 @@ class AttendancePayrollRulesTest extends TestCase
             ['status' => $status, 'half_day_type' => $halfDayType]
         );
 
+        $this->assertFalse($isLate);
+    }
+
+    public static function allHalfDayRequestCombinations(): array
+    {
+        return [
+            'approved first half' => ['approved', 'first'],
+            'approved second half' => ['approved', 'second'],
+            'pending first half' => ['pending', 'first'],
+            'pending second half' => ['pending', 'second'],
+            'rejected first half' => ['rejected', 'first'],
+            'rejected second half' => ['rejected', 'second'],
+        ];
+    }
+
+    public function test_no_half_day_request_applies_normal_late_coming_rule(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $isLate = AttendancePayrollRules::isLateArrival(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 09:30:00'),
+            null
+        );
+
         $this->assertTrue($isLate);
     }
 
-    public static function nonApprovedHalfDayRequests(): array
+    public function test_approved_half_day_evaluate_day_has_zero_deduction_and_zero_late(): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $result = AttendancePayrollRules::evaluateDay(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 09:30:00'),
+            strtotime('2026-03-02 13:00:00'),
+            ['status' => 'approved', 'half_day_type' => 'second'],
+            false
+        );
+
+        $this->assertSame(['late_events' => 0, 'absence_days' => 0.0], $result);
+    }
+
+    /**
+     * @dataProvider pendingAndRejectedRequests
+     */
+    public function test_pending_or_rejected_half_day_evaluate_day_has_half_day_deduction_and_zero_late(string $status, string $type): void
+    {
+        [$start, $end] = $this->shiftTimes();
+
+        $result = AttendancePayrollRules::evaluateDay(
+            $start,
+            $end,
+            15,
+            strtotime('2026-03-02 09:30:00'),
+            strtotime('2026-03-02 13:00:00'),
+            ['status' => $status, 'half_day_type' => $type],
+            false
+        );
+
+        $this->assertSame(['late_events' => 0, 'absence_days' => 0.5], $result);
+    }
+
+    public static function pendingAndRejectedRequests(): array
     {
         return [
-            'pending first half' => ['pending', 'first'],
-            'rejected first half' => ['rejected', 'first'],
-            'pending second half' => ['pending', 'second'],
-            'rejected second half' => ['rejected', 'second'],
+            'pending first' => ['pending', 'first'],
+            'pending second' => ['pending', 'second'],
+            'rejected first' => ['rejected', 'first'],
+            'rejected second' => ['rejected', 'second'],
         ];
     }
 

@@ -418,9 +418,9 @@
                               <span class="gender_msg validation_err"></span>
                            </div>
                            <div class="col-md-4 form-group mb-3">
-                              <label for="Caste">Caste<b class="validation_err">*</b></label>
+                              <label for="Caste">Caste</label>
                               <select id="Caste" class="form-control Caste select2" name="student_caste" data-placeholder="Please select caste">
-                                 <option value="" disabled {{ empty($savedCaste) ? 'selected' : '' }}>Please select caste</option>
+                                 <option value="" {{ empty($savedCaste) ? 'selected' : '' }}>Please select caste</option>
                                  @foreach($casteList as $eachCaste)
                                     <option value="{{ $eachCaste }}" {{ (strcasecmp($savedCaste, $eachCaste) === 0) ? 'selected' : '' }}>{{ $eachCaste }}</option>
                                  @endforeach
@@ -536,10 +536,10 @@
                                     </div>
 
                                     <div class="col-md-4 form-group mb-3">
-                                        <label for="address">Family SSSM ID :</label>
-                                        <input class="form-control" id="family_SSSMID" type="text" placeholder="Enter SSSMID"  value="<?php if (!empty($notificationData1['family_SSSMID'])) {
+                                        <label for="family_SSSMID">Family SSSM ID :</label>
+                                        <input class="form-control" id="family_SSSMID" type="text" placeholder="Enter SSSMID" value="<?php if (!empty($notificationData1['family_SSSMID'])) {
                                                                                                                                        echo $notificationData1['family_SSSMID'];
-                                                                                                                                    } ?>" name="family_SSSMID" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err7"></span>
+                                                                                                                                    } ?>" name="family_SSSMID" maxlength="8" pattern="\d{8}" onkeyup="this.value = this.value.replace(/[^0-9]/g, '');check8();" /><span class="fathermobile_for_msg validation_err" id="validation_err_family_sssmid"></span>
                                     </div>
 
                                     <div class="col-md-4 form-group mb-3">
@@ -1442,122 +1442,245 @@
 
    });
 
-   /*validate form*/
-   $(".submit_btn").on('click', function(e) {
+   /* Step validation helpers */
+   function showStepAlert(stepTitle, missingFields) {
+      var msg = "Please complete the following required fields in " + stepTitle + " before proceeding:\n\n• " + missingFields.join("\n• ");
+      alert(msg);
+   }
 
-      e.preventDefault();
+   function focusFirstInvalid(elem) {
+      if (elem && elem.length) {
+         try {
+            elem.focus();
+            if (elem.offset()) {
+               $('html, body').animate({ scrollTop: elem.offset().top - 120 }, 200);
+            }
+         } catch (err) {}
+      }
+   }
+
+   function validateStep1() {
+      var missing = [];
+      var firstInvalid = null;
 
       var application_for = $('select[name="application_for"]').val();
-      var registration_date = $('input[name="registration_date"]').val();
-      var student_name = $('input[name="studentname"]').val() || $('input[name="student_name"]').val() || '';
-      student_name = $.trim(student_name);
-      var student_dob = $('input[name="student_dob"]').val() || '';
-      student_dob = $.trim(student_dob);
-      var nationality = $('select[name="nationality"], input[name="nationality"]').val() || '';
-      nationality = $.trim(nationality);
-      var student_caste = $('select[name="student_caste"]').val() || $('input[name="student_caste"]').val() || '';
-      student_caste = $.trim(student_caste);
-      var religion = $('select[name="religion"]').val() || '';
-      religion = $.trim(religion);
-      var category = $('select[name="category"]').val() || '';
-      category = $.trim(category);
-      var classname = $('select[name="classname"]').val() || '';
-      classname = $.trim(classname);
-      var session_name = $('[name="session_name"]').val() || '';
-      session_name = $.trim(session_name);
-      var batch = $('select[name="batch"]').val() || '';
-      batch = $.trim(batch);
-
-      var isValid = true;
-
-      if (!registration_date || registration_date.trim() === '') {
-         $('.registration_date_msg').text("This field is required*");
-         isValid = false;
-      } else {
-         $('.registration_date_msg').text("");
-      }
-
       if (!application_for || application_for === '' || application_for === 'Please Select') {
          $('.application_for_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Application Type");
+         if (!firstInvalid) firstInvalid = $('select[name="application_for"]');
       } else {
          $('.application_for_msg').text("");
       }
 
-      if (!student_name || student_name === '') {
+      var registration_date = $('input[name="registration_date"]').val();
+      if (!registration_date || registration_date.trim() === '') {
+         $('.registration_date_msg').text("This field is required*");
+         missing.push("Registration Date");
+         if (!firstInvalid) firstInvalid = $('input[name="registration_date"]');
+      } else {
+         $('.registration_date_msg').text("");
+      }
+
+      var student_name = $('input[name="studentname"]').val() || $('input[name="student_name"]').val() || '';
+      student_name = $.trim(student_name);
+      if (!student_name) {
          $('.student_name_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Student Name");
+         if (!firstInvalid) firstInvalid = $('input[name="studentname"]');
       } else {
          $('.student_name_msg').text("");
       }
 
-      if (!student_dob || student_dob === '') {
+      var student_dob = $('input[name="student_dob"]').val() || '';
+      student_dob = $.trim(student_dob);
+      if (!student_dob) {
          $('.student_dob_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Student Date of Birth");
+         if (!firstInvalid) firstInvalid = $('input[name="student_dob"]');
       } else {
          $('.student_dob_msg').text("");
       }
 
-      if (!nationality || nationality === '' || nationality === 'select') {
+      var nationality = $('select[name="nationality"], input[name="nationality"]').val() || '';
+      nationality = $.trim(nationality);
+      if (!nationality || nationality === '' || nationality === 'select' || nationality === 'Please select') {
          $('.nationality_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Nationality");
+         if (!firstInvalid) firstInvalid = $('select[name="nationality"]');
       } else {
          $('.nationality_msg').text("");
       }
 
-      if (!student_caste || student_caste === '' || student_caste === '0' || student_caste === 'select') {
-         $('.student_caste_msg').text("This field is required*");
-         isValid = false;
+      var gender = $('select[name="gender"]').val() || '';
+      gender = $.trim(gender);
+      if (!gender || gender === '' || gender === 'select' || gender === 'Please select') {
+         $('.gender_msg').text("This field is required*");
+         missing.push("Gender");
+         if (!firstInvalid) firstInvalid = $('select[name="gender"]');
       } else {
-         $('.student_caste_msg').text("");
+         $('.gender_msg').text("");
       }
 
-      if (!religion || religion === '' || religion === 'select') {
+      // Note: Caste is optional, so student_caste is not required
+
+      var religion = $('select[name="religion"]').val() || '';
+      religion = $.trim(religion);
+      if (!religion || religion === '' || religion === 'select' || religion === 'Please select') {
          $('.religion_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Religion");
+         if (!firstInvalid) firstInvalid = $('select[name="religion"]');
       } else {
          $('.religion_msg').text("");
       }
 
-      if (!category || category === '' || category === 'select') {
+      var category = $('select[name="category"]').val() || '';
+      category = $.trim(category);
+      if (!category || category === '' || category === 'select' || category === 'Please select') {
          $('.category_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Category");
+         if (!firstInvalid) firstInvalid = $('select[name="category"]');
       } else {
          $('.category_msg').text("");
       }
 
-      if (!classname || classname === '' || classname === 'select') {
+      var classname = $('select[name="classname"]').val() || $('#sibling_class_second').val() || '';
+      classname = $.trim(classname);
+      if (!classname || classname === '' || classname === 'select' || classname === 'Please select') {
          $('.classname_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Class Name");
+         if (!firstInvalid) firstInvalid = $('select[name="classname"]');
       } else {
          $('.classname_msg').text("");
       }
 
-      if (!session_name || session_name === '' || session_name === 'select') {
+      var session_name = $('[name="session_name"]').val() || '';
+      session_name = $.trim(session_name);
+      if (!session_name || session_name === '' || session_name === 'select' || session_name === 'Please select') {
          $('.session_name_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Session Name");
+         if (!firstInvalid) firstInvalid = $('[name="session_name"]');
       } else {
          $('.session_name_msg').text("");
       }
 
-      if (!batch || batch === '' || batch === 'select') {
+      var batch = $('select[name="batch"]').val() || '';
+      batch = $.trim(batch);
+      if (!batch || batch === '' || batch === 'select' || batch === ' - Year - ') {
          $('.batch_msg').text("This field is required*");
-         isValid = false;
+         missing.push("Batch Name");
+         if (!firstInvalid) firstInvalid = $('select[name="batch"]');
       } else {
          $('.batch_msg').text("");
       }
 
-      if (isValid) {
-         $('.allinput_msg').text("");
-         var myForm = document.getElementById("form-id");
-         HTMLFormElement.prototype.submit.call(myForm);
+      var famSSSM = $('#family_SSSMID').val();
+      if (famSSSM && famSSSM.trim() !== '') {
+         var famClean = famSSSM.replace(/[^0-9]/g, '');
+         if (famClean.length !== 8) {
+            $('#validation_err_family_sssmid').text("Family SSSMID must be exactly 8 digits!");
+            missing.push("Family SSSMID (must be exactly 8 digits)");
+            if (!firstInvalid) firstInvalid = $('#family_SSSMID');
+         } else {
+            $('#validation_err_family_sssmid').text("");
+         }
       } else {
-         $('.allinput_msg').text("All required fields must be completed before you submit the form*");
-         $("#step1").addClass('s1');
-         console.log("invalid form");
+         $('#validation_err_family_sssmid').text("");
       }
 
+      return {
+         isValid: missing.length === 0,
+         missing: missing,
+         firstInvalid: firstInvalid
+      };
+   }
 
+   function validateStep2() {
+      var missing = [];
+      var firstInvalid = null;
+
+      var bankName = $('input[name="bankName"]').val();
+      if (!bankName || bankName.trim() === '') {
+         missing.push("Bank Name");
+         if (!firstInvalid) firstInvalid = $('input[name="bankName"]');
+      }
+
+      var branchName = $('input[name="branchName"]').val();
+      if (!branchName || branchName.trim() === '') {
+         missing.push("Branch Name");
+         if (!firstInvalid) firstInvalid = $('input[name="branchName"]');
+      }
+
+      var accNo = $('input[name="account_number"]').val();
+      if (!accNo || accNo.trim() === '') {
+         missing.push("Account Number");
+         if (!firstInvalid) firstInvalid = $('input[name="account_number"]');
+      }
+
+      var ifsc = $('input[name="ifsc_code"]').val();
+      if (!ifsc || ifsc.trim() === '') {
+         missing.push("IFSC Code");
+         if (!firstInvalid) firstInvalid = $('input[name="ifsc_code"]');
+      }
+
+      return {
+         isValid: missing.length === 0,
+         missing: missing,
+         firstInvalid: firstInvalid
+      };
+   }
+
+   /* SmartWizard step validation on leaveStep */
+   $("#smartwizard").on("leaveStep", function (e, anchorObject, stepNumber, stepDirection) {
+      if (stepNumber === 0 && stepDirection === 'forward') {
+         var check1 = validateStep1();
+         if (!check1.isValid) {
+            showStepAlert("Step 1 (Student Details)", check1.missing);
+            focusFirstInvalid(check1.firstInvalid);
+            return false;
+         }
+      }
+   });
+
+   /* Enforce Next button and Step 2 tab navigation validation */
+   $(document).on('click', '.sw-btn-next, a[href="#step-2"]', function(e) {
+      if ($('#step-1').is(':visible')) {
+         var check1 = validateStep1();
+         if (!check1.isValid) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            showStepAlert("Step 1 (Student Details)", check1.missing);
+            focusFirstInvalid(check1.firstInvalid);
+            return false;
+         }
+      }
+   });
+
+   /* Submit button validation */
+   $(".submit_btn").on('click', function(e) {
+      e.preventDefault();
+
+      var check1 = validateStep1();
+      if (!check1.isValid) {
+         showStepAlert("Step 1 (Student Details)", check1.missing);
+         if ($('#smartwizard').data('smartWizard')) {
+            $('#smartwizard').smartWizard("goToStep", 0);
+         } else {
+            $('a[href="#step-1"]').trigger('click');
+         }
+         focusFirstInvalid(check1.firstInvalid);
+         return false;
+      }
+
+      var check2 = validateStep2();
+      if (!check2.isValid) {
+         showStepAlert("Step 2 (Personal / Bank Details)", check2.missing);
+         focusFirstInvalid(check2.firstInvalid);
+         return false;
+      }
+
+      $('.allinput_msg').text("");
+      var myForm = document.getElementById("form-id");
+      HTMLFormElement.prototype.submit.call(myForm);
    });
    /*checkbox Actions*/
    // DOM ready checkbox actions
@@ -1994,6 +2117,18 @@
          message.innerHTML = "required 9 digits, match requested format!"
       } else {
          message.innerHTML = "";
+      }
+   }
+
+   function check8() {
+      var mobile = document.getElementById('family_SSSMID');
+      var message = document.getElementById('validation_err_family_sssmid') || document.getElementById('validation_err8');
+      if (mobile && message) {
+         if (mobile.value.length != 8 && mobile.value.length != 0) {
+            message.innerHTML = "Family SSSMID must be exactly 8 digits!";
+         } else {
+            message.innerHTML = "";
+         }
       }
    }
 

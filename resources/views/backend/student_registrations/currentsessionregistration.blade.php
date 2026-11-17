@@ -68,12 +68,12 @@ font-size: 0.813rem;
                        </div>
                        <div class="col-md-2 form-group mb-3">
                         <label for="serial_number">Serial number</label>
-                        <input name="serial_number" class="form-control" id="form_number" placeholder="Serial Number" value="<?php if(!empty($jsonArr['serial_number'])){ echo $jsonArr['serial_number']; }?>" />
+                        <input name="serial_number" class="form-control" id="serial_number" placeholder="Serial Number" value="<?php if(!empty($jsonArr['serial_number'])){ echo $jsonArr['serial_number']; }?>" />
                       </div>
 
                       <div class="col-md-2 form-group mb-3">
                         <label for="firstName1">Class Name</label>
-                        <select id="classname" class="form-control" name="classname" autocomplete="" required>
+                        <select id="classname" class="form-control" name="classname" autocomplete="">
                            @if(!empty($jsonArr))
                             <option value=""> -- Please select -- </option>
                                     @foreach($classlist as $each)

@@ -16,20 +16,11 @@ class AttendancePayrollRules
             return false;
         }
 
-        $isApprovedHalfDay = $halfDayRequest
-            && strtolower(trim((string) ($halfDayRequest['status'] ?? ''))) === 'approved'
-            && in_array(
-                strtolower(trim((string) ($halfDayRequest['half_day_type'] ?? ''))),
-                ['first', 'second'],
-                true
-            );
-
-        if ($isApprovedHalfDay) {
-            $halfDayType = strtolower(trim((string) $halfDayRequest['half_day_type']));
-            if (
-                $halfDayType === 'first'
-                || ($halfDayType === 'second' && $inTime >= $shiftStart + (int) floor(($shiftEnd - $shiftStart) / 2))
-            ) {
+        // Requirement: If a staff member has submitted a half-day leave request for that date
+        // (Approved, Pending, or Rejected; First or Second Half), do NOT apply the late-coming rule.
+        if (!empty($halfDayRequest)) {
+            $status = strtolower(trim((string) ($halfDayRequest['status'] ?? '')));
+            if (in_array($status, ['approved', 'pending', 'rejected'], true)) {
                 return false;
             }
         }
@@ -50,22 +41,12 @@ class AttendancePayrollRules
             return ['late_events' => 0, 'absence_days' => 0.0];
         }
 
-        if ($halfDayRequest) {
-            if (
-                $halfDayRequest['status'] === 'approved'
-                && $halfDayRequest['half_day_type'] === 'second'
-            ) {
-                return ['late_events' => 0, 'absence_days' => 0.0];
+        if (!empty($halfDayRequest)) {
+            $status = strtolower(trim((string) ($halfDayRequest['status'] ?? '')));
+            if (in_array($status, ['approved', 'pending', 'rejected'], true)) {
+                $absenceDays = ($status === 'approved') ? 0.0 : 0.5;
+                return ['late_events' => 0, 'absence_days' => $absenceDays];
             }
-
-            $lateMinutes = $inTime ? ($inTime - $shiftStart) / 60 : 0;
-            $lateEvents = $lateMinutes > 0
-                && $lateMinutes <= 60
-                && $lateMinutes > $lateComingThreshold
-                ? 1
-                : 0;
-
-            return ['late_events' => $lateEvents, 'absence_days' => 0.0];
         }
 
         $lateEvents = 0;

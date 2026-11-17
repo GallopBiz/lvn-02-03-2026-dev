@@ -35,12 +35,12 @@ class AttendanceController extends Controller
         $filters = $this->filters($request);
         $isStaffUser = $this->isStaffAttendanceUser();
 
-        if ($isStaffUser && empty($filters['class_id'])) {
+        if ($isStaffUser) {
             $assignedSubjects = $this->accessibleTeacherSubjects(true)->get();
             if ($assignedSubjects->isNotEmpty()) {
-                $firstAssignment = $assignedSubjects->first();
-                $filters['class_id'] = $firstAssignment->class_id;
-                if (empty($filters['section_name'])) {
+                if (empty($filters['class_id']) || !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
+                    $firstAssignment = $assignedSubjects->first();
+                    $filters['class_id'] = $firstAssignment->class_id;
                     $filters['section_name'] = $firstAssignment->section_name;
                 }
             }
@@ -93,7 +93,9 @@ class AttendanceController extends Controller
                 $filters['date'],
                 $filters['class_id'],
                 $filters['section_name'],
-                $filters['academic_session']
+                $filters['academic_session'],
+                null,
+                $isStaffUser ? $this->staffEmployeeId() : null
             );
         }
 
@@ -151,6 +153,7 @@ class AttendanceController extends Controller
         $sectionName = $request->query('section_name');
         $session = $request->query('academic_session', $this->defaultSession($request));
         $isStaffUser = $this->isStaffAttendanceUser();
+        $teacherId = $isStaffUser ? $this->staffEmployeeId() : ($request->query('teacher_id') ? (int) $request->query('teacher_id') : null);
 
         if ($isStaffUser) {
             if (empty($classId)) {
@@ -170,17 +173,17 @@ class AttendanceController extends Controller
             }
         }
 
-        if (empty($date) || empty($classId)) {
+        if (empty($date) || (empty($classId) && empty($teacherId))) {
             return response()->json([
                 'already_marked' => false,
             ]);
         }
 
-        $existing = $this->findExistingAttendance($date, $classId, $sectionName, $session);
+        $existing = $this->findExistingAttendance($date, $classId, $sectionName, $session, null, $teacherId);
 
         if ($existing) {
-            $class = $this->resolveClass($classId);
-            $className = optional($class)->class_name ?: (string) $classId;
+            $class = $this->resolveClass($classId ?: $existing->class_id);
+            $className = optional($class)->class_name ?: (string) ($classId ?: $existing->class_id);
             return response()->json([
                 'already_marked' => true,
                 'message' => 'Attendance has already been submitted for this date.',
@@ -199,35 +202,56 @@ class AttendanceController extends Controller
         ]);
     }
 
-    public function findExistingAttendance(?string $date, $classId, ?string $sectionName = null, ?string $session = null, ?int $excludeId = null): ?Attendance
+    public function findExistingAttendance(?string $date, $classId, ?string $sectionName = null, ?string $session = null, ?int $excludeId = null, ?int $teacherId = null): ?Attendance
     {
-        if (empty($date) || empty($classId)) {
+        if (empty($date)) {
             return null;
         }
 
-        $class = $this->resolveClass($classId);
-        $className = optional($class)->class_name ?: (string) $classId;
-        $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->filter()->unique()->values();
+        if ($teacherId === null && $this->isStaffAttendanceUser()) {
+            $teacherId = $this->staffEmployeeId();
+        }
 
-        return Attendance::query()
+        if (empty($classId) && empty($teacherId)) {
+            return null;
+        }
+
+        $query = Attendance::query()
             ->where('is_delete', 0)
-            ->whereDate('attendance_date', $date)
-            ->where(function ($q) use ($classIds, $className, $classId) {
+            ->whereDate('attendance_date', $date);
+
+        if ($teacherId) {
+            $query->where(function ($tq) use ($teacherId) {
+                $tq->where('Teacher_id', $teacherId)
+                    ->orWhere('teacher_id', $teacherId);
+            });
+        }
+
+        if (!empty($classId)) {
+            $class = $this->resolveClass($classId);
+            $className = optional($class)->class_name ?: (string) $classId;
+            $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->filter()->unique()->values();
+
+            $query->where(function ($q) use ($classIds, $className, $classId) {
                 $q->whereIn('class_id', $classIds)
                     ->orWhere('class_id', $className)
                     ->orWhere('class_id', (string) $classId)
                     ->orWhere('class_name', $className);
-            })
-            ->when(!empty($sectionName), function ($q) use ($sectionName) {
-                $q->where(function ($inner) use ($sectionName) {
+            });
+
+            if (!empty($sectionName)) {
+                $query->where(function ($inner) use ($sectionName) {
                     $inner->where('section_name', $sectionName)
                         ->orWhere('section_name', 'All');
                 });
-            })
-            ->when($excludeId, function ($q) use ($excludeId) {
-                $q->where('id', '!=', $excludeId);
-            })
-            ->first();
+            }
+        }
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        return $query->first();
     }
 
     public function students(Request $request)
@@ -329,12 +353,15 @@ class AttendanceController extends Controller
             return back()->withInput()->with('error', $this->lockedMonthlyAttendanceMessage());
         }
 
+        $teacherId = $this->isStaffAttendanceUser() ? ($this->staffEmployeeId() ?: ($validated['teacher_id'] ?? null)) : ($validated['teacher_id'] ?? null);
+
         $duplicate = $this->findExistingAttendance(
             $validated['attendance_date'],
             $validated['class_id'],
             $validated['section_name'],
             $validated['academic_session'],
-            $attendanceId ? (int) $attendanceId : null
+            $attendanceId ? (int) $attendanceId : null,
+            $teacherId ? (int) $teacherId : null
         );
 
         if ($duplicate) {
@@ -343,12 +370,12 @@ class AttendanceController extends Controller
 
         $counts = collect($validated['attendance'])->countBy();
         $leaveCount = (int) ($counts['leave'] ?? 0);
-        $teacherId = $this->isStaffAttendanceUser() ? ($this->staffEmployeeId() ?: ($validated['teacher_id'] ?? null)) : ($validated['teacher_id'] ?? null);
 
         DB::transaction(function () use ($validated, $request, $attendanceId, $counts, $leaveCount, $teacherId) {
             $attendance = Attendance::updateOrCreate(
                 ['id' => $attendanceId],
                 [
+                    'Teacher_id' => $teacherId,
                     'teacher_id' => $teacherId,
                     'class_id' => $validated['class_id'],
                     'class_name' => $validated['class_name'] ?? null,
@@ -1842,13 +1869,19 @@ class AttendanceController extends Controller
             return false;
         }
 
-        return Auth::guard('staff')->check()
-            && (
-                request()->cookie('auth_portal') === 'staff'
-                || (request()->hasSession() && request()->session()->get('auth_portal') === 'staff')
-                || request()->is('staff', 'staff/*')
-                || !Auth::guard('web')->check()
-            );
+        if (Auth::guard('staff')->check()) {
+            return true;
+        }
+
+        $user = Auth::guard('web')->user() ?: Auth::user();
+        if ($user) {
+            $role = strtolower(trim((string) ($user->role ?? '')));
+            if ($role === 'academic' || $role === 'teacher' || !empty($user->employee_id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isMonthLockedForAttendance(Attendance $attendance): bool
@@ -1865,7 +1898,12 @@ class AttendanceController extends Controller
 
     private function staffEmployeeId(): ?int
     {
-        return $this->isStaffAttendanceUser() ? (int) Auth::guard('staff')->user()->employee_id : null;
+        if (!$this->isStaffAttendanceUser()) {
+            return null;
+        }
+
+        $user = Auth::guard('staff')->user() ?: Auth::guard('web')->user() ?: Auth::user();
+        return $user && !empty($user->employee_id) ? (int) $user->employee_id : null;
     }
 
     private function accessibleTeacherSubjects(bool $classTeacherOnly = false)
@@ -1877,7 +1915,10 @@ class AttendanceController extends Controller
         }
 
         if ($classTeacherOnly) {
-            $query->whereRaw('LOWER(TRIM(role)) = ?', ['class teacher']);
+            $hasExplicitClassTeacher = (clone $query)->whereRaw('LOWER(TRIM(role)) = ?', ['class teacher'])->exists();
+            if ($hasExplicitClassTeacher) {
+                $query->whereRaw('LOWER(TRIM(role)) = ?', ['class teacher']);
+            }
         }
 
         return $query;
@@ -1888,12 +1929,23 @@ class AttendanceController extends Controller
         $query = Attendance::query();
 
         if ($this->isStaffAttendanceUser()) {
+            $teacherId = $this->staffEmployeeId();
+            if (!$teacherId) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            // Each teacher should only be able to view their own attendance records
+            $query->where(function ($q) use ($teacherId) {
+                $q->where('Teacher_id', $teacherId)
+                    ->orWhere('teacher_id', $teacherId);
+            });
+
             $subjects = $this->accessibleTeacherSubjects($classTeacherOnly)
                 ->get(['class_id', 'section_name'])
                 ->groupBy('class_id');
 
             if ($subjects->isEmpty()) {
-                return $query->whereRaw('1 = 0');
+                return $query;
             }
 
             $query->where(function ($outer) use ($subjects) {

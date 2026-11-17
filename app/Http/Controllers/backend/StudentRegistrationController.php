@@ -30,7 +30,7 @@ class StudentRegistrationController extends Controller
             if (isset($_COOKIE['selectedYear'])) {
                 $db_name = $_COOKIE['selectedYear'];
             } else {
-                $db_name = "2023_2024";
+                $db_name = session('db_names') ?? session('selectedYear') ?? env('DB_DATABASE', '2026_2027');
             }
             
         }
@@ -855,46 +855,63 @@ public function downloadcertificate($id)
     
 	public function student_registration_filer(Request $request)
 	{
-		$session_name = $request->post('session_name');
-		$form_number = $request->post('form_number');
-		$save_status = $request->post('save_status');
-		$class_name = $request->post('classname');
-		$studentname = $request->post('student_name');
-		$application_for = $request->post('application_for'); // <-- new
+		$session_name = $request->input('session_name');
+		$form_number = $request->input('form_number');
+		$serial_number = $request->input('serial_number');
+		$class_name = $request->input('classname');
+		$studentname = $request->input('student_name');
+		$application_for = $request->input('application_for');
 
 		$jsonArr = [
 			'session_name' => $session_name,
 			'student_name' => $studentname,
-			'serial_number' => $request->post('serial_number'),
-			'class_name' => $request->post('classname'),
+			'serial_number' => $serial_number,
+			'class_name' => $class_name,
 			'form_number' => $form_number,
-			'application_for' => $application_for, // <-- add to jsonArr
+			'application_for' => $application_for,
 		];
 
-		// Start query builder
-		if(!empty($session_name)){
-			$records1 = $this->activeStudentRegistrationQuery()
-						 ->where("session_name", $session_name)
-						 ->orderBy('created_at', 'desc')
-                         ->orderBy('id', 'desc');
-		} else {
-			$records1 = $this->activeStudentRegistrationQuery()->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+		// Start query builder with active student registrations (status = 'r')
+		$records1 = $this->activeStudentRegistrationQuery()
+			->where('status', '=', 'r')
+			->orderBy('created_at', 'desc')
+			->orderBy('id', 'desc');
+
+		if (!empty($session_name)) {
+			$sessionVariants = array_unique([
+				trim($session_name),
+				str_replace('-', '_', trim($session_name)),
+				str_replace('_', '-', trim($session_name))
+			]);
+			$records1->whereIn('session_name', $sessionVariants);
 		}
 
-		if(!empty($form_number)){
-			$records1->where("form_number", $form_number);
+		if (!empty($form_number)) {
+			$records1->where('form_number', 'like', '%' . trim($form_number) . '%');
 		}
-		if(!empty($save_status)){
-			$records1->where("save_status", $save_status);
+
+		if (!empty($serial_number)) {
+			$trimmedSerial = trim($serial_number);
+			$records1->where(function ($q) use ($trimmedSerial) {
+				$q->where('scholar_no', 'like', '%' . $trimmedSerial . '%')
+				  ->orWhere('form_number', 'like', '%' . $trimmedSerial . '%')
+				  ->orWhere('id', $trimmedSerial);
+			});
 		}
-		if(!empty($class_name)){
-			$records1->where("class_name", $class_name);
+
+		if (!empty($class_name)) {
+			$records1->where(function ($q) use ($class_name) {
+				$q->where('class_name', trim($class_name))
+				  ->orWhere('class_id', trim($class_name));
+			});
 		}
-		if(!empty($studentname)){
-			$records1->where("student_name", $studentname);
+
+		if (!empty($studentname)) {
+			$records1->where('student_name', 'like', '%' . trim($studentname) . '%');
 		}
-		if(!empty($application_for)){
-			$records1->where("application_for", $application_for);
+
+		if (!empty($application_for)) {
+			$records1->where('application_for', trim($application_for));
 		}
 
 		$all_inquiry = $records1->get();

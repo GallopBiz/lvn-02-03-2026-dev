@@ -85,8 +85,7 @@ class EmployeeAttendanceController extends Controller
                 return strtolower(trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '')));
             });
 
-        $leaveRequests = \App\Models\HrmsLeaveRequest::whereIn('status', ['Approved', 'approved'])
-            ->whereDate('start_date', '<=', $endDate)
+        $leaveRequests = \App\Models\HrmsLeaveRequest::whereDate('start_date', '<=', $endDate)
             ->whereDate('end_date', '>=', $startDate)
             ->when($employeeId, fn($q) => $q->where('employee_id', $employeeId))
             ->get();

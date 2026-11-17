@@ -387,7 +387,7 @@ Route::group(['middleware' => ['auth', 'check.permission']], function() {
     Route::post('save-selection-process', [StudentRegistrationController::class,'save_selection_process'])->name('save-selection-process');
     Route::get('/getEmployees', [StudentRegistrationController::class, 'getEmployees'])->name('getEmployees');
     Route::post('filter-student-registration',[StudentRegistrationController::class, 'filter_student_registration']);
-    Route::post('student-registration-filter',[StudentRegistrationController::class, 'student_registration_filer']);
+    Route::match(['get', 'post'], 'student-registration-filter', [StudentRegistrationController::class, 'student_registration_filer'])->name('student-registration-filter');
 
     /*Student routes*/
     Route::get('student-inquiry', [HomeController::class, 'index'])->name('student-inquiry');

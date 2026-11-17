@@ -122,7 +122,38 @@ class EmployeePayrollController extends Controller
 			->toArray();
 	}
 
-	private function getApprovedHalfDayRequestForDate(HrmsEmployee $employee, string $date): ?array
+	private function getDeductibleHalfDayDates(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate): array
+	{
+		return $employee->leaveRequest
+			->filter(function ($leaveRequest) use ($startDate, $endDate) {
+				$status = strtolower(trim((string) $leaveRequest->status));
+				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+
+				if (!$isHalfDay) {
+					return false;
+				}
+
+				$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
+				if (!in_array($status, ['rejected', 'pending'], true) && !($status === 'approved' && $isPaid == 0)) {
+					return false;
+				}
+
+				$leaveStart = Carbon::parse($leaveRequest->start_date);
+				$leaveEnd = Carbon::parse($leaveRequest->end_date);
+				return ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+					|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+					|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
+			})
+			->flatMap(function ($leaveRequest) {
+				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
+				return collect($period)->map(fn ($day) => $day->format('Y-m-d'));
+			})
+			->unique()
+			->values()
+			->toArray();
+	}
+
+	private function getHalfDayRequestForDate(HrmsEmployee $employee, string $date): ?array
 	{
 		foreach ($employee->leaveRequest as $leaveRequest) {
 			$isHalfDay = in_array(
@@ -130,11 +161,11 @@ class EmployeePayrollController extends Controller
 				['1', 'true', 'yes', 'on'],
 				true
 			);
+			$status = strtolower(trim((string) $leaveRequest->status));
 			$halfDayType = strtolower(trim((string) $leaveRequest->half_day_type));
 
-			if (strtolower(trim((string) $leaveRequest->status)) !== 'approved'
+			if (!in_array($status, ['approved', 'pending', 'rejected'], true)
 				|| !$isHalfDay
-				|| !in_array($halfDayType, ['first', 'second'], true)
 				|| Carbon::parse($leaveRequest->start_date)->toDateString() > $date
 				|| Carbon::parse($leaveRequest->end_date)->toDateString() < $date
 			) {
@@ -142,44 +173,22 @@ class EmployeePayrollController extends Controller
 			}
 
 			return [
-				
-				'status' => 'approved',
+				'status' => $status,
 				'half_day_type' => $halfDayType,
 			];
 		}
 
 		return null;
 	}
+
+	private function getApprovedHalfDayRequestForDate(HrmsEmployee $employee, string $date): ?array
+	{
+		return $this->getHalfDayRequestForDate($employee, $date);
+	}
 	
 	private function getRejectedOrUnpaidHalfDayCount(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
 	{
-		$halfDayCount = 0;
-		foreach ($employee->leaveRequest as $leaveRequest) {
-			$status = strtolower(trim((string) $leaveRequest->status));
-			$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
-
-			if (!$isHalfDay) {
-				continue;
-			}
-
-			$leaveStart = Carbon::parse($leaveRequest->start_date);
-			$leaveEnd = Carbon::parse($leaveRequest->end_date);
-			$isWithinRange = ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
-				|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
-				|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
-
-			if (!$isWithinRange) {
-				continue;
-			}
-
-			$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
-
-			if ($status === 'rejected' || ($status === 'approved' && $isPaid == 0)) {
-				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
-				$halfDayCount += count(collect($period)) * 0.5;
-			}
-		}
-		return $halfDayCount;
+		return count($this->getDeductibleHalfDayDates($employee, $startDate, $endDate)) * 0.5;
 	}
 
 	public function GenerateJson(Request $request)
@@ -299,7 +308,9 @@ class EmployeePayrollController extends Controller
 					}
 					$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 					$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
-					$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
+					$deductibleHalfDayDates = $this->getDeductibleHalfDayDates($employee, $startDate, $endDate);
+					$allHalfDayDates = array_values(array_unique(array_merge($approvedHalfDayDates, $deductibleHalfDayDates)));
+					$rejectedOrUnpaidHalfDays = count($deductibleHalfDayDates) * 0.5;
 					$lateComingCount = 0;
 					$unapprovedHalfDaysFromBiometric = 0;
 					if ($biometricRequired) {
@@ -315,7 +326,7 @@ class EmployeePayrollController extends Controller
 							$expectedDuration = max(1, $shiftEnd - $shiftStart);
 							$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
 							$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
-							$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
+							$halfDayRequest = $this->getHalfDayRequestForDate($employee, $logDate);
 							$isLateSkippedForDate = false;
 							if ($skipLateComing) {
 								if ($skipLateComingType === 'entire_month') {
@@ -335,7 +346,7 @@ class EmployeePayrollController extends Controller
 							$lateComingCount++;
 							}
 
-							if (!in_array($logDate, $approvedHalfDayDates)) {
+							if (!in_array($logDate, $allHalfDayDates, true)) {
 							if ($inTime && $outTime) {
 								$actualDuration = $outTime - $inTime;
 									if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
@@ -396,6 +407,8 @@ class EmployeePayrollController extends Controller
 							$allDates[$dateStr] = 'holiday';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
+						} elseif (in_array($dateStr, $deductibleHalfDayDates, true)) {
+							$allDates[$dateStr] = 'half_day_unpaid';
 						} else {
 							$allDates[$dateStr] = 'absent';
 						}
@@ -704,7 +717,9 @@ class EmployeePayrollController extends Controller
 
 				$approvedHalfDayDates = $this->getApprovedHalfDayDates($employee, $startDate, $endDate);
 				$halfDayLeaveDays = count($approvedHalfDayDates) * 0.5;
-				$rejectedOrUnpaidHalfDays = $this->getRejectedOrUnpaidHalfDayCount($employee, $startDate, $endDate);
+				$deductibleHalfDayDates = $this->getDeductibleHalfDayDates($employee, $startDate, $endDate);
+				$allHalfDayDates = array_values(array_unique(array_merge($approvedHalfDayDates, $deductibleHalfDayDates)));
+				$rejectedOrUnpaidHalfDays = count($deductibleHalfDayDates) * 0.5;
 				$lateComingCount = 0;
 				$unapprovedHalfDaysFromBiometric = 0;
 
@@ -722,7 +737,7 @@ class EmployeePayrollController extends Controller
 						$expectedDuration = max(1, $shiftEnd - $shiftStart);
 						$inTime = $log->in_time ? strtotime($logDate . ' ' . $log->in_time) : null;
 						$outTime = $log->out_time ? strtotime($logDate . ' ' . $log->out_time) : null;
-						$halfDayRequest = $this->getApprovedHalfDayRequestForDate($employee, $logDate);
+						$halfDayRequest = $this->getHalfDayRequestForDate($employee, $logDate);
 
 						$isLateSkippedForDate = false;
 						if ($skipLateComing) {
@@ -745,7 +760,7 @@ class EmployeePayrollController extends Controller
 						\Log::info("Late Entry on $logDate: " . round(($inTime - $shiftStart) / 60, 2) . ' minutes.');
 						}
 
-						if (!in_array($logDate, $approvedHalfDayDates)) {
+						if (!in_array($logDate, $allHalfDayDates, true)) {
 						if ($inTime && $outTime) {
 								$actualDuration = $outTime - $inTime;
 								if ($actualDuration > 0 && $actualDuration < ($expectedDuration * 0.6)) {
@@ -824,6 +839,8 @@ class EmployeePayrollController extends Controller
 							$allDates[$dateStr] = 'holiday';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
+						} elseif (in_array($dateStr, $deductibleHalfDayDates, true)) {
+							$allDates[$dateStr] = 'half_day_unpaid';
 						} else {
 							$allDates[$dateStr] = 'absent';
 						}

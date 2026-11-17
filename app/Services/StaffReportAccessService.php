@@ -28,13 +28,23 @@ class StaffReportAccessService
 
     public function isStaffUser(): bool
     {
-        return Auth::guard('staff')->check()
-            && (
-                request()->cookie('auth_portal') === 'staff'
-                || (request()->hasSession() && request()->session()->get('auth_portal') === 'staff')
-                || request()->is('staff', 'staff/*')
-                || !Auth::guard('web')->check()
-            );
+        if (class_exists(\App\Services\PermissionService::class) && \App\Services\PermissionService::isAdmin()) {
+            return false;
+        }
+
+        if (Auth::guard('staff')->check()) {
+            return true;
+        }
+
+        $user = Auth::guard('web')->user() ?: Auth::user();
+        if ($user) {
+            $role = strtolower(trim((string) ($user->role ?? '')));
+            if ($role === 'academic' || $role === 'teacher' || !empty($user->employee_id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function appliesToRequest(Request $request): bool
@@ -523,7 +533,8 @@ class StaffReportAccessService
             return $this->assignments;
         }
 
-        $employeeId = (int) (Auth::guard('staff')->user()->employee_id ?? 0);
+        $user = Auth::guard('staff')->user() ?: Auth::guard('web')->user() ?: Auth::user();
+        $employeeId = (int) ($user->employee_id ?? 0);
         $this->assignments = $employeeId > 0
             ? TeacherSubject::query()
                 ->where('is_delete', 0)

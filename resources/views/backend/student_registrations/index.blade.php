@@ -255,19 +255,19 @@ font-size: 0.813rem;
             source: availableTags2
         });
 
-        // Set session value after a delay
+        // Set session value after a delay if empty
         setTimeout(function() {
-            var year = $("#year").val();
-            $("#session_name").val(year);
+            if (!$("#session_name").val()) {
+                var year = $("#year").val();
+                if (year) {
+                    $("#session_name").val(year);
+                }
+            }
         }, 1000);
 
         // Clear Filter Button
         $('#clearFilterBtn').click(function () {
-            $('#form_number').val('');
-            $('#serial_number').val('');
-            $('#classname').val('');
-            $('#application_for').val('');
-            $('#studentname').val('');
+            window.location.href = "{{ url('student-registrations') }}";
         });
 
         function keepLatestFirst() {

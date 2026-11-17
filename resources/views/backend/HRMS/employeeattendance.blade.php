@@ -353,16 +353,18 @@
 
                                             $shift = $employeeShifts->get($employeeId);
 
-                                            $approvedLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
+                                            $halfDayLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
                                                 return $lr->employee_id == $employeeId
+                                                    && in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true)
+                                                    && in_array(strtolower(trim((string) $lr->status)), ['approved', 'pending', 'rejected'], true)
                                                     && \Carbon\Carbon::parse($lr->start_date)->lte($date)
                                                     && \Carbon\Carbon::parse($lr->end_date)->gte($date);
                                             }) : null;
-                                            $approvedHalfDayLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
+
+                                            $approvedLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
                                                 return $lr->employee_id == $employeeId
                                                     && in_array(strtolower(trim((string) $lr->status)), ['approved'], true)
-                                                    && in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true)
-                                                    && in_array(strtolower(trim((string) $lr->half_day_type)), ['first', 'second'], true)
+                                                    && !in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true)
                                                     && \Carbon\Carbon::parse($lr->start_date)->lte($date)
                                                     && \Carbon\Carbon::parse($lr->end_date)->gte($date);
                                             }) : null;
@@ -386,9 +388,9 @@
 
                                                 if ($record->in_time) {
                                                     $inTime = strtotime($dateStr . ' ' . $record->in_time);
-                                                    $halfDayRequest = $approvedHalfDayLeave ? [
-                                                        'status' => $approvedHalfDayLeave->status,
-                                                        'half_day_type' => $approvedHalfDayLeave->half_day_type,
+                                                    $halfDayRequest = $halfDayLeave ? [
+                                                        'status' => strtolower(trim((string) $halfDayLeave->status)),
+                                                        'half_day_type' => strtolower(trim((string) $halfDayLeave->half_day_type)),
                                                     ] : null;
                                                     if (\App\Services\Hrms\AttendancePayrollRules::isLateArrival(
                                                         $shiftStart,
@@ -428,11 +430,14 @@
                                             $cellClass = 'att-cell';
                                             if ($isWeekendOff) $cellClass .= ' cell-weekend';
                                             elseif ($holiday) $cellClass .= ' cell-holiday';
-                                            elseif (!$record && !$approvedLeave) $cellClass .= ' cell-absent';
+                                            elseif (!$record && !$approvedLeave && !$halfDayLeave) $cellClass .= ' cell-absent';
 
                                             $tooltipText = "Employee: " . ($employeeName ?: '--') . " | Date: " . $date->format('d M Y (D)');
                                             if ($record) {
                                                 $tooltipText .= "\nStatus: " . ucfirst($record->status);
+                                                if ($halfDayLeave) {
+                                                    $tooltipText .= " (Half Day - " . ucfirst($halfDayLeave->status) . ")";
+                                                }
                                                 if ($isOffDay) {
                                                     $tooltipText .= $isWeekendOff ? " (Weekly Off Work)" : " (Holiday Work: " . ($holiday->HolidayName ?? 'Holiday') . ")";
                                                 }
@@ -440,7 +445,7 @@
                                                     $tooltipText .= "\nShift: " . $shift->start_time . ' - ' . $shift->end_time;
                                                 }
                                                 $tooltipText .= "\nIn: " . ($record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : 'N/A');
-                                                if ($isLateIn) $tooltipText .= " (Late by " . formatDurationInHoursAndMinutes($lateMinutes) . ")";
+                                                if ($isLateIn && !$halfDayLeave) $tooltipText .= " (Late by " . formatDurationInHoursAndMinutes($lateMinutes) . ")";
                                                 $tooltipText .= "\nOut: " . ($record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : 'N/A');
                                                 if ($isEarlyOut) $tooltipText .= " (Early by " . formatDurationInHoursAndMinutes($earlyMinutes) . ")";
                                                 if ($isExtraOut) $tooltipText .= " (Extra " . formatDurationInHoursAndMinutes($extraMinutes) . ")";
@@ -449,6 +454,10 @@
                                                 $tooltipText .= "\nHoliday: " . ($holiday->HolidayName ?? 'Public Holiday');
                                             } elseif ($isWeekendOff) {
                                                 $tooltipText .= "\nSunday Off";
+                                            } elseif ($halfDayLeave) {
+                                                $tooltipText .= "\nHalf Day Leave (" . ucfirst($halfDayLeave->status) . ")";
+                                            } elseif ($approvedLeave) {
+                                                $tooltipText .= "\nApproved Leave";
                                             } else {
                                                 $tooltipText .= "\nStatus: Absent";
                                             }
@@ -459,7 +468,19 @@
                                                     <!-- Exception / Status Badge Chips -->
                                                     @php $hasException = false; @endphp
 
-                                                    @if ($isLateIn)
+                                                    @if ($halfDayLeave)
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-leave" title="Half Day Leave ({{ ucfirst($halfDayLeave->status) }})">
+                                                            Half Day
+                                                        </span>
+                                                    @elseif ($approvedLeave)
+                                                        @php $hasException = true; @endphp
+                                                        <span class="badge-chip badge-chip-leave">
+                                                            Leave
+                                                        </span>
+                                                    @endif
+
+                                                    @if ($isLateIn && !$halfDayLeave)
                                                         @php $hasException = true; @endphp
                                                         <span class="badge-chip badge-chip-late" title="Late by {{ formatDurationInHoursAndMinutes($lateMinutes) }}">
                                                             Late
@@ -483,13 +504,6 @@
                                                         </span>
                                                     @endif
 
-                                                    @if ($approvedLeave)
-                                                        @php $hasException = true; @endphp
-                                                        <span class="badge-chip badge-chip-leave">
-                                                            {{ $approvedLeave->is_half_day ? 'Half Day' : 'Leave' }}
-                                                        </span>
-                                                    @endif
-
                                                     @if (!$hasException)
                                                         <span class="badge-chip badge-chip-present">
                                                             {{ $record->status == 'on-official-work' ? 'Official' : 'Present' }}
@@ -499,7 +513,7 @@
                                                     <!-- Timings -->
                                                     <div class="punch-times">
                                                         <div class="punch-row punch-in">
-                                                            <span class="lbl-in">I:</span> {{ $record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : '--' }}
+                                                             <span class="lbl-in">I:</span> {{ $record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : '--' }}
                                                         </div>
                                                         <div class="punch-row punch-out">
                                                             <span class="lbl-out">O:</span> {{ $record->out_time ? \Carbon\Carbon::parse($record->out_time)->format('h:i A') : '--' }}
@@ -510,6 +524,10 @@
                                                 <span class="badge-chip badge-chip-holiday" title="{{ $holiday->HolidayName ?? 'Holiday' }}">Holiday</span>
                                             @elseif($isWeekendOff)
                                                 <span class="badge-chip badge-chip-sunday">Sunday</span>
+                                            @elseif($halfDayLeave)
+                                                <span class="badge-chip badge-chip-leave" title="Half Day Leave ({{ ucfirst($halfDayLeave->status) }})">Half Day</span>
+                                            @elseif($approvedLeave)
+                                                <span class="badge-chip badge-chip-leave">Leave</span>
                                             @else
                                                 <span class="badge-chip badge-chip-absent">Absent</span>
                                             @endif

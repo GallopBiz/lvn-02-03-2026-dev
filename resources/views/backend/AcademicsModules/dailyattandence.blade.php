@@ -147,17 +147,29 @@
                     <p class="text-muted mb-0">Bulk mark the class, then adjust individual students where needed.</p>
                 </div>
                 <div class="d-flex flex-wrap align-items-center">
-                    <select name="teacher_id" class="form-control mr-2 mb-2" style="min-width:220px">
-                        <option value="">Teacher/Admin</option>
-                        @foreach($teachers as $teacherSubject)
-                            @php $teacher = $teacherSubject->Teacher; @endphp
-                            @if($teacher)
-                                <option value="{{ $teacher->id }}" @selected($editingAttendance && (string)$editingAttendance->teacher_id === (string)$teacher->id)>
-                                    {{ $teacher->first_name }} {{ $teacher->last_name }}
-                                </option>
-                            @endif
-                        @endforeach
-                    </select>
+                    @if($isStaffAttendanceUser)
+                        @php
+                            $currentEmpId = auth()->guard('staff')->user()->employee_id ?? auth()->guard('web')->user()->employee_id ?? auth()->user()->employee_id ?? null;
+                            $currentStaff = $currentEmpId ? \App\Models\HrmsEmployee::find($currentEmpId) : null;
+                            $currentTeacherName = $currentStaff ? trim($currentStaff->first_name . ' ' . $currentStaff->last_name) : (auth()->user()->name ?? 'Teacher');
+                        @endphp
+                        <input type="hidden" name="teacher_id" value="{{ $currentEmpId }}">
+                        <span class="badge badge-light border text-dark p-2 mr-2 mb-2 font-weight-bold" style="font-size: 0.95rem;">
+                            <i class="i-Administrator mr-1 text-primary"></i> Teacher: {{ $currentTeacherName }}
+                        </span>
+                    @else
+                        <select name="teacher_id" class="form-control mr-2 mb-2" style="min-width:220px">
+                            <option value="">Teacher/Admin</option>
+                            @foreach($teachers as $teacherSubject)
+                                @php $teacher = $teacherSubject->Teacher; @endphp
+                                @if($teacher)
+                                    <option value="{{ $teacher->id }}" @selected($editingAttendance && (string)$editingAttendance->teacher_id === (string)$teacher->id)>
+                                        {{ $teacher->first_name }} {{ $teacher->last_name }}
+                                    </option>
+                                @endif
+                            @endforeach
+                        </select>
+                    @endif
                     <input type="search" id="studentSearch" class="form-control student-search mb-2" placeholder="Search student">
                 </div>
             </div>
@@ -494,10 +506,14 @@
             return;
         }
 
+        var teacherInput = document.querySelector('[name="teacher_id"]');
+        var teacherId = teacherInput ? teacherInput.value : '';
+
         var checkUrl = "{{ route('dailyattandence.check-marked') }}?date=" + encodeURIComponent(dateVal) +
             "&class_id=" + encodeURIComponent(classId) +
             "&section_name=" + encodeURIComponent(sectionName) +
-            "&academic_session=" + encodeURIComponent(sessionVal);
+            "&academic_session=" + encodeURIComponent(sessionVal) +
+            (teacherId ? "&teacher_id=" + encodeURIComponent(teacherId) : '');
 
         fetch(checkUrl, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -568,10 +584,14 @@
             var sessionInput = form.querySelector('[name="academic_session"]');
             var sessionVal = sessionInput ? sessionInput.value : '';
 
+            var teacherInput = document.querySelector('[name="teacher_id"]');
+            var teacherId = teacherInput ? teacherInput.value : '';
+
             var checkUrl = "{{ route('dailyattandence.check-marked') }}?date=" + encodeURIComponent(dateVal) +
                 "&class_id=" + encodeURIComponent(classId) +
                 "&section_name=" + encodeURIComponent(sectionName) +
-                "&academic_session=" + encodeURIComponent(sessionVal);
+                "&academic_session=" + encodeURIComponent(sessionVal) +
+                (teacherId ? "&teacher_id=" + encodeURIComponent(teacherId) : '');
 
             fetch(checkUrl, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
