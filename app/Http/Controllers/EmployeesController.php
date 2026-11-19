@@ -44,7 +44,7 @@ class EmployeesController extends Controller
     {
         $employeeStatus = $request->input('employee_status');
 
-        $stream = HrmsEmployee::with(['addresses', 'biometricDetails'])
+        $stream = HrmsEmployee::with(['addresses', 'biometricDetails', 'shift.shiftType', 'staffType'])
             ->when(in_array($employeeStatus, self::EMPLOYEE_STATUSES, true), function ($query) use ($employeeStatus) {
                 $query->where('employee_status', $employeeStatus);
             })

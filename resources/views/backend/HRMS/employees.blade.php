@@ -1083,17 +1083,13 @@
                                     <th>Sr.</th>
                                     <th>First Name</th>
                                     <th>Last Name</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Address</th>
                                     <th>Ess Emp Code</th>
-                                    <th>Date Of Birth</th>
+                                    <th>Phone</th>
+                                    <th>Shift</th>
+                                    <th>Staff Type</th>
                                     <th>Joining Date</th>
                                     <th>Status</th>
-                                    {{-- <th>Departure Date</th> --}}
                                     <th>Action </th>
-
-
                                 </tr>
                             </thead>
                             <tbody>
@@ -1104,28 +1100,13 @@
                                         <tr>
                                             <td>{{ ++$i }}</td>
 
-
-
                                             <td class= "uperletter">{{ $streams->first_name }}</td>
                                             <td class= "uperletter">{{ $streams->last_name }}</td>
-                                            <td>{{ $streams->email }}</td>
+                                            <td class= "uperletter">{{ $streams->biometricDetails->ess_emp_code ?? 'N/A' }}</td>
                                             <td>{{ $streams->contact_number }}</td>
-                                            <td class="uperletter">
-                                                @empty($streams->addresses[0])
-                                                    N/A
-                                                @else
-                                                    {{ $streams->addresses[0]->address_line ?? 'N/A' }},
-                                                    {{ $streams->addresses[0]->city ?? 'N/A' }},
-                                                    {{ $streams->addresses[0]->pin_code ?? 'N/A' }}
-                                                @endempty
-                                            </td>
-                                            
-
-                                            <td class= "uperletter">{{ $streams->biometricDetails->ess_emp_code ?? 'N/A' }}
-                                            </td>
-                                            <td>{{ date('d-m-Y', strtotime($streams->date_of_birth)) }}</td>
-
-                                            <td>{{ date('d-m-Y', strtotime($streams->date_of_joining)) }}</td>
+                                            <td class="uperletter">{{ $streams->shift->shiftType->shift_type_name ?? 'N/A' }}</td>
+                                            <td class="uperletter">{{ $streams->staffType->staff_type_name ?? 'N/A' }}</td>
+                                            <td>{{ !empty($streams->date_of_joining) ? date('d-m-Y', strtotime($streams->date_of_joining)) : 'N/A' }}</td>
                                             <td class="uperletter">{{ $streams->employee_status ?? 'N/A' }}</td>
                                             <td class='d-flex'>
                                                 <a class="btn btn-primary m-1"
@@ -1136,12 +1117,11 @@
                                                     onclick="confirmDelete(event)">Delete</a>
                                             </td>
 
-
                                         </tr>
                                     @endforeach
                                 @else
                                     <tr>
-                                        <td colspan="11" class="text-center">No Data Found</td>
+                                        <td colspan="10" class="text-center">No Data Found</td>
                                     </tr>
                                 @endif
                             </tbody>
