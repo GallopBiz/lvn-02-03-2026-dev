@@ -140,8 +140,8 @@ font-size: 0.813rem;
                           <th>Mother Name</th>
                           <th>Session Name</th>
                           <th>Mobile Number</th>
-                          <th>scholar No</th>
                           <th>Enquiry Date</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                           <th>Updated by</th>
                         </tr>
@@ -163,8 +163,18 @@ font-size: 0.813rem;
                           <td><?php if(!empty($each_inq->session_name)){ echo $each_inq->session_name;}?></td>
                           <td><?php if(!empty($each_inq->mobile_number)){ echo $each_inq->mobile_number; }?></td>
                           <!-- <td>@if($each_inq->inq_mode=='off') offline @elseif($each_inq->inq_mode=='on') Online @endif</td> -->
-                          <td><?php if(!empty($each_inq->scholar_no)){ echo $each_inq->scholar_no; }?></td>
                           <td><?php if(!empty($each_inq->created_at)){ echo date('d-m-Y', strtotime($each_inq->created_at));}?></td>
+                          <td>
+                            @php
+                              $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                  || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
+                            @endphp
+                            @if($isNextYear)
+                              <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; background-color: #28a745 !important; color: #ffffff !important;">Yes</span>
+                            @else
+                              <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
+                            @endif
+                          </td>
                           <td>
                             <div class="dropdown">
                               <button class="btn btn-primary dropdown-toggle" id="dropdownMenuButton" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -201,6 +211,7 @@ font-size: 0.813rem;
                           <th>Mobile Number</th>
                          <!--  <th>Mode</th> -->
                           <th>Enquiry Date</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                           <th>Updated by</th>
                         </tr>

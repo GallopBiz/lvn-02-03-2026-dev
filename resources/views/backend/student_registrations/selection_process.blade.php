@@ -431,6 +431,7 @@ font-size: 0.813rem;
                             <th>Form No.</th>
                             <th>Class Name</th>
                             <th>Session Name</th>
+                            <th>Next Year</th>
                             <th>Student Name</th>
                             <th>Father Name</th>
                             <th>Mobile Number</th>
@@ -448,13 +449,29 @@ font-size: 0.813rem;
                         <tr>
                           <?php 
                             $arr = json_decode($each_inq->json_str,1);
+                            $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                || (!empty($arr['next_year']) && ($arr['next_year'] == 1 || $arr['next_year'] === '1'));
                           ?>  
                           <td><?php echo $i; ?></td>
 
                           <td><?php echo (!empty($each_inq->created_at)) ? date('d-m-Y', strtotime($each_inq->created_at )) : '' ; ?></td>
                           <td><?php echo (!empty($each_inq->form_number)) ? $each_inq->form_number : '' ; ?></td>
                           <td><?php echo (!empty($each_inq->student_name)) ? $each_inq->class_name : '' ; ?></td>
-                          <td><?php echo (!empty($each_inq->session_name)) ? $each_inq->session_name : '' ; ?></td>
+                          <td>
+                            <?php echo (!empty($each_inq->session_name)) ? $each_inq->session_name : '' ; ?>
+                            @if($isNextYear)
+                              <br><small class="text-primary font-weight-bold">(Admission for Next Session)</small>
+                            @else
+                              <br><small class="text-muted">(Current Session)</small>
+                            @endif
+                          </td>
+                          <td>
+                            @if($isNextYear)
+                              <span class="badge bg-warning text-dark font-weight-bold" style="font-size: 11px; padding: 4px 8px; background-color: #ffc107 !important; color: #212529 !important;">Yes</span>
+                            @else
+                              <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
+                            @endif
+                          </td>
                           <td><?php echo (!empty($arr['studentname_prefix'])) ? $arr['studentname_prefix'].' ' : '' ; ?><?php echo (!empty($each_inq->student_name)) ? ucwords($each_inq->student_name) : '' ; ?></td>
                           <td><?php echo (!empty($arr['fathername_prefix'])) ? $arr['fathername_prefix'].' ' : '' ; ?><?php echo (!empty($arr['fathername'])) ? ucwords($arr['fathername']) : '' ; ?></td>
                           <td><?php echo (!empty($each_inq->mobile_number)) ? $each_inq->mobile_number : '' ; ?></td>
@@ -494,7 +511,7 @@ font-size: 0.813rem;
                         <input type="hidden" id="select_count" name="select_count" value="<?php echo $i-1; ?>">
 
                         @else
-                       <tr><td colspan="9" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
+                       <tr><td colspan="12" class="text-center"><span class="fontcolor-error">There Are No Records Available</span></td></tr>
                         @endif
                       </tbody>
                       <tfoot>
@@ -504,10 +521,11 @@ font-size: 0.813rem;
                           <th>Form No.</th>
                           <th>Class Name</th>
                           <th>Session Name</th>
+                          <th>Next Year</th>
                           <th>Student Name</th>
                           <th>Father Name</th>
                           <th>Mobile Number</th>
-                          <th>Mother Number</th>
+                          <th>Mother Name</th>
                           <!-- <th>DOB</th> -->
                           <th>Save Status</th>
                           <th>Updated by</th>

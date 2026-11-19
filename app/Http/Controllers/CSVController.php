@@ -72,6 +72,7 @@ class CSVController extends Controller
             'Session Name',
             'Mobile Number',
             'Enquiry Date',
+            'Next Year',
         ];
         $csv->insertOne($column_list);
         // echo"<pre>";
@@ -85,29 +86,33 @@ class CSVController extends Controller
             // foreach ($columnNames as $column) {
                 // Check if the column contains JSON data
                 
-                
+                $jsonData = [];
                 if (!empty($item->json_str)) {
                     
                     $jsonData = json_decode($item->json_str, true);
-                    
-                    foreach($jsonData as $key => $jsonData_1){
-                        $row[$key] = $jsonData_1;
-                        
+                    if (is_array($jsonData)) {
+                        foreach($jsonData as $key => $jsonData_1){
+                            $row[$key] = $jsonData_1;
+                        }
                     }
                 }
-                $originalDate = $row['enquirydate'];
-                $formattedDate = date('d-m-Y', strtotime($originalDate));
+                $originalDate = $row['enquirydate'] ?? '';
+                $formattedDate = !empty($originalDate) ? date('d-m-Y', strtotime($originalDate)) : '';
+
+                $isNextYear = (!empty($item->next_year) && ($item->next_year == 1 || $item->next_year === '1'))
+                    || (!empty($jsonData['next_year']) && ($jsonData['next_year'] == 1 || $jsonData['next_year'] === '1'));
 
                 $data_value = [
                     'id' => $o,
-                    'formno' => $row['formno'],
-                    'class_name' => $item->class_name,
-                    'student_name' => $item->student_name,
-                    'fathername' => $row['fathername'],
-                    'mothername' => $row['mothername'],
-                    'session_name' => $item->session_name,
-                    'mobile_number' => $item->mobile_number,
+                    'formno' => $row['formno'] ?? ($item->form_number ?? ''),
+                    'class_name' => $item->class_name ?? '',
+                    'student_name' => $item->student_name ?? '',
+                    'fathername' => $row['fathername'] ?? '',
+                    'mothername' => $row['mothername'] ?? '',
+                    'session_name' => $item->session_name ?? '',
+                    'mobile_number' => $item->mobile_number ?? '',
                     'enquirydate' => $formattedDate,
+                    'next_year' => $isNextYear ? 'Yes' : 'No',
                 ];
                 // print_r($data_value);
             // }
@@ -313,6 +318,7 @@ class CSVController extends Controller
             'Form No.',
             'Class Name',
             'Session Name',
+            'Next Year',
             'Student Name',
             'Father Name',
             'Mobile Number',
@@ -330,6 +336,10 @@ class CSVController extends Controller
             $formNo = $item->form_number ?? ($jsonData['formno'] ?? ($jsonData['enquiryno'] ?? ''));
             $className = $item->class_name ?? ($jsonData['class_name'] ?? '');
             $sessionName = $item->session_name ?? ($jsonData['batch'] ?? ($jsonData['intended_session'] ?? ''));
+
+            $isNextYear = (!empty($item->next_year) && ($item->next_year == 1 || $item->next_year === '1'))
+                || (!empty($jsonData['next_year']) && ($jsonData['next_year'] == 1 || $jsonData['next_year'] === '1'));
+            $nextYearVal = $isNextYear ? 'Yes' : 'No';
 
             $studentPrefix = !empty($jsonData['studentname_prefix']) ? trim($jsonData['studentname_prefix']) . ' ' : '';
             $studentRaw = $item->student_name ?? ($jsonData['student_name'] ?? '');
@@ -355,6 +365,7 @@ class CSVController extends Controller
                 $formNo,
                 $className,
                 $sessionName,
+                $nextYearVal,
                 $studentName,
                 $fatherName,
                 $mobileNumber,

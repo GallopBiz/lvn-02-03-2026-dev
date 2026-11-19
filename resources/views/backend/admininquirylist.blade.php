@@ -172,6 +172,7 @@ font-size: 0.813rem;
                       <input type="hidden" name="column_names[]" value="inq_mode">
                       <input type="hidden" name="column_names[]" value="status">
                       <input type="hidden" name="column_names[]" value="save_status">
+                      <input type="hidden" name="column_names[]" value="next_year">
                       <input type="hidden" name="start_date" id="start_date" value="">
                       <input type="hidden" name="end_date" id="end_date" value="">
                       <input type="hidden" name="table_name" value="inquiry_registration">
@@ -194,7 +195,7 @@ font-size: 0.813rem;
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                           <th>Updated by</th>
                         </tr>
@@ -226,26 +227,14 @@ font-size: 0.813rem;
 						</td>
 
                           <td>
-                            @if(empty($each_inq->session_name))
-                              <?php 
-                                $originalYear = $each_inq->session_name;
-
-                                // Split the string into two years
-                                $years = explode("_", $originalYear);
-                                
-                                if (count($years) === 2) {
-                                    $startYear = intval($years[0]);
-                                    $endYear = intval($years[1]);
-                                    $newStartYear = $startYear + 1;
-                                    $newEndYear = $endYear + 1;
-                                    $newYear = $newStartYear . "_" . $newEndYear;
-                                    echo $newYear; // Output: 2024_2025
-                                } else {
-                                  echo "Invalid input format";
-                                }
-                              ?>
+                            @php
+                              $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                  || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
+                            @endphp
+                            @if($isNextYear)
+                              <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; background-color: #28a745 !important; color: #ffffff !important;">Yes</span>
                             @else
-                              {{ $each_inq->session_name }}
+                              <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
                             @endif
                           </td>
                           <td>
@@ -281,7 +270,7 @@ font-size: 0.813rem;
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                           <th>Updated by</th>
                         </tr>

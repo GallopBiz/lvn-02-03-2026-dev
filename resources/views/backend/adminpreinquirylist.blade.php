@@ -133,6 +133,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                       <input type="hidden" name="column_names[]" value="inq_mode">
                       <input type="hidden" name="column_names[]" value="status">
                       <input type="hidden" name="column_names[]" value="save_status">
+                      <input type="hidden" name="column_names[]" value="next_year">
                       <input type="hidden" name="table_name" value="inquiry_registration">
                       <!-- <button type="submit" class="btn btn-raised ripple btn-raised-warning m-1">Export CSV</button> -->
                   </form></div>
@@ -153,7 +154,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -175,35 +176,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           
                           <td>{{ date('d-m-Y', strtotime($each_inq->created_at)) }}</td>
                           <td>
-                            @if(!empty($each_inq->next_year))
-                              <?php 
-                              $currentYear = date('Y');
-                              $nextYear = date('Y') + 1;
-                              $currentSchoolYear = $each_inq->session_name;
-                              
-                                $originalYear = $currentSchoolYear;
-
-                                // Split the string into two years
-                                $years = explode("_", $originalYear);
-                                
-                                if (count($years) === 2) {
-                                    $startYear = intval($years[0]);
-                                    $endYear = intval($years[1]);
-                                    $newStartYear = $startYear + 1;
-                                    $newEndYear = $endYear + 1;
-                                    $newYear = $newStartYear . "_" . $newEndYear;
-                                    echo $newYear; // Output: 2024_2025
-                                } else {
-                                  echo "Invalid input format";
-                                }
-                              
-                              ?>
+                            @php
+                              $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                  || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
+                            @endphp
+                            @if($isNextYear)
+                              <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; background-color: #28a745 !important; color: #ffffff !important;">Yes</span>
                             @else
-                            <?php if(!empty($_COOKIE['selectedYear'])){ ?>
-                              {{ $_COOKIE['selectedYear'] }}
-                            <?php } ?>
+                              <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
                             @endif
-                            
                           </td>
                           <td>
                             <div class="dropdown">
@@ -236,7 +217,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                         </tr>
                       </tfoot>

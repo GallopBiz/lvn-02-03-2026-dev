@@ -147,7 +147,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <th>Mobile Number</th>
                           <th>scholar No</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -170,26 +170,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <!-- <td>@if($each_inq->inq_mode=='off') offline @elseif($each_inq->inq_mode=='on') Online @endif</td> -->
                           <td>{{ date('d-m-Y', strtotime($each_inq->created_at)) }}</td>
                           <td>
-                            @if(!empty($each_inq->next_year))
-                              <?php 
-                                $originalYear = $_COOKIE['selectedYear'];
-
-                                // Split the string into two years
-                                $years = explode("_", $originalYear);
-                                
-                                if (count($years) === 2) {
-                                    $startYear = intval($years[0]);
-                                    $endYear = intval($years[1]);
-                                    $newStartYear = $startYear + 1;
-                                    $newEndYear = $endYear + 1;
-                                    $newYear = $newStartYear . "_" . $newEndYear;
-                                    echo $newYear; // Output: 2024_2025
-                                } else {
-                                  echo "Invalid input format";
-                                }
-                              ?>
+                            @php
+                              $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                  || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
+                            @endphp
+                            @if($isNextYear)
+                              <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; background-color: #28a745 !important; color: #ffffff !important;">Yes</span>
                             @else
-                              {{ $_COOKIE['selectedYear'] }}
+                              <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
                             @endif
                           </td>
                           <td>
@@ -223,7 +211,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
                           <th>Session Name</th>
                           <th>Mobile Number</th>
                           <th>Enquiry Date</th>
-                          <th>Year</th>
+                          <th>Next Year</th>
                           <th>Status</th>
                           <td>scholar No</td>
                         </tr>

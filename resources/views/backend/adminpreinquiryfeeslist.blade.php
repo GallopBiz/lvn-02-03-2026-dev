@@ -110,7 +110,7 @@
                         <th>Mobile Number</th>
                         <th>Amount</th>
                         <th>Enquiry Date</th>
-                        <th>Year</th>
+                        <th>Next Year</th>
                         <th>Status</th>
                      </tr>
                   </thead>
@@ -130,13 +130,14 @@
                         <td>500</td>
                         <td>{{ date('d-m-Y', strtotime($each_inq->created_at)) }}</td>
                         <td>
-                           @if(!empty($each_inq->next_year))
                            @php
-                           $years = explode("_", $each_inq->session_name);
-                           echo count($years) === 2 ? ($years[0] + 1) . "_" . ($years[1] + 1) : 'Invalid';
+                             $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                                 || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
                            @endphp
+                           @if($isNextYear)
+                             <span class="badge bg-success text-white" style="font-size: 11px; padding: 4px 8px; background-color: #28a745 !important; color: #ffffff !important;">Yes</span>
                            @else
-                           {{ $_COOKIE['selectedYear'] ?? '' }}
+                             <span class="badge bg-secondary text-white" style="font-size: 11px; padding: 4px 8px; background-color: #6c757d !important; color: #ffffff !important;">No</span>
                            @endif
                         </td>
                         <td>
@@ -169,7 +170,7 @@
                         <th>Mobile Number</th>
                         <th>Amount</th>
                         <th>Enquiry Date</th>
-                        <th>Year</th>
+                        <th>Next Year</th>
                         <th>Status</th>
                      </tr>
                   </tfoot>

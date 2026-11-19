@@ -2248,7 +2248,7 @@ public function perstudueamount($id){
 			'Mobile Number',
 			'Amount',
 			'Enquiry Date',
-			'Year',
+			'Next Year',
 			'Status',
 		];
 
@@ -2263,15 +2263,9 @@ public function perstudueamount($id){
 				$studentName = (!empty($json['studentname_prefix']) ? $json['studentname_prefix'] . ' ' : '') . $record->student_name;
 				$fatherName = (!empty($json['fathername_prefix']) ? $json['fathername_prefix'] . ' ' : '') . ($json['fathername'] ?? '');
 
-				$year = '';
-				if (!empty($record->next_year)) {
-					$years = explode("_", $record->session_name);
-					if (count($years) == 2) {
-						$year = ($years[0] + 1) . '_' . ($years[1] + 1);
-					}
-				} elseif (!empty($_COOKIE['selectedYear'])) {
-					$year = $_COOKIE['selectedYear'];
-				}
+				$isNextYear = (!empty($record->next_year) && ($record->next_year == 1 || $record->next_year === '1'))
+					|| (!empty($json['next_year']) && ($json['next_year'] == 1 || $json['next_year'] === '1'));
+				$nextYearDisplay = $isNextYear ? 'Yes' : 'No';
 
 				fputcsv($file, [
 					$i++,
@@ -2283,7 +2277,7 @@ public function perstudueamount($id){
 					$record->mobile_number,
 					'500',
 					date('d-m-Y', strtotime($record->created_at)),
-					$year,
+					$nextYearDisplay,
 					'Inquiry',
 				]);
 			}
