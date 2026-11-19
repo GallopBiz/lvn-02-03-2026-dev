@@ -792,7 +792,7 @@ public function downloadcertificate($id)
             );
         }
 
-       return redirect()->route('registrationviewlist',['id'=>$uid])->with('success', 'Student Successfully Registred With Scholar Number - ' .$request->scholar_no );
+       return redirect()->route('student-registrations')->with('success', 'Student Successfully Registred With Scholar Number - ' .$request->scholar_no );
     
     }
 

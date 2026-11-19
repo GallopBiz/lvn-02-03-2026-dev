@@ -125,7 +125,24 @@ img.school-logo {
         <div class="row">
             @if(!empty($all_inquiry))
                 @foreach($all_inquiry as $each_inq)
-                    <?php $notificationData1 = json_decode($each_inq->json_str, true); ?>
+                    <?php 
+                        $notificationData1 = json_decode($each_inq->json_str, true); 
+                        $rawSession = $notificationData1['admission_session'] ?? $notificationData1['intended_session'] ?? $notificationData1['batch'] ?? $each_inq->session_name ?? session('db_names') ?? '2025_2026';
+                        $isNextYear = (!empty($each_inq->next_year) && ($each_inq->next_year == 1 || $each_inq->next_year === '1'))
+                            || (!empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1'));
+
+                        $cleanSession = preg_replace('/[_\s\/]+/', '-', trim($rawSession));
+
+                        if ($isNextYear) {
+                            if (preg_match('/^(\d{4})[-_](\d{4})$/', $rawSession, $m)) {
+                                $displaySession = ((int)$m[1] + 1) . '-' . ((int)$m[2] + 1);
+                            } else {
+                                $displaySession = $cleanSession;
+                            }
+                        } else {
+                            $displaySession = $cleanSession;
+                        }
+                    ?>
 
                     <!-- Header and Logo -->
                     <div class="col-md-12 mb-2 text-center">
@@ -137,6 +154,9 @@ img.school-logo {
                             <strong>C.B.S.E. Affiliation No.1030429</strong>
                         </div>
                         <div class="red-underline"></div>
+                        <h4 style="font-size: 13px; font-weight: bold; margin: 4px 0 2px 0; text-transform: uppercase;">
+                            Admission for Session {{ $displaySession }}
+                        </h4>
                     </div>
 
                     <!-- Student Info -->
@@ -154,7 +174,7 @@ img.school-logo {
 						</div>
 						<div class="student-right" style="text-align:right !important;">
 							<h5 style="font-size: 12px; margin: 4px;">
-								<strong>Session:</strong> {{ $each_inq->session_name ?? '' }}
+								<strong>Session:</strong> {{ $displaySession }}
 							</h5>
 							<h5 style="font-size: 12px; margin: 4px;">
 								<strong>Receipt No.:</strong> {{ $each_inq->form_number ?? '' }}
@@ -175,7 +195,7 @@ img.school-logo {
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>Admission Form</td>
+                                    <td>Admission Form (Session {{ $displaySession }})</td>
                                     <td style="text-align:right;">&#x20B9;500</td>
                                 </tr>
                                 <tr>

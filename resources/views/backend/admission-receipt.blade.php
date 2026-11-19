@@ -116,8 +116,16 @@
 @endphp
 
 @php
-    $batch = $json['batch'] ?? $json['batch_no'] ?? $json['intended_session'] ?? $student->session_name ?? '';
-    $formattedBatch = !empty($batch) ? preg_replace('/-+/', '-', preg_replace('/[\s_\/]+/', '-', trim($batch))) : 'N/A';
+    $rawBatch = $json['admission_session'] ?? $json['intended_session'] ?? $json['batch'] ?? $json['batch_no'] ?? $student->session_name ?? '';
+    $isNextYear = (!empty($student->next_year) && ($student->next_year == 1 || $student->next_year === '1'))
+        || (!empty($json['next_year']) && ($json['next_year'] == 1 || $json['next_year'] === '1'));
+
+    $cleanBatch = !empty($rawBatch) ? preg_replace('/-+/', '-', preg_replace('/[\s_\/]+/', '-', trim($rawBatch))) : 'N/A';
+    if ($isNextYear && preg_match('/^(\d{4})[-_](\d{4})$/', $rawBatch, $m)) {
+        $formattedBatch = ((int)$m[1] + 1) . '-' . ((int)$m[2] + 1);
+    } else {
+        $formattedBatch = $cleanBatch;
+    }
     $firstFee = $feeHeads->first();
     $rawDate = null;
     if ($firstFee && !empty($firstFee->payment_date)) {
@@ -151,6 +159,10 @@
             </div>
 
             <div class="red-underline"></div>
+
+            <div style="text-align: center; font-weight: bold; font-size: 14px; margin: 4px 0 10px 0; text-transform: uppercase;">
+                Admission for Session {{ $formattedBatch }}
+            </div>
 
             <div class="meta-line">
                 <div><strong>School Code:</strong> 50396</div>

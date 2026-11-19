@@ -212,7 +212,7 @@ class FeesMasterStudentController extends Controller
         DB::connection('dynamic')->table('model_has_roles')->insert(['role_id' => 2,'model_id' => $uid]);
         //return redirect()->back()->with('success', 'Student successfully registred'); 
        //return view('backend.registrationviewlist',1301); 
-       return redirect()->route('registrationviewlist',['id'=>$uid])->with('success', 'Student Successfully Registred With Scholar Number - ' .$request->scholar_no );
+       return redirect()->route('student-registrations')->with('success', 'Student Successfully Registred With Scholar Number - ' .$request->scholar_no );
         //registrationviewlist/1301 
     
     }

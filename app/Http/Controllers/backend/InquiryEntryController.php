@@ -200,6 +200,8 @@ class InquiryEntryController extends Controller
                         ->when($request->has('fromdate') && $request->has('todate'), function ($query) use ($request) {
                             $query->whereBetween('enquirydate', [$request->input('fromdate'), $request->input('todate')]);
                         })
+                        ->orderByDesc('created_at')
+                        ->orderByDesc('id')
                         ->get();
 
         // Fetch total pending student registrations from the 'dynamic' database
@@ -235,7 +237,7 @@ class InquiryEntryController extends Controller
 		$currentSchoolYear = session('db_names');
 	
         $enquirecount = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->where('session_name', $currentSchoolYear)->count();
-        $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->get(); 
+        $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->orderByDesc('created_at')->orderByDesc('id')->get(); 
 		 //$totalPending = Inquiry_registration::select('*')->where("status","=", "i")->whereJsonContains('json_str->folloupdate_status',"Pending")->get();
 		 $totalPending = DB::connection('dynamic')->table('inquiry_registration')
                         ->select('*')
@@ -261,7 +263,7 @@ class InquiryEntryController extends Controller
     public function followupdate(Request $request)
     {   
          //$all_inquiry = CommanModel::fetchDataWhere('inquiry_registration',['status'=>'i']);
-         $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->get(); //CommanModel::fetchDataWhere('inquiry_registration',['status'=>'i']);
+         $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('status','i')->orderByDesc('created_at')->orderByDesc('id')->get(); //CommanModel::fetchDataWhere('inquiry_registration',['status'=>'i']);
          $date = date("Y-m-d");
          $todatfollowu = DB::connection('dynamic')->table('inquiry_registration')
          ->where('status','i')
@@ -704,11 +706,13 @@ class InquiryEntryController extends Controller
     
         // Fetch filtered data
 		//echo $response->toSql(); die;
-        $all_inquiry = $response->get();
+        $all_inquiry = $response->orderByDesc('created_at')->orderByDesc('id')->get();
     
         // Fetch all data (for comparison or alternative view)
-        $response2 = DB::table('inquiry_registration')
-            ->select('inquiry_regist	ration.*')
+        $response2 = DB::connection('dynamic')->table('inquiry_registration')
+            ->select('inquiry_registration.*')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
     
         $all_inquiry2 = $response2;
@@ -2043,7 +2047,7 @@ public function perstudueamount($id){
                 'exempt_per' => $percentage_total
             ]
         );
-        return redirect()->route('registrationeditlist', ['id' => $request->id])->with('success', 'Student registration updated successfully.');  
+        return redirect()->route('student-registrations')->with('success', 'Student registration updated successfully.');  
     }
 	
     public function getcastename(){

@@ -26,7 +26,7 @@ class EnquiryReciptController extends Controller
             if (isset($_COOKIE['selectedYear'])) {
                 $db_name = $_COOKIE['selectedYear'];
             } else {
-                $db_name = "2023_2024";
+                $db_name = session('db_names') ?? Config::get('database.connections.dynamic.database') ?? '2025_2026';
             }
             
         }
@@ -40,8 +40,35 @@ class EnquiryReciptController extends Controller
     }
 
     public function index($id){
+        $all_inquiry = DB::connection('dynamic')->table('inquiry_registration')->where('id', $id)->get();
 
-        $data['all_inquiry'] = DB::connection('dynamic')->table('inquiry_registration')->where('id',$id)->get();//CommanModel::fetchDataWhere('inquiry_registration',['id'=> $id]);
-        return view('backend.enquiryrecipt',$data);
+        if ($all_inquiry->isEmpty()) {
+            $candidateDbs = array_unique(array_filter([
+                session('db_names'),
+                isset($_COOKIE['selectedYear']) ? $_COOKIE['selectedYear'] : null,
+                Config::get('database.connections.dynamic.database'),
+                '2025_2026',
+                '2026_2027',
+                '2027_2028',
+            ]));
+
+            foreach ($candidateDbs as $db) {
+                try {
+                    Config::set('database.connections.dynamic.database', $db);
+                    DB::purge('dynamic');
+                    $found = DB::connection('dynamic')->table('inquiry_registration')->where('id', $id)->get();
+                    if (!$found->isEmpty()) {
+                        $all_inquiry = $found;
+                        session(['db_names' => $db]);
+                        break;
+                    }
+                } catch (\Exception $e) {
+                    continue;
+                }
+            }
+        }
+
+        $data['all_inquiry'] = $all_inquiry;
+        return view('backend.enquiryrecipt', $data);
     }
 }
