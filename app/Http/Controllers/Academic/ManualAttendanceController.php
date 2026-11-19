@@ -687,7 +687,7 @@ class ManualAttendanceController extends Controller
             ->pluck('class_name')
             ->values();
 
-        $pre = ['Nursery', 'Kg1', 'Kg2'];
+        $pre = ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2'];
         return $all->sort(function ($a, $b) use ($pre) {
             $posA = array_search($a, $pre);
             $posB = array_search($b, $pre);

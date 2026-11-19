@@ -77,14 +77,14 @@
                               @if (!empty($teacher_subject))
                                   <option value="" disabled hidden>Please select</option>
                                   @foreach($classlist as $each)
-                                      @if(in_array($each->class_name, ['Nursery', 'Kg1', 'Kg2']))
+                                      @if(in_array($each->class_name, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2']))
                                           <option value="{{$each->class_name}}" {{ ($teacher_subject->class_name == $each->class_name) ? 'selected' : ''}}>{{$each->class_name}}</option>
                                       @endif
                                   @endforeach
                               @else
                                   <option value="" disabled selected>Please select</option>
                                   @foreach($classlist as $each)
-                                      @if(in_array($each->class_name, ['Nursery', 'Kg1', 'Kg2']))
+                                      @if(in_array($each->class_name, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2']))
                                           <option value="{{$each->class_name}}">{{$each->class_name}}</option>
                                       @endif
                                   @endforeach

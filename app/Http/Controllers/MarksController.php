@@ -171,6 +171,10 @@ class MarksController extends Controller
                 $query->where('is_archived', 0)
                     ->orWhereNull('is_archived');
             })
+            ->where(function ($query) {
+                $query->where('next_year', 0)
+                    ->orWhereNull('next_year');
+            })
             ->where(function ($query) use ($classId, $className) {
                 $query->where('class_id', $classId)
                     ->orWhere('class_name', $className);
@@ -271,6 +275,10 @@ class MarksController extends Controller
             ->where(function ($query) {
                 $query->where('student_registration.is_archived', 0)
                     ->orWhereNull('student_registration.is_archived');
+            })
+            ->where(function ($query) {
+                $query->where('student_registration.next_year', 0)
+                    ->orWhereNull('student_registration.next_year');
             })
             ->where(function ($query) use ($classId, $className) {
                 $query->where('student_registration.class_id', $classId)

@@ -70,6 +70,9 @@ class ScholarbusassignController extends Controller
         ->where('is_archived', 0)
         ->where('class_name', $class_name)
         ->where('json_str->required_school_transport', 1)
+        ->where(function ($q) {
+            $q->where('next_year', 0)->orWhereNull('next_year');
+        })
         ->get();
     
         // echo"<pre>";print_r($datas);exit;

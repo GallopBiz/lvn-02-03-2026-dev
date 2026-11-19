@@ -81,6 +81,37 @@
                                                             <!-- <th scope="row">2</th> -->
                                                             <th>Session </th>
                                                             <td>{{$each_inq->session_name}}</td>
+                                                            <th>Current Session </th>
+                                                            <td>{{ str_replace('_', '-', $each_inq->session_name ?: (session('db_names') ?: '2025_2026')) }}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <th>Admission Session </th>
+                                                            <td>
+                                                                <?php
+                                                                    $rawCurrentSess = $each_inq->session_name ?: (session('db_names') ?: '2025_2026');
+                                                                    $rawAdmSess = $notificationData1['admission_session'] ?? ($notificationData1['intended_session'] ?? null);
+                                                                    $isNextY = !empty($notificationData1['next_year']) && ($notificationData1['next_year'] == 1 || $notificationData1['next_year'] === '1');
+                                                                    if ($isNextY && empty($rawAdmSess)) {
+                                                                        $parts = preg_split('/[_-]/', $rawCurrentSess);
+                                                                        if (count($parts) === 2 && is_numeric($parts[0]) && is_numeric($parts[1])) {
+                                                                            $rawAdmSess = ((int)$parts[0] + 1) . '-' . ((int)$parts[1] + 1);
+                                                                        }
+                                                                    }
+                                                                    if (empty($rawAdmSess)) {
+                                                                        $rawAdmSess = $rawCurrentSess;
+                                                                    }
+                                                                    $admDisplay = str_replace('_', '-', $rawAdmSess);
+                                                                    $isUpc = ($isNextY || $admDisplay !== str_replace('_', '-', $rawCurrentSess));
+                                                                ?>
+                                                                {{ $admDisplay }}
+                                                                @if($isUpc)
+                                                                    <span class="badge bg-success text-white ms-1">Next Year</span>
+                                                                @endif
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <th>Batch </th>
+                                                            <td>{{ str_replace('_', '-', $notificationData1['batch'] ?? ($notificationData1['admission_session'] ?? $each_inq->session_name)) }}</td>
                                                         </tr>
                                                         <tr>
                                                             <!-- <th scope="row">2</th> -->

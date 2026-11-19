@@ -22,10 +22,33 @@
 </style>
 
 <div class="main-content">
-    <div class="breadcrumb">
-        <h1>Student Transfer</h1>
+    <div class="breadcrumb d-flex justify-content-between align-items-center">
+        <h1>Student Transfer & Section Assignment</h1>
+        <form action="{{ route('student.allocate_sections') }}" method="POST" onsubmit="return confirm('Run automatic Round Robin section allocation and balancing for the next academic session?');">
+            @csrf
+            <button type="submit" class="btn btn-warning text-white">
+                <i class="fas fa-balance-scale mr-1"></i> Balance / Allocate Next Session Sections
+            </button>
+        </form>
     </div>
     <div class="separator-breadcrumb border-top"></div>
+
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ session('success') }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    @endif
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ session('error') }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    @endif
     
     <div class="row">
         <div class="col-lg-12 mb-4">
@@ -67,12 +90,13 @@
                                     <th>Scholar Number</th>
                                     <th>Current Class</th>
 									<th>Section Name</th>
+                                    <th>Transition Type</th>
                                 </tr>
                             </thead>
                             <tbody id="studentList"></tbody>
                         </table>
 
-                        <button type="submit" class="btn btn-success">Promote Selected</button>
+                        <button type="submit" class="btn btn-success">Promote / Transfer Selected</button>
                     </form>
                 </div>
             </div>
@@ -119,6 +143,16 @@
                     }
                 }
 
+                let transitionBadge = '<span class="badge bg-primary text-white">Regular (Class Promotion)</span>';
+                if (student.next_year == 1) {
+                    let upcomingDetails = [];
+                    if (student.next_year_section) upcomingDetails.push(`Section: ${student.next_year_section}`);
+                    if (student.next_year_stream) upcomingDetails.push(`Stream: ${student.next_year_stream}`);
+                    if (student.next_year_subject_combination) upcomingDetails.push(`Comb: ${student.next_year_subject_combination}`);
+                    let detailsStr = upcomingDetails.length ? `<div class="small text-muted mt-1">${upcomingDetails.join(', ')}</div>` : '';
+                    transitionBadge = `<span class="badge bg-warning text-dark"><i class="fas fa-arrow-right"></i> Next Year (Session Transfer Only - No Class Promotion)</span>${detailsStr}`;
+                }
+
                 studentList.innerHTML += `
                     <tr>
                         <td><input type="checkbox" name="selected_students[]" value="${student.id}"></td>
@@ -127,6 +161,7 @@
                         <td>${student.scholar_no}</td>
                         <td>${student.class_name}</td>
                         <td>${sectionName}</td> <!-- New Column for Section -->
+                        <td>${transitionBadge}</td>
                     </tr>
                 `;
             });

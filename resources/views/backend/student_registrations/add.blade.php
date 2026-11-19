@@ -101,15 +101,18 @@
         <div class="col-md-6 p-2">
             <label for="firstName1">Select Form No to Pick Information form inquiry</label>
                 <select id="inq-form-no" class="form-control uperletter select2" onchange="getValAndAssign(this);" name="inq_form_selection" required>
-                <option selected>Please select</option>
+                <option value="" selected>Please select</option>
                 @if (!empty($inqArr))
                 @foreach ($inqArr as $each)
                 @if ($each->type != 't')
-                <option value="{{ $each->form_number }}">
+                <option value="{{ $each->id }}" data-id="{{ $each->id }}" data-form-number="{{ $each->form_number }}" data-next-year="{{ $each->next_year ?? 0 }}">
                     {{ $each->student_name }}
 
                     @if ($each->form_number)
-                    - {{ $each->form_number }}
+                    - Form #{{ $each->form_number }}
+                    @endif
+                    @if (!empty($each->next_year))
+                    (Next Year)
                     @endif
 
                     <?php
@@ -145,8 +148,9 @@
             </select>
         </div>
 
-        <div class="col-md-6" style="padding-top: 28px!important;">
-            <button class="btn btn-primary pick_inq_data" data-form_number=''>Pick Data</button>
+        <div class="col-md-6 d-flex align-items-center" style="padding-top: 28px!important;">
+            <button type="button" class="btn btn-primary pick_inq_data" data-form_number='' data-id='' data-next_year='0'>Pick Data</button>
+            <span id="next_year_badge" class="badge bg-success text-white ms-2" style="display: none; font-size: 13px; padding: 6px 10px;">Next Year Admission</span>
         </div>
         <div class="col-md-12">
             <!--  SmartWizard html -->
@@ -175,6 +179,8 @@
                         <div class="form_section1_div">
                             <form novalidate="novalidate" id="form-id" method="post" action="{{ url('save-student-registration') }}" class="rg_form" enctype="multipart/form-data">
                                 @csrf
+                                <input type="hidden" name="next_year" id="inq_next_year" value="0">
+                                <input type="hidden" name="inquiry_id" id="inquiry_id" value="">
                                 <div class="row">
                                     <div class="col-md-6 form-group mb-3">
                                         <label for="studentname">Scholar Number</label>
@@ -299,18 +305,57 @@
 
                                     </div>
 
-                                    <!-- <div class="col-md-4 form-group mb-3">
-                                            <label for="firstName1">Section<b class="validation_err">*</b></label>
-                                            <select id="section" class="form-control" name="section" autocomplete=""
-                                                required>
-                                                <option disabled selected>Please select</option>
-                                                @foreach (config('global.section') as $each)
-                                                    <option value="{{ $each }}">{{ $each }}</option>
-                                                @endforeach
-                                            </select>
+                                    <div class="col-md-4 form-group mb-3" id="section_container">
+                                        <label for="section_name">Section</label>
+                                        <select id="section_name" class="form-control" name="section_name">
+                                            <option value="D" selected>D (Temporary)</option>
+                                            <option value="Aryabhatta">Aryabhatta</option>
+                                            <option value="Kautilya">Kautilya</option>
+                                            <option value="Ramanujan">Ramanujan</option>
+                                        </select>
+                                        <span class="section_name_msg validation_err"></span>
+                                    </div>
 
+                                    <div class="col-md-4 form-group mb-3" id="stream_selection_wrapper" style="display: none;">
+                                        <label for="stream_id">Stream <b class="validation_err">*</b></label>
+                                        <select id="stream_id" class="form-control" name="stream_id">
+                                            <option value="" disabled selected>Please select Stream</option>
+                                        </select>
+                                        <span class="stream_id_msg validation_err"></span>
+                                    </div>
 
-                                        </div> -->
+                                    <div class="col-md-4 form-group mb-3" id="combination_selection_wrapper" style="display: none;">
+                                        <label for="combination_id">Subject Combination <b class="validation_err">*</b></label>
+                                        <select id="combination_id" class="form-control select2" name="combination_id" data-placeholder="Please select Subject Combination">
+                                            <option value="" disabled selected>Please select Subject Combination</option>
+                                        </select>
+                                        <span class="combination_id_msg validation_err"></span>
+                                    </div>
+
+                                    <div class="col-md-12 mb-3" id="section_strength_wrapper" style="display: none;">
+                                        <div class="card border" style="background-color: #f8f9fa;">
+                                            <div class="card-body p-3">
+                                                <h6 class="mb-2 font-weight-bold text-primary">
+                                                    Current Student Strength &mdash; Class <span id="section_strength_class_title"></span>
+                                                </h6>
+                                                <div class="table-responsive" style="max-width: 480px;">
+                                                    <table class="table table-sm table-bordered bg-white mb-1">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>Section</th>
+                                                                <th class="text-end" style="width: 180px;">Current Student Strength</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="section_strength_tbody">
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <small class="text-muted d-block mt-1">
+                                                    * New admissions default to Section D (temporary) until allocated to actual sections by the admin.
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="col-md-4 form-group mb-3">
                                         <label for="firstName1">Session Name<b class="validation_err">*</b></label>
                                         <input type="text" readonly id="session_name" class="form-control" value="{{ session('db_names') ?? ($_COOKIE['selectedYear'] ?? '2026_2027') }}" name="session_name">
@@ -1082,11 +1127,219 @@
                 $('.category_msg').text("");
             }
         });
+        function updateClassSectionStrength(selectedClass) {
+            if (!selectedClass) {
+                $('#section_strength_wrapper').hide();
+                return;
+            }
+            $.ajax({
+                url: '{{ url("class-section-strength") }}',
+                type: 'GET',
+                data: { class_name: selectedClass },
+                success: function(res) {
+                    if (res && res.success && res.is_applicable) {
+                        $('#section_strength_class_title').text(res.class_name);
+                        var html = '';
+                        var curVal = $('#section_name').val();
+                        res.sections.forEach(function(sec) {
+                            var isTemp = (sec.section === 'D');
+                            var displayName = isTemp ? 'D (Temporary)' : sec.section;
+                            html += '<tr>' +
+                                '<td><strong>' + displayName + '</strong></td>' +
+                                '<td class="text-end font-weight-bold">' + sec.strength + '</td>' +
+                            '</tr>';
+                        });
+                        $('#section_strength_tbody').html(html);
+                        $('#section_strength_wrapper').slideDown(200);
+
+                        var select = $('#section_name');
+                        if (select.children('option').length <= 1) {
+                            select.empty();
+                            select.append(new Option('D (Temporary)', 'D'));
+                            select.append(new Option('Aryabhatta', 'Aryabhatta'));
+                            select.append(new Option('Kautilya', 'Kautilya'));
+                            select.append(new Option('Ramanujan', 'Ramanujan'));
+                        }
+                        if (!curVal || curVal === '') {
+                            select.val('D');
+                        }
+                        $('#section_container').show();
+                    } else {
+                        $('#section_strength_wrapper').hide();
+                    }
+                },
+                error: function() {
+                    $('#section_strength_wrapper').hide();
+                }
+            });
+        }
+
         $('#classname').on('change', function() {
-            if ($(this).val()) {
+            var val = $(this).val();
+            if (val) {
                 $('.classname_msg').text("");
+                updateClassSectionStrength(val);
+                handleSeniorClassStreamSelection(val);
+            } else {
+                $('#section_strength_wrapper').hide();
+                handleSeniorClassStreamSelection('');
             }
         });
+
+        function initCombinationSelect2() {
+            if ($.fn.select2) {
+                var comb = $('#combination_id');
+                if (comb.hasClass('select2-hidden-accessible')) {
+                    comb.select2('destroy');
+                }
+                comb.select2({
+                    width: '100%',
+                    placeholder: 'Please select Subject Combination',
+                    allowClear: true,
+                    minimumResultsForSearch: 0
+                });
+            }
+        }
+
+        function handleSeniorClassStreamSelection(selectedClass, preselectedStreamId, preselectedCombinationId) {
+            selectedClass = (selectedClass || '').trim();
+            if (selectedClass === '11' || selectedClass === '12') {
+                $('#stream_selection_wrapper').slideDown(200);
+                $('#combination_selection_wrapper').slideDown(200, function() {
+                    initCombinationSelect2();
+                });
+                loadClassStreams(selectedClass, preselectedStreamId, preselectedCombinationId);
+            } else {
+                $('#stream_selection_wrapper').slideUp(200);
+                $('#combination_selection_wrapper').slideUp(200);
+                $('#stream_id').empty().append(new Option('Please select Stream', ''));
+                var comb = $('#combination_id');
+                if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+                    comb.select2('destroy');
+                }
+                comb.empty().append(new Option('Please select Subject Combination', ''));
+                initCombinationSelect2();
+                $('.stream_id_msg').text('');
+                $('.combination_id_msg').text('');
+            }
+        }
+
+        function loadClassStreams(selectedClass, preselectedStreamId, preselectedCombinationId) {
+            var streamSelect = $('#stream_id');
+            streamSelect.empty().append(new Option('Loading streams...', ''));
+            var comb = $('#combination_id');
+            if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+                comb.select2('destroy');
+            }
+            comb.empty().append(new Option('Please select Stream first', ''));
+            initCombinationSelect2();
+
+            $.ajax({
+                url: '{{ url("academic/class-streams") }}',
+                type: 'GET',
+                data: { class_name: selectedClass },
+                success: function(res) {
+                    streamSelect.empty();
+                    streamSelect.append(new Option('Please select Stream', ''));
+                    if (res && res.streams && res.streams.length > 0) {
+                        res.streams.forEach(function(s) {
+                            var opt = new Option(s.stream_name, s.id);
+                            streamSelect.append(opt);
+                        });
+                        if (preselectedStreamId) {
+                            streamSelect.val(preselectedStreamId);
+                            loadStreamCombinations(selectedClass, preselectedStreamId, preselectedCombinationId);
+                        }
+                    } else {
+                        streamSelect.append(new Option('No streams available for Class ' + selectedClass, ''));
+                    }
+                },
+                error: function() {
+                    streamSelect.empty().append(new Option('Failed to load streams', ''));
+                }
+            });
+        }
+
+        function loadStreamCombinations(selectedClass, streamId, preselectedCombinationId) {
+            var combSelect = $('#combination_id');
+            if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+                combSelect.select2('destroy');
+            }
+            combSelect.empty().append(new Option('Loading combinations...', ''));
+            initCombinationSelect2();
+
+            $.ajax({
+                url: '{{ url("academic/stream-combinations") }}',
+                type: 'GET',
+                data: { class_name: selectedClass, stream_id: streamId },
+                success: function(res) {
+                    if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+                        combSelect.select2('destroy');
+                    }
+                    combSelect.empty();
+                    combSelect.append(new Option('Please select Subject Combination', ''));
+                    if (res && res.combinations && res.combinations.length > 0) {
+                        res.combinations.forEach(function(c) {
+                            var label = c.combination_name;
+                            if (c.alise_name && c.alise_name.trim() !== '') {
+                                label += ' (' + c.alise_name + ')';
+                            }
+                            var opt = new Option(label, c.id);
+                            combSelect.append(opt);
+                        });
+                        if (preselectedCombinationId) {
+                            combSelect.val(preselectedCombinationId);
+                        }
+                    } else {
+                        combSelect.append(new Option('No combinations available for this stream', ''));
+                    }
+                    initCombinationSelect2();
+                },
+                error: function() {
+                    if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+                        combSelect.select2('destroy');
+                    }
+                    combSelect.empty().append(new Option('Failed to load combinations', ''));
+                    initCombinationSelect2();
+                }
+            });
+        }
+
+        $('#stream_id').on('change', function() {
+            var streamId = $(this).val();
+            var selectedClass = $('#classname').val();
+            var isSenior = (selectedClass === '11' || selectedClass === '12');
+            if (isSenior) {
+                var streamText = $('#stream_id option:selected').text().toUpperCase();
+                if (streamText.indexOf('SCIENCE') !== -1 || streamId == 3) {
+                    $('#section_name').val('Kautilya').trigger('change');
+                } else if (streamText.indexOf('COMMERCE') !== -1 || streamText.indexOf('HUMANITIES') !== -1 || streamId == 1 || streamId == 2) {
+                    $('#section_name').val('Ramanujan').trigger('change');
+                }
+            }
+            if (streamId) {
+                $('.stream_id_msg').text('');
+                loadStreamCombinations(selectedClass, streamId);
+            } else {
+                var comb = $('#combination_id');
+                if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+                    comb.select2('destroy');
+                }
+                comb.empty().append(new Option('Please select Stream first', ''));
+                initCombinationSelect2();
+            }
+        });
+
+        $('#combination_id').on('change', function() {
+            if ($(this).val()) {
+                $('.combination_id_msg').text('');
+            }
+        });
+
+        if ($('#classname').val()) {
+            updateClassSectionStrength($('#classname').val());
+            handleSeniorClassStreamSelection($('#classname').val());
+        }
         $('select[name="application_for"]').on('change', function() {
             if ($(this).val()) {
                 $('.application_for_msg').text("");
@@ -1095,27 +1348,46 @@
     });
 
     function getValAndAssign(selectOption) {
-        var form_number = selectOption.value;
-        $('.pick_inq_data').attr('data-form_number', form_number);
+        var $opt = $(selectOption).find('option:selected');
+        var inqId = $opt.data('id') || $opt.val() || '';
+        var formNumber = $opt.data('form-number') || $opt.val() || '';
+        var nextYear = $opt.data('next-year') || 0;
+        $('.pick_inq_data').attr('data-id', inqId);
+        $('.pick_inq_data').attr('data-form_number', formNumber);
+        $('.pick_inq_data').attr('data-next_year', nextYear);
     }
+
+    $('#inq-form-no').on('change', function() {
+        getValAndAssign(this);
+    });
 
     /*Ajax for pick data from form no*/
     var CSRF_TOKEN = $('meta[name="csrf-token"]').attr('content');
-    $(".pick_inq_data").on('click', function() {
+    $(".pick_inq_data").on('click', function(e) {
+        if (e && e.preventDefault) e.preventDefault();
 
-        var form_number = $('.pick_inq_data').attr('data-form_number');
+        var $selectedOpt = $('#inq-form-no').find('option:selected');
+        var form_number = $('.pick_inq_data').attr('data-form_number') || $selectedOpt.data('form-number') || $selectedOpt.val();
+        var inquiry_id = $('.pick_inq_data').attr('data-id') || $selectedOpt.data('id') || $selectedOpt.val();
+        var next_year = $('.pick_inq_data').attr('data-next_year') || $selectedOpt.data('next-year') || '0';
+
+        if (!form_number && !inquiry_id) {
+            alert("Please select an inquiry from the dropdown first.");
+            return false;
+        }
 
         $.ajax({
             url: '{{ url('getDataByFormNumberstudent_registration') }}',
             type: 'post',
             data: {
                 _token: CSRF_TOKEN,
-                form_number: form_number
+                form_number: form_number,
+                inquiry_id: inquiry_id,
+                next_year: next_year
             },
             // dataType: 'json',
             success: function(response) {
 
-                console.log(response.inq_str_data.caste);
                 if (response.inq_data) {
                     /*assign value on pick data*/
                     // $('select[name="application_for"] option[value='+response.inq_str_data.admission_type+']').attr("selected","selected");
@@ -1135,17 +1407,39 @@
                             $('select[name="student_caste"]').append(newCasteOption);
                         }
                         $('select[name="student_caste"]').val(response.inq_str_data.caste).trigger('change');
+                    } else {
+                        $('select[name="student_caste"]').val('').trigger('change');
                     }
                     $('select[name="religion"]').val(response.inq_str_data.religion);
                     $('select[name="category"]').val(response.inq_str_data.category);
-                    $('select[name="classname"]').val(response.inq_data.class_name);
+                    if (response.inq_data.class_name) {
+                        $('select[name="classname"]').val(response.inq_data.class_name).trigger('change');
+                    }
                     $('[name="session_name"]').val(response.inq_data.session_name || $("#session_name").val());
                     if ($('[name="session_name"]').val()) {
                         $('.session_name_msg').text("");
                     }
-                    if (response.inq_data && response.inq_data.session_name) {
-                        $('select[name="batch"]').val(response.inq_data.session_name);
-                        $('.batch_dob_msg').text("");
+                    var isNext = (response.inq_data.next_year == 1 || response.inq_data.next_year === '1' || response.next_year == 1) ? '1' : '0';
+                    $('input[name="next_year"]').val(isNext);
+                    if (isNext === '1') {
+                        $('#next_year_badge').show();
+                        var curSess = $('[name="session_name"]').val() || '2025_2026';
+                        var sessParts = curSess.split(/[-_]/);
+                        if (sessParts.length === 2 && !isNaN(sessParts[0]) && !isNaN(sessParts[1])) {
+                            var nextSessUnderscore = (parseInt(sessParts[0], 10) + 1) + '_' + (parseInt(sessParts[1], 10) + 1);
+                            var nextSessDash = (parseInt(sessParts[0], 10) + 1) + '-' + (parseInt(sessParts[1], 10) + 1);
+                            if ($('select[name="batch"] option[value="' + nextSessUnderscore + '"]').length) {
+                                $('select[name="batch"]').val(nextSessUnderscore);
+                            } else if ($('select[name="batch"] option[value="' + nextSessDash + '"]').length) {
+                                $('select[name="batch"]').val(nextSessDash);
+                            }
+                        }
+                    } else {
+                        $('#next_year_badge').hide();
+                        if (response.inq_data && response.inq_data.session_name) {
+                            $('select[name="batch"]').val(response.inq_data.session_name);
+                            $('.batch_dob_msg').text("");
+                        }
                     }
                     // $('input[name="present_address"]').val(response.inq_str_data.address);
                     $('input[name="permanent_address"]').val(response.inq_str_data.address);
@@ -1173,6 +1467,7 @@
                     $('input[name="father_email_id"]').val(response.inq_str_data.email);
                     $('input[name="father_mobile"]').val(response.inq_str_data.fathermobile);
                     $('input[name="iid"]').val(response.inq_data.id);
+                    $('input[name="inquiry_id"]').val(response.inq_data.id);
                     $('input[name="mother_mobile"]').val(response.inq_str_data.mothermobile);
 
 
@@ -1328,6 +1623,29 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
             if (!firstInvalid) firstInvalid = $('select[name="classname"]');
         } else {
             $('.classname_msg').text("");
+        }
+
+        if (classname === '11' || classname === '12') {
+            var streamId = $('#stream_id').val() || '';
+            if (!streamId || streamId === '' || streamId === 'select') {
+                $('.stream_id_msg').text("This field is required*");
+                missing.push("Stream");
+                if (!firstInvalid) firstInvalid = $('#stream_id');
+            } else {
+                $('.stream_id_msg').text("");
+            }
+
+            var combinationId = $('#combination_id').val() || '';
+            if (!combinationId || combinationId === '' || combinationId === 'select') {
+                $('.combination_id_msg').text("This field is required*");
+                missing.push("Subject Combination");
+                if (!firstInvalid) firstInvalid = $('#combination_id');
+            } else {
+                $('.combination_id_msg').text("");
+            }
+        } else {
+            $('.stream_id_msg').text("");
+            $('.combination_id_msg').text("");
         }
 
         var session_name = $('[name="session_name"]').val() || '';

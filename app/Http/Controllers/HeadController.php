@@ -35,7 +35,7 @@ class HeadController extends Controller
             // Check if the selected class allows this option
             if (
                 ($option === 'E1' || $option === 'E2') &&
-                in_array($class_name, ['Nursery', 'Kg1', 'Kg2'])
+                in_array($class_name, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2'])
             ) {
                 if ($request->has($option)) {
                     $selectedOptions[] = $option;
@@ -125,7 +125,7 @@ class HeadController extends Controller
     
         $class = $request->class_name; // Get the selected class
     
-        if (in_array($class, ['Nursery', 'Kg1', 'Kg2'])) {
+        if (in_array($class, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2'])) {
         
             if ($request->has('E1')) {
                 // Handle E1-specific processing here

@@ -1542,6 +1542,39 @@ class InquiryEntryController extends Controller
                 ->orderBy('class_name')
                 ->get();
         }
+
+        $assignedCombinationId = null;
+        $assignedStreamId = null;
+        if (Schema::connection('dynamic')->hasTable('subject_assign_student')) {
+            $existingAssignment = DB::connection('dynamic')->table('subject_assign_student')
+                ->where('students_details', $id)
+                ->where('is_delete', 0)
+                ->first();
+            if ($existingAssignment && !empty($existingAssignment->assign_this_combtoall)) {
+                $assignedCombinationId = $existingAssignment->assign_this_combtoall;
+            }
+        }
+        if (!$assignedCombinationId && !empty($data['all_inquiry'][0]->json_str)) {
+            $parsedJson = json_decode($data['all_inquiry'][0]->json_str, true);
+            if (is_array($parsedJson) && !empty($parsedJson['combination_id'])) {
+                $assignedCombinationId = $parsedJson['combination_id'];
+            }
+        }
+        if ($assignedCombinationId && Schema::connection('dynamic')->hasTable('subject_combinations')) {
+            $comb = DB::connection('dynamic')->table('subject_combinations')->where('id', $assignedCombinationId)->first();
+            if ($comb && !empty($comb->streams)) {
+                $assignedStreamId = $comb->streams;
+            }
+        }
+        if (!$assignedStreamId && !empty($data['all_inquiry'][0]->json_str)) {
+            $parsedJson = json_decode($data['all_inquiry'][0]->json_str, true);
+            if (is_array($parsedJson) && !empty($parsedJson['stream_id'])) {
+                $assignedStreamId = $parsedJson['stream_id'];
+            }
+        }
+        $data['assignedCombinationId'] = $assignedCombinationId;
+        $data['assignedStreamId'] = $assignedStreamId;
+
         return view('backend.student_registrations.edit_registration',$data); 
     }
 
@@ -1853,6 +1886,11 @@ public function perstudueamount($id){
         $sectionNameVal = (!empty($postData_html['section_name'])) ? $postData_html['section_name'] : (!empty($existingStudent->section_name) ? $existingStudent->section_name : ($existingJson['section_name'] ?? ''));
         $studentNameVal = !empty($request->studentname) ? $request->studentname : (!empty($request->student_name) ? $request->student_name : (!empty($existingStudent->student_name) ? $existingStudent->student_name : ($existingJson['studentname'] ?? '')));
 
+        $fatherNameVal = !empty($postData_html['fathername']) ? $postData_html['fathername'] : (!empty($existingJson['fathername']) ? $existingJson['fathername'] : ($existingJson['student_father_name'] ?? ''));
+        $motherNameVal = !empty($postData_html['mothername']) ? $postData_html['mothername'] : (!empty($existingJson['mothername']) ? $existingJson['mothername'] : ($existingJson['mother_name'] ?? ''));
+        $mobileVal = !empty($postData_html['mobile_number']) ? $postData_html['mobile_number'] : (!empty($existingStudent->mobile_number) ? $existingStudent->mobile_number : ($existingJson['mobile_number'] ?? ($existingJson['father_mobile'] ?? '')));
+        $phoneVal = !empty($postData_html['phone_number']) ? $postData_html['phone_number'] : (!empty($existingStudent->phone_number) ? $existingStudent->phone_number : ($existingJson['phone_number'] ?? ''));
+
         $mergedPostData['student_dob'] = $studentDobVal;
         $mergedPostData['nationality'] = $nationalityVal;
         $mergedPostData['category'] = $categoryVal;
@@ -1861,10 +1899,68 @@ public function perstudueamount($id){
         $mergedPostData['batch'] = $batchNameVal;
         $mergedPostData['student_caste'] = $casteVal;
         $mergedPostData['caste'] = $casteVal;
-        $mergedPostData['section_name'] = $sectionNameVal;
+        $mergedPostData['fathername'] = $fatherNameVal;
+        $mergedPostData['student_father_name'] = $fatherNameVal;
+        $mergedPostData['mothername'] = $motherNameVal;
+        $mergedPostData['mother_name'] = $motherNameVal;
+        $mergedPostData['mobile_number'] = $mobileVal;
+        $mergedPostData['phone_number'] = $phoneVal;
         if (!empty($studentNameVal)) {
             $mergedPostData['studentname'] = $studentNameVal;
         }
+
+        $isNextYearVal = 0;
+        if (isset($postData_html['next_year'])) {
+            $isNextYearVal = (!empty($postData_html['next_year']) && ($postData_html['next_year'] == 1 || $postData_html['next_year'] === '1')) ? 1 : 0;
+        } elseif (isset($existingStudent->next_year)) {
+            $isNextYearVal = (int)$existingStudent->next_year;
+        } elseif (isset($existingJson['next_year'])) {
+            $isNextYearVal = (!empty($existingJson['next_year']) && ($existingJson['next_year'] == 1 || $existingJson['next_year'] === '1')) ? 1 : 0;
+        }
+        $mergedPostData['next_year'] = $isNextYearVal;
+
+        if (isset($postData_html['admission_session'])) {
+            $mergedPostData['admission_session'] = $postData_html['admission_session'];
+        } elseif (isset($existingJson['admission_session'])) {
+            $mergedPostData['admission_session'] = $existingJson['admission_session'];
+        }
+        if (isset($postData_html['intended_session'])) {
+            $mergedPostData['intended_session'] = $postData_html['intended_session'];
+        } elseif (isset($existingJson['intended_session'])) {
+            $mergedPostData['intended_session'] = $existingJson['intended_session'];
+        }
+
+        $isSeniorClass = in_array(trim((string)$classNameVal), ['11', '12'], true);
+        if ($isSeniorClass) {
+            $streamId = $request->stream_id ?? ($mergedPostData['stream_id'] ?? null);
+            if (!empty($streamId)) {
+                $mergedPostData['stream_id'] = $streamId;
+                $streamRecord = DB::connection('dynamic')->table('streams')->where('id', $streamId)->first();
+                $streamName = $streamRecord ? strtoupper(trim($streamRecord->streams)) : '';
+                if ($streamName === 'SCIENCE' || (int)$streamId === 3) {
+                    $sectionNameVal = 'Kautilya';
+                } elseif (in_array($streamName, ['COMMERCE', 'HUMANITIES'], true) || in_array((int)$streamId, [1, 2], true)) {
+                    $sectionNameVal = 'Ramanujan';
+                }
+            }
+            if (!empty($request->combination_id)) {
+                $mergedPostData['combination_id'] = $request->combination_id;
+            }
+        }
+        $mergedPostData['section_name'] = $sectionNameVal;
+
+        $nextYearSectionVal = null;
+        $nextYearStreamVal = null;
+        $nextYearCombVal = null;
+        if ($isNextYearVal === 1) {
+            $nextYearSectionVal = $request->next_year_section ?? ($existingStudent->next_year_section ?? ($sectionNameVal ?: 'D'));
+            $nextYearStreamVal = $isSeniorClass ? ($request->next_year_stream ?? ($request->stream_id ?? ($existingStudent->next_year_stream ?? ($mergedPostData['stream_id'] ?? null)))) : null;
+            $nextYearCombVal = $isSeniorClass ? ($request->next_year_subject_combination ?? ($request->combination_id ?? ($existingStudent->next_year_subject_combination ?? ($mergedPostData['combination_id'] ?? null)))) : null;
+        }
+
+        $mergedPostData['next_year_section'] = $nextYearSectionVal;
+        $mergedPostData['next_year_stream'] = $nextYearStreamVal;
+        $mergedPostData['next_year_subject_combination'] = $nextYearCombVal;
         
         $insertArr  = [
             'application_for'=> !empty($request->application_for) ? $request->application_for : ($existingStudent->application_for ?? ''),
@@ -1873,10 +1969,18 @@ public function perstudueamount($id){
             'date_of_birth'=> $studentDobVal,
             'class_name'=> $classNameVal,
             'section_name'=> $sectionNameVal,
+            'mobile_number'=> $mobileVal,
+            'phone_number'=> $phoneVal,
+            'staff_name'=> (!empty($request->staff_name) && is_array($request->staff_name)) ? ($request->staff_name[0] ?? '') : (!empty($request->staff_name) ? $request->staff_name : ($existingStudent->staff_name ?? '')),
+            'driver'=> $request->driver_name ?? ($existingStudent->driver ?? ''),
             'student_name'=> $studentNameVal,
             'session_name'=> $sessionNameVal,
             'inq_mode'=>'off',
             'status'=>'r',
+            'next_year' => $isNextYearVal,
+            'next_year_section' => $nextYearSectionVal,
+            'next_year_stream' => $nextYearStreamVal,
+            'next_year_subject_combination' => $nextYearCombVal,
             'json_str'=>json_encode($mergedPostData),
             'registration_date'=> !empty($request->registration_date) ? $request->registration_date : (!empty($existingStudent->registration_date) ? $existingStudent->registration_date : date('Y-m-d')),
         ];
@@ -1900,6 +2004,21 @@ public function perstudueamount($id){
         }
 
         $inquiry_data = DB::connection('dynamic')->table('student_registration')->where('id', $request->id)->update($insertArr);
+
+        if ($isSeniorClass && !empty($request->combination_id)) {
+            DB::connection('dynamic')->table('subject_assign_student')->updateOrInsert(
+                [
+                    'students_details' => $request->id,
+                ],
+                [
+                    'class_name' => $classNameVal,
+                    'section_name' => $sectionNameVal,
+                    'assign_this_combtoall' => $request->combination_id,
+                    'is_delete' => 0,
+                    'updated_at' => now(),
+                ]
+            );
+        }
         
         $sibling = 0;
         $staff = 0;

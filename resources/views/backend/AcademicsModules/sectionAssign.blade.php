@@ -88,9 +88,9 @@
                                                         <td>
                                                             <select name="section_name" class="form-control section_name" data-student-id="{{ $student->id }}">
                                                                 <option value="">Please select section </option>
-                                                                <option value="Aryabhatta" {{ $student->section->section_name === 'Aryabhatta' ? 'selected' : ''}}>Aryabhatta</option>
-                                                                <option value="Kautilya" {{ $student->section->section_name === 'Kautilya' ? 'selected' : ''}}>Kautilya</option>
-                                                                <option value="Ramanujan" {{ $student->section->section_name === 'Ramanujan' ? 'selected' : ''}}>Ramanujan</option>
+                                                                <option value="Aryabhatta" {{ ($student->section_name ?? ($student->section->section_name ?? '')) === 'Aryabhatta' ? 'selected' : ''}}>Aryabhatta</option>
+                                                                <option value="Kautilya" {{ ($student->section_name ?? ($student->section->section_name ?? '')) === 'Kautilya' ? 'selected' : ''}}>Kautilya</option>
+                                                                <option value="Ramanujan" {{ ($student->section_name ?? ($student->section->section_name ?? '')) === 'Ramanujan' ? 'selected' : ''}}>Ramanujan</option>
                                                             </select>
                                                         </td>
                                                         <td><button type="button" class="btn btn-primary update-comb-btn" data-studentclass="{{ $student->class_name }}" data-student-id="{{ $student->id }}">Update</button></td>
@@ -130,6 +130,7 @@
                                         <th>Aryabhatta</th>
                                         <th>Kautilya</th>
                                         <th>Ramanujan</th>
+                                        <th>D (Temporary)</th>
                                         <th>Total</th>
                                     </tr>
                                 </thead>
@@ -142,17 +143,8 @@
                                                 <td> Students: {{ $sections['Aryabhatta'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Aryabhatta'}}">Edit</a></td>
                                                 <td> Students: {{ $sections['Kautilya'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Kautilya'}}">Edit</a></td>
                                                 <td> Students: {{ $sections['Ramanujan'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=Ramanujan'}}">Edit</a></td>
-                                                <td><strong>{{ $sections->sum() }}</strong></td>
-                                                @foreach ($sections as $section => $count)
-
-                                                    {{-- echo "  Section: $section → Students: $count\n"; --}}
-                                                @endforeach
-                                                {{-- <td>{{ $student->student_name }}</td>
-                                                <td>{{ $student->section->section_name }}</td> --}}
-
-                                                {{-- <td class='d-flex'>
-                                                    <a class="btn btn-primary m-1" href="{{ url('view-AssignSection') .'/'.$student->id}}">Edit</a>
-                                                </td> --}}
+                                                <td> Students: {{ $sections['D'] ?? "0" }} <a class="btn btn-primary m-1" href="{{ url('view-AssignSection/'. $class) . '?section=D'}}">Edit</a></td>
+                                                <td><strong>{{ ($sections['Aryabhatta'] ?? 0) + ($sections['Kautilya'] ?? 0) + ($sections['Ramanujan'] ?? 0) + ($sections['D'] ?? 0) }}</strong></td>
                                             </tr>
                                         @endforeach
                                     @endif
@@ -192,10 +184,12 @@
                             var student_name = data[i].student_name;
                             var student_id = data[i].id;
                             var class_name = data[i].class_name;
-                            let section_name = '';
+                            let section_name = data[i].section_name ?? '';
                             try {
                                 let json = JSON.parse(data[i].json_str);
-                                section_name = json.section_name ?? '';
+                                if (!section_name && json.section_name) {
+                                    section_name = json.section_name;
+                                }
                             } catch (e) {
                                 console.error('Invalid JSON for student ID:', student_id);
                             }
@@ -221,19 +215,19 @@
                             $('#student_list_table').append(tRow);
                         }
                         let sectionCounts = response['sectionCounts'];
-                        let summaryHtml = '<h3>Section-wise Student Count</h3>';
+                        let summaryHtml = '<div class="col-md-12 mb-2"><h3>Section-wise Student Count</h3></div>';
 
                         for (let section in sectionCounts) {
+                            let label = (section === 'D') ? 'D (Temporary)' : section;
                             summaryHtml += `
-                                <div class="col-md-2 mx-1 card text-center">
-                                    <div class="card-body"><h4>${section}</h4>
+                                <div class="col-md-2 mx-1 card text-center mb-2">
+                                    <div class="card-body"><h4>${label}</h4>
                                         <h4>${sectionCounts[section]}</h4></div>
                                 </div>
                             `;
                         }
 
-
-                        //$('#section_summary').html(summaryHtml);
+                        $('#section_summary').html(summaryHtml);
 
                     }
                 });

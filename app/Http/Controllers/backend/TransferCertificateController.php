@@ -93,6 +93,11 @@ class TransferCertificateController extends Controller
             ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'status'), function ($query) {
                 $query->where('status', 'r');
             })
+            ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'next_year'), function ($query) {
+                $query->where(function ($q) {
+                    $q->where('next_year', 0)->orWhereNull('next_year');
+                });
+            })
             ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status'), function ($query) {
                 $query->where(function ($q) {
                     $q->whereNull('transfer_status')->orWhere('transfer_status', '!=', 'transferred');
@@ -262,6 +267,11 @@ class TransferCertificateController extends Controller
                 $query->where(function ($q) use ($search) {
                     $q->where('student_name', 'like', "%{$search}%")
                         ->orWhere('scholar_no', 'like', "%{$search}%");
+                });
+            })
+            ->when(Schema::connection('dynamic')->hasColumn('student_registration', 'next_year'), function ($query) {
+                $query->where(function ($q) {
+                    $q->where('next_year', 0)->orWhereNull('next_year');
                 });
             })
             ->orderBy('student_name')

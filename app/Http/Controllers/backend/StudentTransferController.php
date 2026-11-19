@@ -33,16 +33,20 @@ class StudentTransferController extends Controller
                 $transferredScholarNos = NextYearStudent::pluck('scholar_no')->toArray();
             }
 
-            $studentQuery = Student_registration::on('dynamic')->where('class_name', $request->class_id)
+            $studentQuery = Student_registration::on('dynamic')->withoutGlobalScope('not_next_year')
+                ->where('class_name', $request->class_id)
                 ->whereNotIn('scholar_no', $transferredScholarNos);
             $this->applyActiveStudentFilters($studentQuery);
 
             $students = $studentQuery->get();
-            //echo $students->toSql();die;
 		
             $students = $students->map(function ($student) {
-                $jsonData = json_decode($student->json_str, true);
-                $student->section_name = $jsonData['section_name'] ?? 'N/A'; // Default if not found
+                $jsonData = json_decode($student->json_str, true) ?: [];
+                $student->section_name = $student->section_name ?: ($jsonData['section_name'] ?? 'N/A');
+                $student->next_year = (int)($student->next_year ?? ($jsonData['next_year'] ?? 0));
+                $student->next_year_section = $student->next_year_section ?? ($jsonData['next_year_section'] ?? null);
+                $student->next_year_stream = $student->next_year_stream ?? ($jsonData['next_year_stream'] ?? null);
+                $student->next_year_subject_combination = $student->next_year_subject_combination ?? ($jsonData['next_year_subject_combination'] ?? null);
                 return $student;
             })->sortBy('section_name')->values(); // Sorting by section name
 
@@ -80,12 +84,12 @@ class StudentTransferController extends Controller
             return redirect()->back()->with('error', 'Next session database is not available.');
         }
 
-        $studentQuery = Student_registration::on('dynamic')->whereIn('id', $selectedStudents);
+        $studentQuery = Student_registration::on('dynamic')->withoutGlobalScope('not_next_year')->whereIn('id', $selectedStudents);
         $this->applyActiveStudentFilters($studentQuery);
 
         $students = $studentQuery->get();
 
-        // Step 1: Fetch inquiry data for all selected students
+        // Step 1: Fetch inquiry data for fallback if needed
         $formNumbers = $students->pluck('form_number')->toArray();
         $inquiryRecords = Inquiry_registration::on('dynamic')->get(); // Consider filtering if performance is a concern
 
@@ -98,55 +102,420 @@ class StudentTransferController extends Controller
             }
         }
 
+        $promotedTargetClasses = [];
+
         foreach ($students as $student) {
             $formNumber = $student->form_number;
-            $nextYearValue = $inquiryMap[$formNumber] ?? 0;
+            $data = json_decode($student->json_str, true) ?: [];
 
-            // If next_year == 1, DO NOT promote class
-            $newClassName = ($nextYearValue == 1)
-                ? $student->class_name
-                : $this->getNextClassName($student->class_name);
-
-            $data = json_decode($student->json_str, true);
-            if (empty($data['section_name'])) {
-                $data['section_name'] = 'Aryabhatta';
+            // Check if student is Next Year admission
+            $isNextYear = (!empty($student->next_year) && ($student->next_year == 1 || $student->next_year === '1'));
+            if (!$isNextYear) {
+                if (!empty($data['next_year']) && ($data['next_year'] == 1 || $data['next_year'] === '1')) {
+                    $isNextYear = true;
+                } elseif (!empty($inquiryMap[$formNumber]) && ($inquiryMap[$formNumber] == 1 || $inquiryMap[$formNumber] === '1')) {
+                    $isNextYear = true;
+                }
             }
 
-            $student->json_str = json_encode($data);
-            $student->save();
+            if ($isNextYear) {
+                // Category B: Next Year student - DO NOT PROMOTE CLASS
+                // Class remains unchanged because student was registered directly for their upcoming class
+                $newClassName = $student->class_name;
+                $promotedSection = $student->next_year_section ?: ($student->section_name ?: ($data['section_name'] ?? 'D'));
+                $targetStreamId = $student->next_year_stream ?: ($data['stream_id'] ?? null);
+                $targetCombinationId = $student->next_year_subject_combination ?: ($data['combination_id'] ?? null);
+            } else {
+                // Category A: Regular existing student - PROMOTE CLASS
+                $newClassName = $this->getNextClassName($student->class_name);
+                $promotedSection = $student->section_name ?: ($data['section_name'] ?? 'Aryabhatta');
+                $targetStreamId = $data['stream_id'] ?? null;
+                $targetCombinationId = $data['combination_id'] ?? null;
+            }
 
             if ($newClassName === null) {
                 continue;
             }
 
-			NextYearStudent::create([
-                'id'              => $student->id,
-                'application_for' => $student->application_for,
-                'form_number'     => $formNumber,
-                'scholar_no'      => $student->scholar_no,
-                'date_of_birth'   => $student->date_of_birth,
-                'class_name'      => $newClassName,
-                'student_name'    => $student->student_name,
-				'session_name'    => $nextSession,
-                'json_str'        => $student->json_str,
-                'staff_name'      => $student->staff_name,
-                'phone_number'    => $student->phone_number,
-                'mobile_number'   => $student->mobile_number,
-                'inq_mode'        => $student->inq_mode,
-                'driver'          => $student->driver,
-                'status'          => $student->status,
-                'type'            => $student->type,
-                'password'        => $student->password,
-                'created_at'      => now(),
-                'updated_at'      => now(),
-            ]);
+            $promotedTargetClasses[] = $newClassName;
+
+            $isPromotedSenior = in_array(trim((string)$newClassName), ['11', '12'], true);
+
+            if ($isPromotedSenior) {
+                $streamId = $targetStreamId;
+                if (!empty($streamId)) {
+                    $streamRecord = DB::connection('dynamic')->table('streams')->where('id', $streamId)->first();
+                    $streamName = $streamRecord ? strtoupper(trim($streamRecord->streams)) : '';
+                    if ($streamName === 'SCIENCE' || (int)$streamId === 3) {
+                        $promotedSection = 'Kautilya';
+                    } elseif (in_array($streamName, ['COMMERCE', 'HUMANITIES'], true) || in_array((int)$streamId, [1, 2], true)) {
+                        $promotedSection = 'Ramanujan';
+                    }
+                }
+            }
+
+            // Find class_id in next_session_db
+            $targetClassRecord = DB::connection('next_session_db')->table('classes')
+                ->where('class_name', $newClassName)
+                ->where('section_name', $promotedSection)
+                ->where('is_delete', 0)
+                ->first();
+            $targetClassId = $targetClassRecord ? $targetClassRecord->id : null;
+            if (!$targetClassId) {
+                $firstClass = DB::connection('next_session_db')->table('classes')
+                    ->where('class_name', $newClassName)
+                    ->where('is_delete', 0)
+                    ->first();
+                $targetClassId = $firstClass ? $firstClass->id : null;
+            }
+
+            $nextJson = $data;
+            $nextJson['classname'] = $newClassName;
+            $nextJson['section_name'] = $promotedSection;
+            $nextJson['class_id'] = $targetClassId;
+            $nextJson['session_name'] = $nextSession;
+            $nextJson['batch'] = $nextSession;
+            $nextJson['next_year'] = 0;
+            $nextJson['next_year_section'] = null;
+            $nextJson['next_year_stream'] = null;
+            $nextJson['next_year_subject_combination'] = null;
+            if (!empty($targetStreamId)) {
+                $nextJson['stream_id'] = $targetStreamId;
+            }
+            if (!empty($targetCombinationId)) {
+                $nextJson['combination_id'] = $targetCombinationId;
+            }
+
+            // Transfer student to target session DB
+            $targetStudent = NextYearStudent::updateOrCreate(
+                ['scholar_no' => $student->scholar_no],
+                [
+                    'application_for' => $student->application_for,
+                    'form_number'     => $formNumber,
+                    'scholar_no'      => $student->scholar_no,
+                    'date_of_birth'   => $student->date_of_birth,
+                    'class_name'      => $newClassName,
+                    'section_name'    => $promotedSection,
+                    'class_id'        => $targetClassId,
+                    'student_name'    => $student->student_name,
+                    'session_name'    => $nextSession,
+                    'json_str'        => json_encode($nextJson),
+                    'staff_name'      => $student->staff_name,
+                    'phone_number'    => $student->phone_number,
+                    'mobile_number'   => $student->mobile_number,
+                    'inq_mode'        => $student->inq_mode,
+                    'driver'          => $student->driver,
+                    'status'          => $student->status,
+                    'type'            => $student->type,
+                    'password'        => $student->password,
+                    'next_year'       => 0,
+                    'next_year_section' => null,
+                    'next_year_stream'  => null,
+                    'next_year_subject_combination' => null,
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+                ]
+            );
+
+            // If senior class combination exists, assign in next session DB
+            if ($isPromotedSenior && !empty($targetCombinationId) && Schema::connection('next_session_db')->hasTable('subject_assign_student')) {
+                DB::connection('next_session_db')->table('subject_assign_student')->updateOrInsert(
+                    ['students_details' => $targetStudent->id],
+                    [
+                        'class_name' => $newClassName,
+                        'section_name' => $promotedSection,
+                        'assign_this_combtoall' => $targetCombinationId,
+                        'is_delete' => 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
+            }
+
+            // Task 7: Cleanup in current session DB - only runs after successful transfer
+            $data['section_name'] = $student->section_name ?: ($data['section_name'] ?? 'Aryabhatta');
+            $student->json_str = json_encode($data);
+            if ($isNextYear) {
+                $student->next_year = 0;
+                $student->next_year_section = null;
+                $student->next_year_stream = null;
+                $student->next_year_subject_combination = null;
+            }
+            if (Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status')) {
+                $student->transfer_status = 'transferred';
+                $student->transferred_at = now();
+            }
+            $student->save();
         }
 
-        return redirect()->back()->with('success', 'Students transferred successfully. Class promotion skipped if next_year = 1.');
+        // Automatic Round Robin distribution: merge Section D new admissions into promoted strength
+        $promotedTargetClasses = array_values(array_unique($promotedTargetClasses));
+        if (!empty($promotedTargetClasses)) {
+            $this->allocateSectionsForSession($nextSession, $promotedTargetClasses);
+        }
+
+        return redirect()->back()->with('success', 'Students transferred successfully. Section distribution applied.');
     }
 
     return redirect()->back()->with('error', 'No students selected!');
 }
+
+    /**
+     * Web endpoint to trigger automatic section allocation and balancing for the next academic session.
+     */
+    public function allocateSections(Request $request)
+    {
+        $this->applySessionDatabaseBindings($request);
+
+        $currentSession = $this->resolveSelectedSessionYear($request);
+        if (empty($currentSession)) {
+            $registration = Student_registration::on('dynamic')->first();
+            $currentSession = $registration->session_name ?? null;
+        }
+
+        if (empty($currentSession) || !preg_match('/^\d{4}_\d{4}$/', $currentSession)) {
+            return redirect()->back()->with('error', 'Invalid session year selected.');
+        }
+
+        [$startYear, $endYear] = explode('_', $currentSession);
+        $nextSession = ($startYear + 1) . '_' . ($endYear + 1);
+
+        $targetSession = null;
+        if ($this->nextSessionStudentTableExists()) {
+            $targetSession = $nextSession;
+        } elseif (Schema::connection('dynamic')->hasTable('student_registration')) {
+            $targetSession = $currentSession;
+        }
+
+        if (!$targetSession) {
+            return redirect()->back()->with('error', 'Target session database is not available.');
+        }
+
+        $selectedClass = $request->input('class_name') ? [$request->input('class_name')] : null;
+
+        $results = $this->allocateSectionsForSession($targetSession, $selectedClass);
+
+        return redirect()->back()->with('success', 'Sections automatically balanced for session ' . $targetSession . ' using Round Robin distribution.');
+    }
+
+    /**
+     * Automatically assign sections to students in target academic session.
+     *
+     * Rules:
+     * 1. Classes Nursery to 10:
+     *    - Regular sections: ['Aryabhatta', 'Kautilya', 'Ramanujan']
+     *    - Promoted students maintain their regular sections and form base strength.
+     *    - All students in temporary Section D (new admissions) are merged and allocated
+     *      using balanced Round Robin (lowest count first, tie-break Aryabhatta -> Kautilya -> Ramanujan).
+     * 2. Classes 11 and 12:
+     *    - Science -> 'Kautilya'
+     *    - Humanities / Commerce -> 'Ramanujan'
+     *
+     * @param string $targetSession Target database session (e.g. '2026_2027')
+     * @param array|null $targetClasses Optional classes filter
+     * @return array Allocation report
+     */
+    public function allocateSectionsForSession(string $targetSession, ?array $targetClasses = null): array
+    {
+        $currentNextDb = Config::get('database.connections.next_session_db.database');
+        if ($currentNextDb !== $targetSession) {
+            Config::set('database.connections.next_session_db.database', $targetSession);
+            DB::purge('next_session_db');
+            DB::reconnect('next_session_db');
+        }
+
+        if (!Schema::connection('next_session_db')->hasTable('student_registration')) {
+            return ['error' => "Table student_registration not found in session {$targetSession}"];
+        }
+
+        if (Schema::connection('next_session_db')->hasColumn('student_registration', 'next_year')) {
+            DB::connection('next_session_db')->table('student_registration')
+                ->where('next_year', 1)
+                ->update([
+                    'next_year' => 0,
+                    'next_year_section' => null,
+                    'next_year_stream' => null,
+                    'next_year_subject_combination' => null,
+                ]);
+        }
+
+        $regularSections = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+        $nurseryTo10 = [
+            'Nursery', 'KG1', 'KG2',
+            '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
+            '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ];
+
+        if (empty($targetClasses)) {
+            $targetClasses = DB::connection('next_session_db')->table('student_registration')
+                ->where(function ($q) {
+                    $q->where('is_archived', 0)
+                        ->orWhereNull('is_archived');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('status')->orWhereNotIn('status', ['t', 'archived']);
+                })
+                ->distinct()
+                ->pluck('class_name')
+                ->toArray();
+        }
+
+        $allocationSummary = [];
+
+        foreach ($targetClasses as $className) {
+            $cleanClass = trim((string)$className);
+            $isSenior = in_array($cleanClass, ['11', '12'], true);
+            $isJunior = in_array(strtolower($cleanClass), array_map('strtolower', $nurseryTo10), true);
+
+            if ($isSenior) {
+                // Task 3: Stream-based mapping for Classes 11 and 12
+                $students = DB::connection('next_session_db')->table('student_registration')
+                    ->where('class_name', $cleanClass)
+                    ->where(function ($q) {
+                        $q->where('is_archived', 0)
+                            ->orWhereNull('is_archived');
+                    })
+                    ->where(function ($q) {
+                        $q->whereNull('status')->orWhereNotIn('status', ['t', 'archived']);
+                    })
+                    ->get();
+
+                $allocatedSeniorCount = 0;
+                foreach ($students as $stu) {
+                    $json = json_decode($stu->json_str, true) ?: [];
+                    $streamId = $json['stream_id'] ?? null;
+                    $streamName = '';
+                    if (!empty($streamId)) {
+                        $streamRow = DB::connection('next_session_db')->table('streams')->where('id', $streamId)->first();
+                        if (!$streamRow && Schema::connection('dynamic')->hasTable('streams')) {
+                            $streamRow = DB::connection('dynamic')->table('streams')->where('id', $streamId)->first();
+                        }
+                        $streamName = $streamRow ? strtoupper(trim($streamRow->streams)) : '';
+                    }
+
+                    $targetSection = 'Kautilya';
+                    if ($streamName === 'SCIENCE' || (int)$streamId === 3) {
+                        $targetSection = 'Kautilya';
+                    } elseif (in_array($streamName, ['COMMERCE', 'HUMANITIES'], true) || in_array((int)$streamId, [1, 2], true)) {
+                        $targetSection = 'Ramanujan';
+                    } elseif (!empty($stu->section_name) && in_array($stu->section_name, ['Kautilya', 'Ramanujan'], true)) {
+                        $targetSection = $stu->section_name;
+                    }
+
+                    $matchedClass = DB::connection('next_session_db')->table('classes')
+                        ->where('class_name', $cleanClass)
+                        ->where('section_name', $targetSection)
+                        ->where('is_delete', 0)
+                        ->first();
+                    $classId = $matchedClass ? $matchedClass->id : $stu->class_id;
+
+                    if ($stu->section_name !== $targetSection || $stu->class_id != $classId) {
+                        $json['section_name'] = $targetSection;
+                        $json['class_id'] = $classId;
+                        DB::connection('next_session_db')->table('student_registration')
+                            ->where('id', $stu->id)
+                            ->update([
+                                'section_name' => $targetSection,
+                                'class_id'     => $classId,
+                                'json_str'     => json_encode($json),
+                            ]);
+                        $allocatedSeniorCount++;
+                    }
+                }
+
+                $allocationSummary[$cleanClass] = [
+                    'type' => 'senior_stream_mapping',
+                    'updated_students' => $allocatedSeniorCount,
+                ];
+            } elseif ($isJunior) {
+                // Tasks 2 & 4: Round Robin distribution for Nursery to Class 10
+                $students = DB::connection('next_session_db')->table('student_registration')
+                    ->where('class_name', $cleanClass)
+                    ->where(function ($q) {
+                        $q->where('is_archived', 0)
+                            ->orWhereNull('is_archived');
+                    })
+                    ->where(function ($q) {
+                        $q->whereNull('status')->orWhereNotIn('status', ['t', 'archived']);
+                    })
+                    ->orderBy('scholar_no', 'asc')
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                $sectionCounts = [
+                    'Aryabhatta' => 0,
+                    'Kautilya'   => 0,
+                    'Ramanujan'  => 0,
+                ];
+
+                $pendingStudents = [];
+
+                foreach ($students as $stu) {
+                    $sec = trim((string)$stu->section_name);
+                    $matchedRegular = null;
+                    foreach ($regularSections as $reg) {
+                        if (strcasecmp($sec, $reg) === 0) {
+                            $matchedRegular = $reg;
+                            break;
+                        }
+                    }
+
+                    if ($matchedRegular !== null) {
+                        // Existing student in regular section (Aryabhatta, Kautilya, Ramanujan):
+                        // Do not change their section, keep unchanged and count towards section strength
+                        $sectionCounts[$matchedRegular]++;
+                    } else {
+                        // New admissions / Section D / unassigned students: redistribute via Round Robin
+                        $pendingStudents[] = $stu;
+                    }
+                }
+
+                $assignedCount = 0;
+                foreach ($pendingStudents as $stu) {
+                    $bestSection = 'Aryabhatta';
+                    $minCount = $sectionCounts['Aryabhatta'];
+
+                    foreach ($regularSections as $candidate) {
+                        if ($sectionCounts[$candidate] < $minCount) {
+                            $minCount = $sectionCounts[$candidate];
+                            $bestSection = $candidate;
+                        }
+                    }
+
+                    $sectionCounts[$bestSection]++;
+
+                    $matchedClass = DB::connection('next_session_db')->table('classes')
+                        ->where('class_name', $cleanClass)
+                        ->where('section_name', $bestSection)
+                        ->where('is_delete', 0)
+                        ->first();
+                    $classId = $matchedClass ? $matchedClass->id : $stu->class_id;
+
+                    $json = json_decode($stu->json_str, true) ?: [];
+                    $json['section_name'] = $bestSection;
+                    $json['class_id'] = $classId;
+
+                    DB::connection('next_session_db')->table('student_registration')
+                        ->where('id', $stu->id)
+                        ->update([
+                            'section_name' => $bestSection,
+                            'class_id'     => $classId,
+                            'json_str'     => json_encode($json),
+                        ]);
+
+                    $assignedCount++;
+                }
+
+                $allocationSummary[$cleanClass] = [
+                    'type' => 'round_robin_balanced',
+                    'allocated_from_section_d' => $assignedCount,
+                    'final_section_counts' => $sectionCounts,
+                ];
+            }
+        }
+
+        return $allocationSummary;
+    }
 
 	
 	private function getNextClassName($currentClass)
@@ -155,7 +524,9 @@ class StudentTransferController extends Controller
 		$classPromotionMap = [
 			'Nursery' => 'KG1',
 			'KG1' => 'KG2',
+			'Kg1' => 'KG2',
 			'KG2' => '01', // Switch to numeric classes
+			'Kg2' => '01',
 		];
 
 		// Check if class exists in text-based mapping

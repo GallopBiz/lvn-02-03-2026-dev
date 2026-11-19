@@ -44,6 +44,25 @@
       margin-bottom: 0.4rem !important;
    }
 
+   .select2-container .select2-selection--single {
+      background-color: #f3f4f6 !important;
+      border: 1px solid #ced4da !important;
+      height: 34px !important;
+      border-radius: 4px !important;
+   }
+   .select2-container--default .select2-selection--single .select2-selection__rendered {
+      line-height: 34px !important;
+      color: #47404f !important;
+      padding-left: 10px !important;
+   }
+   .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 34px !important;
+      top: 0 !important;
+   }
+   .select2-container--default .select2-selection--single .select2-selection__placeholder {
+      color: #6c757d !important;
+   }
+
    .error_msg2 {
       color: green;
    }
@@ -349,26 +368,19 @@
                               <label for="studentname">Student Name<b class="validation_err">*</b></label>
                               <div class="input-group mb-3">
                                  <div class="input-group-prepend">
+                                    @php
+                                       $savedStudentPrefix = !empty($notificationData1['studentname_prefix']) ? $notificationData1['studentname_prefix'] : (!empty($each_inq->studentname_prefix) ? $each_inq->studentname_prefix : 'Master');
+                                    @endphp
                                     <select id="studentname_prefix" class="form-control btn btn-outline-primary dropdown-toggle" name="studentname_prefix" autocomplete="shipping address-level1">
-                                       <option <?php if (!empty($notificationData1['studentname_prefix'])) {
-                                                   if ($notificationData1['studentname_prefix'] == "Master") {
-                                                      echo "select";
-                                                   }
-                                                } ?> value="Master">Master</option>
-                                       <option <?php if (!empty($notificationData1['studentname_prefix'])) {
-                                                   if ($notificationData1['studentname_prefix'] == "Mr.") {
-                                                      echo "select";
-                                                   }
-                                                } ?> value="Mr.">Mr.</option>
-                                       <option <?php if (!empty($notificationData1['studentname_prefix'])) {
-                                                   if ($notificationData1['studentname_prefix'] == "Miss") {
-                                                      echo "select";
-                                                   }
-                                                } ?> value="Miss">Miss</option>
+                                       <option value="Master" {{ (strcasecmp($savedStudentPrefix, 'Master') === 0) ? 'selected' : '' }}>Master</option>
+                                       <option value="Mr." {{ (strcasecmp($savedStudentPrefix, 'Mr.') === 0 || strcasecmp($savedStudentPrefix, 'Mr') === 0) ? 'selected' : '' }}>Mr.</option>
+                                       <option value="Miss" {{ (strcasecmp($savedStudentPrefix, 'Miss') === 0) ? 'selected' : '' }}>Miss</option>
                                     </select>
                                  </div>
                                  <input type="text" class="form-control uperletter" id="studentname" placeholder="Enter Student Name" name="studentname" required value="<?php if (!empty($notificationData1['studentname'])) {
                                                                                                                                                       echo $notificationData1['studentname'];
+                                                                                                                                                   } elseif (!empty($each_inq->student_name)) {
+                                                                                                                                                      echo $each_inq->student_name;
                                                                                                                                                    } ?>" />
                                  <span class="student_name_msg validation_err"></span>
                               </div>
@@ -464,6 +476,35 @@
                               </select>
                               <span class="classname_msg validation_err"></span>
                            </div>
+                           <div class="col-md-4 form-group mb-3" id="main_section_container">
+                              <label for="student_section_name">Section</label>
+                              @php
+                                 $savedStudentSection = !empty($each_inq->section_name) ? trim($each_inq->section_name) : (!empty($notificationData1['section_name']) ? trim($notificationData1['section_name']) : 'D');
+                              @endphp
+                              <select id="student_section_name" class="form-control" name="section_name">
+                                 <option value="D" {{ ($savedStudentSection === 'D' || empty($savedStudentSection)) ? 'selected' : '' }}>D (Temporary)</option>
+                                 <option value="Aryabhatta" {{ (strcasecmp($savedStudentSection, 'Aryabhatta') === 0) ? 'selected' : '' }}>Aryabhatta</option>
+                                 <option value="Kautilya" {{ (strcasecmp($savedStudentSection, 'Kautilya') === 0) ? 'selected' : '' }}>Kautilya</option>
+                                 <option value="Ramanujan" {{ (strcasecmp($savedStudentSection, 'Ramanujan') === 0) ? 'selected' : '' }}>Ramanujan</option>
+                              </select>
+                              <span class="section_name_msg validation_err"></span>
+                           </div>
+
+                           <div class="col-md-4 form-group mb-3" id="stream_selection_wrapper" style="display: none;">
+                              <label for="stream_id">Stream <b class="validation_err">*</b></label>
+                              <select id="stream_id" class="form-control" name="stream_id">
+                                 <option value="" disabled selected>Please select Stream</option>
+                              </select>
+                              <span class="stream_id_msg validation_err"></span>
+                           </div>
+
+                           <div class="col-md-4 form-group mb-3" id="combination_selection_wrapper" style="display: none;">
+                              <label for="combination_id">Subject Combination <b class="validation_err">*</b></label>
+                              <select id="combination_id" class="form-control select2" name="combination_id" data-placeholder="Please select Subject Combination">
+                                 <option value="" disabled selected>Please select Subject Combination</option>
+                              </select>
+                              <span class="combination_id_msg validation_err"></span>
+                           </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="session_name">Session Name<b class="validation_err">*</b></label>
                               <select id="session_name" class="form-control" name="session_name" required>
@@ -502,13 +543,17 @@
                               <label for="address">Phone Number :</label>
                               <input class="form-control" id="phone number" type="text" placeholder="Enter Phone Number" name="phone_number" value="<?php if (!empty($notificationData1['phone_number'])) {
                                                                                                                                                          echo $notificationData1['phone_number'];
+                                                                                                                                                      } elseif (!empty($each_inq->phone_number)) {
+                                                                                                                                                         echo $each_inq->phone_number;
                                                                                                                                                       } ?>" />
                            </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="address">Mobile Number :</label>
                               <input class="form-control" id="phonenumber" type="text" placeholder="Enter Mobile Number" name="mobile_number" value="<?php if (!empty($notificationData1['mobile_number'])) {
                                                                                                                                                          echo $notificationData1['mobile_number'];
-                                                                                                                                                      } ?>" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check();" name="fathermobile" return false; /><span class="phonenumber_for_msg validation_err" id="validation_err"></span>
+                                                                                                                                                      } elseif (!empty($each_inq->mobile_number)) {
+                                                                                                                                                         echo $each_inq->mobile_number;
+                                                                                                                                                      } ?>" maxlength="10" pattern="\d{10}" onkeyup="this.value = this.value.replace(/[^0-9]/g, '');check();" /><span class="phonenumber_for_msg validation_err" id="validation_err"></span>
                            </div>
                            <div class="col-md-4 form-group mb-3">
                               <label for="firstName1">Mother Tongue</label>
@@ -532,7 +577,7 @@
                                         <label for="address">Scholar SSSM ID :</label>
                                         <input class="form-control uperletter" id="sssmid" type="text" placeholder="Enter SSSMID " name="SSSMID" value="<?php if (!empty($notificationData1['SSSMID'])) {
                                                                                                                                        echo $notificationData1['SSSMID'];
-                                                                                                                                    } ?>" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check7();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err7"></span>
+                                                                                                                                    } ?>" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check7();" /><span class="fathermobile_for_msg validation_err" id="validation_err7"></span>
                                     </div>
 
                                     <div class="col-md-4 form-group mb-3">
@@ -546,7 +591,7 @@
                                         <label for="address">Aadhar No.:</label>
                                         <input class="form-control" id="AadharNo" type="text" placeholder="Enter Aadhar Number" name="AadharNo"  value="<?php if (!empty($notificationData1['AadharNo'])) {
                                                                                                                                        echo $notificationData1['AadharNo'];
-                                                                                                                                    } ?>" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
+                                                                                                                                    } ?>" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
                                     </div>
                                     <div class="col-md-4 form-group mb-3">
                                         <label for="apaar_id">Apaar ID</label>
@@ -654,7 +699,7 @@
 
                                                                 <td>
                                                                   <label for="section_name">Section</label>
-                                                                  <select id="section_name" class="form-control" name="section_name" autocomplete="shipping address-level1" required>
+                                                                  <select id="siblings_section_name" class="form-control" name="siblings_section_second[0]" autocomplete="shipping address-level1">
                                                                                                                                   
                                                                       @if (!empty($teacher_subject))
                                                                       <option value="{{ $teacher_subject->section_name}}" selected>{{ $teacher_subject->section_name}}</option>
@@ -1047,18 +1092,18 @@
                               <div class="input-group-prepend">
                                  <select id="fathername_prefix" class="form-control btn btn-outline-primary dropdown-toggle" name="fathername_prefix" autocomplete="shipping address-level1">
                                     <option <?php if (!empty($notificationData1['fathername_prefix'])) {
-                                                if ($notificationData1['fathername_prefix'] == "Mr.") {
-                                                   echo "select";
+                                                if ($notificationData1['fathername_prefix'] == "Mr." || $notificationData1['fathername_prefix'] == "Mr") {
+                                                   echo "selected";
                                                 }
                                              } ?> value="Mr.">Mr.</option>
                                     <option <?php if (!empty($notificationData1['fathername_prefix'])) {
-                                                if ($notificationData1['fathername_prefix'] == "Dr.") {
-                                                   echo "select";
+                                                if ($notificationData1['fathername_prefix'] == "Dr." || $notificationData1['fathername_prefix'] == "Dr") {
+                                                   echo "selected";
                                                 }
-                                             } ?> value="Dr">Dr.</option>
+                                             } ?> value="Dr.">Dr.</option>
                                     <option <?php if (!empty($notificationData1['fathername_prefix'])) {
                                                 if ($notificationData1['fathername_prefix'] == "Late") {
-                                                   echo "select";
+                                                   echo "selected";
                                                 }
                                              } ?> value="Late">Late</option>
                                  </select>
@@ -1071,13 +1116,13 @@
                         </div>
                         <!-- <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Date Of Birth</label>
-                           <input name="father_dob" class="form-control date4" id="picker2-" type="date" placeholder="dd-mm-yyyy" name="siblings_bod" value="<?php if (!empty($notificationData1['father_dob'])) {
+                           <input name="father_dob" class="form-control date4" id="picker2-" type="date" placeholder="dd-mm-yyyy" value="<?php if (!empty($notificationData1['father_dob'])) {
                                                                                                                                                                   echo $notificationData1['father_dob'];
                                                                                                                                                                } ?>">
                         </div> -->
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Education</label>
-                           <input name="father_education" class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Education" name="father_education" value="<?php if (!empty($notificationData1['father_education'])) {
+                           <input name="father_education" class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Education" value="<?php if (!empty($notificationData1['father_education'])) {
                                                                                                                                                                                  echo $notificationData1['father_education'];
                                                                                                                                                                               } ?>">
                         </div>
@@ -1089,14 +1134,14 @@
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Organization</label>
-                           <input name="father_organization" class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Organization" name="father_education" value="<?php if (!empty($notificationData1['father_organization'])) {
+                           <input name="father_organization" class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Organization" value="<?php if (!empty($notificationData1['father_organization'])) {
                                                                                                                                                                                        echo $notificationData1['father_organization'];
                                                                                                                                                                                     } ?>">
                         </div>
                         
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Office Telephone</label>
-                           <input name="father_office_telephone" class="form-control date4" id="picker2-" type="text" placeholder="Enter Office Telephone" name="father_education" value="<?php if (!empty($notificationData1['father_office_telephone'])) {
+                           <input name="father_office_telephone" class="form-control date4" id="picker2-" type="text" placeholder="Enter Office Telephone" value="<?php if (!empty($notificationData1['father_office_telephone'])) {
                                                                                                                                                                                           echo $notificationData1['father_office_telephone'];
                                                                                                                                                                                        } ?>">
                         </div>
@@ -1108,27 +1153,27 @@
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Mobile No.</label>
-                           <input name="father_mobile" class="form-control date4" id="fathermobile" type="text" placeholder="Enter Mobile No" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check2();" return false; value="<?php if (!empty($notificationData1['father_mobile'])) {
+                           <input name="father_mobile" class="form-control date4" id="fathermobile" type="text" placeholder="Enter Mobile No" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check2();" value="<?php if (!empty($notificationData1['father_mobile'])) {
                                                                                                                                                                                                                                                                                        echo $notificationData1['father_mobile'];
                                                                                                                                                                                                                                                                                     } ?>" /><span class="fathermobile_for_msg validation_err" id="validation_err2"></span>
 </div>                     
                                 <div class="col-md-4 form-group mb-3">
                                     <label for="address">SSSM ID :</label>
-                                    <input class="form-control" id="fathersssmid" type="text"  value="<?php if (!empty($notificationData1['fatherSSSMID'])) {echo $notificationData1['fatherSSSMID'];} ?>"  placeholder="Enter phone number" name="fatherSSSMID" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
+                                    <input class="form-control" id="fathersssmid" type="text"  value="<?php if (!empty($notificationData1['fatherSSSMID'])) {echo $notificationData1['fatherSSSMID'];} ?>"  placeholder="Enter phone number" name="fatherSSSMID" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check9();" /><span class="fathermobile_for_msg validation_err" id="validation_err9"></span>
                                 </div>
                                 <div class="col-md-4 form-group mb-3">
                                     <label for="address">Aadhar No.:</label>
-                                    <input class="form-control" id="fatherAadharNo" type="text"  value="<?php if (!empty($notificationData1['fatherAadharNo'])) {echo $notificationData1['fatherAadharNo'];} ?>" placeholder="Enter Aadhar No." name="fatherAadharNo" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
+                                    <input class="form-control" id="fatherAadharNo" type="text"  value="<?php if (!empty($notificationData1['fatherAadharNo'])) {echo $notificationData1['fatherAadharNo'];} ?>" placeholder="Enter Aadhar No." name="fatherAadharNo" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
                                 </div>
                                 <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Residental Address</label>
-                           <input class="form-control date4 uperletter" id="picker2-" type="email" placeholder="Enter Residental Address" name="father_res_address" value="<?php if (!empty($notificationData1['father_res_address'])) {
+                           <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Residental Address" name="father_res_address" value="<?php if (!empty($notificationData1['father_res_address'])) {
                                                                                                                                                                      echo $notificationData1['father_res_address'];
                                                                                                                                                                   } ?>">
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Emergency contact No.</label>
-                           <input class="form-control date4" id="picker2-" type="email" placeholder="Enter Emergency contact No." name="father_emergency_contact" value="<?php if (!empty($notificationData1['father_emergency_contact'])) {
+                           <input class="form-control date4" id="picker2-" type="text" placeholder="Enter Emergency contact No." name="father_emergency_contact" value="<?php if (!empty($notificationData1['father_emergency_contact'])) {
                                                                                                                                                                               echo $notificationData1['father_emergency_contact'];
                                                                                                                                                                            } ?>">
                         </div>
@@ -1143,12 +1188,12 @@
                               <div class="input-group-prepend">
                                  <select id="mothername_prefix" class="form-control btn btn-outline-primary dropdown-toggle" name="mothername_prefix" autocomplete="shipping address-level1">
                                     <option <?php if (!empty($notificationData1['mothername_prefix'])) {
-                                                if ($notificationData1['mothername_prefix'] == "Mrs.") {
+                                                if ($notificationData1['mothername_prefix'] == "Mrs" || $notificationData1['mothername_prefix'] == "Mrs.") {
                                                    echo "selected";
                                                 }
                                              } ?> value="Mrs">Mrs.</option>
                                     <option <?php if (!empty($notificationData1['mothername_prefix'])) {
-                                                if ($notificationData1['mothername_prefix'] == "Dr.") {
+                                                if ($notificationData1['mothername_prefix'] == "Dr" || $notificationData1['mothername_prefix'] == "Dr.") {
                                                    echo "selected";
                                                 }
                                              } ?> value="Dr">Dr.</option>
@@ -1203,17 +1248,17 @@
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="phone">Mobile No.</label>
-                           <input class="form-control" id="mothermobile" placeholder="Enter Mobile No." name="mother_mobile" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check3();" return false; value="<?php if (!empty($notificationData1['mother_mobile'])) {
+                           <input class="form-control" id="mothermobile" placeholder="Enter Mobile No." name="mother_mobile" maxlength="10" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check3();" value="<?php if (!empty($notificationData1['mother_mobile'])) {
                                                                                                                                                                                                                                                                      echo $notificationData1['mother_mobile'];
                                                                                                                                                                                                                                                                   } ?>" /><span class="mothermobile_for_msg validation_err" id="validation_err3"></span>
  </div>
                                 <div class="col-md-4 form-group mb-3">
                                     <label for="address">SSSM ID :</label>
-                                    <input class="form-control" id="mothersssmid" type="text" placeholder="Enter SSSM ID" name="motherSSSMID" value="<?php if (!empty($notificationData1['motherSSSMID'])) {echo $notificationData1['motherSSSMID'];} ?>" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
+                                    <input class="form-control" id="mothersssmid" type="text" placeholder="Enter SSSM ID" name="motherSSSMID" value="<?php if (!empty($notificationData1['motherSSSMID'])) {echo $notificationData1['motherSSSMID'];} ?>" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
                                 </div>
                                 <div class="col-md-4 form-group mb-3">
                                     <label for="address">Aadhar No.:</label>
-                                    <input class="form-control" id="motherAadharNo" type="text" placeholder="Enter Aadhar No." name="motherAadharNo" value="<?php if (!empty($notificationData1['motherAadharNo'])) {echo $notificationData1['motherAadharNo'];} ?>" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
+                                    <input class="form-control" id="motherAadharNo" type="text" placeholder="Enter Aadhar No." name="motherAadharNo" value="<?php if (!empty($notificationData1['motherAadharNo'])) {echo $notificationData1['motherAadharNo'];} ?>" maxlength="12" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check8();" /><span class="fathermobile_for_msg validation_err" id="validation_err8"></span>
                                 </div>
                                 <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Residental Address</label>
@@ -1230,7 +1275,7 @@
                         <h4>Guardian Details</h4>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Guardian Name</label>
-                           <input class="form-control date4 uperletter" id="picker2-" type="email" placeholder="Enter Guardian Name" name="guardian_name" value="<?php if (!empty($notificationData1['guardian_name'])) {
+                           <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Guardian Name" name="guardian_name" value="<?php if (!empty($notificationData1['guardian_name'])) {
                                                                                                                                                          echo $notificationData1['guardian_name'];
                                                                                                                                                       } ?>">
                         </div>
@@ -1248,7 +1293,7 @@
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="phone">Mobile No.</label>
-                           <input name="guardian_mobile" class="form-control" placeholder="Enter Mobile No." name="guardian_mobile" maxlength="10" id="guardianmobile" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check4();" return false; value="<?php if (!empty($notificationData1['guardian_mobile'])) {
+                           <input class="form-control" placeholder="Enter Mobile No." name="guardian_mobile" maxlength="10" id="guardianmobile" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check4();" value="<?php if (!empty($notificationData1['guardian_mobile'])) {
                                                                                                                                                                                                                                                                                                 echo $notificationData1['guardian_mobile'];
                                                                                                                                                                                                                                                                                              } ?>" /><span class="guardianmobile_for_msg validation_err" id="validation_err4"></span>
 
@@ -1261,13 +1306,13 @@
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Emergency Contact No.</label>
-                           <input class="form-control date4 uperletter" id="picker2-" type="email" placeholder="Emergency Contact No." name="guardian_emergency_contact" value="<?php if (!empty($notificationData1['guardian_emergency_contact'])) {
+                           <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Emergency Contact No." name="guardian_emergency_contact" value="<?php if (!empty($notificationData1['guardian_emergency_contact'])) {
                                                                                                                                                                         echo $notificationData1['guardian_emergency_contact'];
                                                                                                                                                                      } ?>">
                         </div>
                         <div class="col-md-4 form-group mb-3">
                            <label for="siblings_school">Guardian Relation.</label>
-                           <input class="form-control date4 uperletter" id="picker2-" type="email" placeholder="Enter Guardian Relation" name="guardian_relation" value="<?php if (!empty($notificationData1['guardian_relation'])) {
+                           <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter Guardian Relation" name="guardian_relation" value="<?php if (!empty($notificationData1['guardian_relation'])) {
                                                                                                                                                                   echo $notificationData1['guardian_relation'];
                                                                                                                                                                } ?>">
                         </div>
@@ -1551,6 +1596,29 @@
          if (!firstInvalid) firstInvalid = $('select[name="classname"]');
       } else {
          $('.classname_msg').text("");
+      }
+
+      if (classname === '11' || classname === '12') {
+         var streamId = $('#stream_id').val() || '';
+         if (!streamId || streamId === '' || streamId === 'select') {
+            $('.stream_id_msg').text("This field is required*");
+            missing.push("Stream");
+            if (!firstInvalid) firstInvalid = $('#stream_id');
+         } else {
+            $('.stream_id_msg').text("");
+         }
+
+         var combinationId = $('#combination_id').val() || '';
+         if (!combinationId || combinationId === '' || combinationId === 'select') {
+            $('.combination_id_msg').text("This field is required*");
+            missing.push("Subject Combination");
+            if (!firstInvalid) firstInvalid = $('#combination_id');
+         } else {
+            $('.combination_id_msg').text("");
+         }
+      } else {
+         $('.stream_id_msg').text("");
+         $('.combination_id_msg').text("");
       }
 
       var session_name = $('[name="session_name"]').val() || '';
@@ -2184,6 +2252,168 @@
          if (name === 'application_for') $('.application_for_msg').text('');
          if (name === 'registration_date') $('.registration_date_msg').text('');
       });
+
+      var initialStreamId = @json($assignedStreamId ?? null);
+      var initialCombinationId = @json($assignedCombinationId ?? null);
+
+      function initCombinationSelect2() {
+         if ($.fn.select2) {
+            var comb = $('#combination_id');
+            if (comb.hasClass('select2-hidden-accessible')) {
+               comb.select2('destroy');
+            }
+            comb.select2({
+               width: '100%',
+               placeholder: 'Please select Subject Combination',
+               allowClear: true,
+               minimumResultsForSearch: 0
+            });
+         }
+      }
+
+      function handleSeniorClassStreamSelection(selectedClass, preselectedStreamId, preselectedCombinationId) {
+         selectedClass = (selectedClass || '').trim();
+         if (selectedClass === '11' || selectedClass === '12') {
+            $('#stream_selection_wrapper').slideDown(200);
+            $('#combination_selection_wrapper').slideDown(200, function() {
+               initCombinationSelect2();
+            });
+            loadClassStreams(selectedClass, preselectedStreamId, preselectedCombinationId);
+         } else {
+            $('#stream_selection_wrapper').slideUp(200);
+            $('#combination_selection_wrapper').slideUp(200);
+            $('#stream_id').empty().append(new Option('Please select Stream', ''));
+            var comb = $('#combination_id');
+            if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+               comb.select2('destroy');
+            }
+            comb.empty().append(new Option('Please select Subject Combination', ''));
+            initCombinationSelect2();
+            $('.stream_id_msg').text('');
+            $('.combination_id_msg').text('');
+         }
+      }
+
+      function loadClassStreams(selectedClass, preselectedStreamId, preselectedCombinationId) {
+         var streamSelect = $('#stream_id');
+         streamSelect.empty().append(new Option('Loading streams...', ''));
+         var comb = $('#combination_id');
+         if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+            comb.select2('destroy');
+         }
+         comb.empty().append(new Option('Please select Stream first', ''));
+         initCombinationSelect2();
+
+         $.ajax({
+            url: '{{ url("academic/class-streams") }}',
+            type: 'GET',
+            data: { class_name: selectedClass },
+            success: function(res) {
+               streamSelect.empty();
+               streamSelect.append(new Option('Please select Stream', ''));
+               if (res && res.streams && res.streams.length > 0) {
+                  res.streams.forEach(function(s) {
+                     var opt = new Option(s.stream_name, s.id);
+                     streamSelect.append(opt);
+                  });
+                  if (preselectedStreamId) {
+                     streamSelect.val(preselectedStreamId);
+                     loadStreamCombinations(selectedClass, preselectedStreamId, preselectedCombinationId);
+                  }
+               } else {
+                  streamSelect.append(new Option('No streams available for Class ' + selectedClass, ''));
+               }
+            },
+            error: function() {
+               streamSelect.empty().append(new Option('Failed to load streams', ''));
+            }
+         });
+      }
+
+      function loadStreamCombinations(selectedClass, streamId, preselectedCombinationId) {
+         var combSelect = $('#combination_id');
+         if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+            combSelect.select2('destroy');
+         }
+         combSelect.empty().append(new Option('Loading combinations...', ''));
+         initCombinationSelect2();
+
+         $.ajax({
+            url: '{{ url("academic/stream-combinations") }}',
+            type: 'GET',
+            data: { class_name: selectedClass, stream_id: streamId },
+            success: function(res) {
+               if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+                  combSelect.select2('destroy');
+               }
+               combSelect.empty();
+               combSelect.append(new Option('Please select Subject Combination', ''));
+               if (res && res.combinations && res.combinations.length > 0) {
+                  res.combinations.forEach(function(c) {
+                     var label = c.combination_name;
+                     if (c.alise_name && c.alise_name.trim() !== '') {
+                        label += ' (' + c.alise_name + ')';
+                     }
+                     var opt = new Option(label, c.id);
+                     combSelect.append(opt);
+                  });
+                  if (preselectedCombinationId) {
+                     combSelect.val(preselectedCombinationId);
+                  }
+               } else {
+                  combSelect.append(new Option('No combinations available for this stream', ''));
+               }
+               initCombinationSelect2();
+            },
+            error: function() {
+               if ($.fn.select2 && combSelect.hasClass('select2-hidden-accessible')) {
+                  combSelect.select2('destroy');
+               }
+               combSelect.empty().append(new Option('Failed to load combinations', ''));
+               initCombinationSelect2();
+            }
+         });
+      }
+
+      $('#classname').on('change', function() {
+         var val = $(this).val();
+         handleSeniorClassStreamSelection(val);
+      });
+
+      $('#stream_id').on('change', function() {
+         var streamId = $(this).val();
+         var selectedClass = $('#classname').val();
+         var isSenior = (selectedClass === '11' || selectedClass === '12');
+         if (isSenior) {
+            var streamText = $('#stream_id option:selected').text().toUpperCase();
+            if (streamText.indexOf('SCIENCE') !== -1 || streamId == 3) {
+               $('#student_section_name').val('Kautilya').trigger('change');
+            } else if (streamText.indexOf('COMMERCE') !== -1 || streamText.indexOf('HUMANITIES') !== -1 || streamId == 1 || streamId == 2) {
+               $('#student_section_name').val('Ramanujan').trigger('change');
+            }
+         }
+         if (streamId) {
+            $('.stream_id_msg').text('');
+            loadStreamCombinations(selectedClass, streamId);
+         } else {
+            var comb = $('#combination_id');
+            if ($.fn.select2 && comb.hasClass('select2-hidden-accessible')) {
+               comb.select2('destroy');
+            }
+            comb.empty().append(new Option('Please select Stream first', ''));
+            initCombinationSelect2();
+         }
+      });
+
+      $('#combination_id').on('change', function() {
+         if ($(this).val()) {
+            $('.combination_id_msg').text('');
+         }
+      });
+
+      if ($('#classname').val()) {
+         handleSeniorClassStreamSelection($('#classname').val(), initialStreamId, initialCombinationId);
+      }
    });
 </script>
 
@@ -2205,10 +2435,10 @@ function showSections() {
             headers: { 'X-CSRF-TOKEN': token },
             dataType: 'json',
             success: function(data) {
-                $('#section_name').html('<option value=""> -- Select All -- </option>');
+                $('#siblings_section_name').html('<option value=""> -- Select All -- </option>');
                 for (var i = 0; i < data.length; i++) {
                     var sectionData = data[i].section_name;
-                    $('#section_name').append('<option value="' + sectionData + '">' + sectionData + '</option>');
+                    $('#siblings_section_name').append('<option value="' + sectionData + '">' + sectionData + '</option>');
                 }
             },
             error: function(xhr, status, error) {
@@ -2216,7 +2446,7 @@ function showSections() {
             }
         });
     } else {
-        $('#section_name').html('<option value="">Select class first</option>');
+        $('#siblings_section_name').html('<option value="">Select class first</option>');
     }
 }
 

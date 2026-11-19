@@ -68,6 +68,11 @@ class ClassesController extends Controller
 
     public function store(Request $request)
     {   
+        $className = $request->class_name;
+        if (strcasecmp($className, 'kg1') === 0) $className = 'KG1';
+        if (strcasecmp($className, 'kg2') === 0) $className = 'KG2';
+        $request->merge(['class_name' => $className]);
+
         $existingRecord = Classes::where('class_name', $request->class_name)
                                  ->where('section_name', $request->section_name)->where('is_delete',0)
                                  ->first();
@@ -108,6 +113,8 @@ class ClassesController extends Controller
 
     public function storeg(Request $request){
         $class_name = $request['class_name'];
+        if (strcasecmp($class_name, 'kg1') === 0) $class_name = 'KG1';
+        if (strcasecmp($class_name, 'kg2') === 0) $class_name = 'KG2';
 
         if (strlen($class_name) < 2) { // Check if the length is less than 2
             $class_name = '0' . $class_name; // Add '0' prefix

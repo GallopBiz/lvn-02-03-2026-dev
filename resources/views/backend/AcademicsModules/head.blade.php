@@ -373,7 +373,7 @@
           return
         }
         
-        let classBelowFirst = ['Nursery', 'Kg1', 'Kg2']
+        let classBelowFirst = ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2']
         if(classBelowFirst.includes(classvalue)){
           $("input.class_E1").attr("disabled", false);
           $("input.class_E2").attr("disabled", false);

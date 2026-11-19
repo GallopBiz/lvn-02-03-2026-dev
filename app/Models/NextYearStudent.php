@@ -10,11 +10,14 @@ class NextYearStudent extends Model
     protected $table = 'student_registration'; // Same table name
 
     protected $fillable = [
+        'id',
         'application_for',
         'form_number',
         'scholar_no',
         'date_of_birth',
         'class_name',
+        'section_name',
+        'class_id',
         'student_name',
         'session_name',
         'json_str',
@@ -24,6 +27,10 @@ class NextYearStudent extends Model
         'inq_mode',
         'driver',
         'status',
+        'next_year',
+        'next_year_section',
+        'next_year_stream',
+        'next_year_subject_combination',
         'type',
         'password',
         'created_at',

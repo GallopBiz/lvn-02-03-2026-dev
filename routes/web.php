@@ -365,12 +365,16 @@ Route::group(['middleware' => ['auth', 'check.permission']], function() {
     Route::get('student-registrations', [StudentRegistrationController::class,'student_registrations'])->name('student-registrations');
     Route::get('add-student-registrations',[StudentRegistrationController::class,'add_student_registrations'])->name('add-student-registrations');
     Route::get('curren-year-student-registrations',[StudentRegistrationController::class,'curren_year_student_registrations'])->name('curren-year-student-registrations');
+    Route::get('next-year-student-registrations', [StudentRegistrationController::class, 'next_year_student_registrations'])->name('next-year-student-registrations');
     Route::get('archived-students', [StudentRegistrationController::class,'archived_students'])->name('archived-students');
     Route::post('archive-student/{id}', [StudentRegistrationController::class,'archive_student'])->name('archive-student');
     Route::post('restore-student/{id}', [StudentRegistrationController::class,'restore_student'])->name('restore-student');
     Route::post('save-student-registration', [StudentRegistrationController::class, 'save_student_registration']);
     Route::post('getDataByFormNumber', [StudentRegistrationController::class, 'getDataByFormNumber']);
     Route::post('getDataByFormNumberstudent_registration', [StudentRegistrationController::class, 'getDataByFormNumberstudent_registration']);
+    Route::match(['get', 'post'], 'class-section-strength', [StudentRegistrationController::class, 'getClassSectionStrength'])->name('class-section-strength');
+    Route::match(['get', 'post'], 'academic/class-streams', [StudentRegistrationController::class, 'getClassStreams'])->name('academic.class-streams');
+    Route::match(['get', 'post'], 'academic/stream-combinations', [StudentRegistrationController::class, 'getStreamCombinations'])->name('academic.stream-combinations');
     /* csv export */
     Route::post('/export_registrations.csv', [CSVController::class, 'export_registrations'])->name('export_registrations.csv');
     Route::match(['get', 'post'], '/export_selection_process.csv', [CSVController::class, 'export_selection_process'])->name('export_selection_process.csv');
@@ -444,6 +448,7 @@ Route::group(['middleware' => ['auth', 'check.permission']], function() {
 	Route::get('/student-transfer', [StudentTransferController::class, 'index'])->name('student.transfer');
 	Route::post('/fetch-students', [StudentTransferController::class, 'fetchStudents'])->name('student.fetch');
 	Route::post('/promote-students', [StudentTransferController::class, 'promote'])->name('student.promote');
+	Route::post('/allocate-sections', [StudentTransferController::class, 'allocateSections'])->name('student.allocate_sections');
 
     // Employee Leave Balance reset (trigger console command from web)
     Route::post('employee/leave/reset', [EmployeeLeaveBalanceController::class, 'reset'])->name('employee.leave.reset');

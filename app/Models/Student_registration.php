@@ -11,10 +11,42 @@ class Student_registration extends Model
     protected $connection = 'dynamic';
     protected $table="student_registration";
     protected $primarykey="id";
-    protected $fillable = ['application_for','form_number','scholar_no','date_of_birth','class_name','student_name','session_name','staff_name','json_str','jsondata','phone_number','mobile_number','inq_mode','status','transfer_status','transferred_at','tc_certificate_id','is_archived','created_at','updated_at'];
+    protected $fillable = [
+        'application_for',
+        'form_number',
+        'scholar_no',
+        'date_of_birth',
+        'class_name',
+        'section_name',
+        'class_id',
+        'student_name',
+        'session_name',
+        'staff_name',
+        'driver',
+        'password',
+        'type',
+        'registration_date',
+        'json_str',
+        'jsondata',
+        'phone_number',
+        'mobile_number',
+        'inq_mode',
+        'status',
+        'transfer_status',
+        'transferred_at',
+        'tc_certificate_id',
+        'is_archived',
+        'next_year',
+        'next_year_section',
+        'next_year_stream',
+        'next_year_subject_combination',
+        'created_at',
+        'updated_at'
+    ];
 
     protected $casts = [
         'is_archived' => 'boolean',
+        'next_year' => 'integer',
     ];
 
     protected static function booted()
@@ -22,6 +54,12 @@ class Student_registration extends Model
         static::addGlobalScope('not_archived', function ($query) {
             $query->where(function ($q) {
                 $q->where('is_archived', 0)->orWhereNull('is_archived');
+            });
+        });
+
+        static::addGlobalScope('not_next_year', function ($query) {
+            $query->where(function ($q) {
+                $q->where('next_year', 0)->orWhereNull('next_year');
             });
         });
     }
@@ -43,11 +81,17 @@ class Student_registration extends Model
         $table = $this->getTable();
         $hasArchived = $schema->hasColumn($table, 'is_archived');
         $hasTransferStatus = $schema->hasColumn($table, 'transfer_status');
+        $hasNextYear = $schema->hasColumn($table, 'next_year');
 
-        return $query->where(function ($q) use ($hasArchived, $hasTransferStatus) {
+        return $query->where(function ($q) use ($hasArchived, $hasTransferStatus, $hasNextYear) {
             if ($hasArchived) {
                 $q->where(function ($sub) {
                     $sub->where('is_archived', 0)->orWhereNull('is_archived');
+                });
+            }
+            if ($hasNextYear) {
+                $q->where(function ($sub) {
+                    $sub->where('next_year', 0)->orWhereNull('next_year');
                 });
             }
             $q->where(function ($sub) {
@@ -64,5 +108,15 @@ class Student_registration extends Model
     public function scopeArchived($query)
     {
         return $query->withoutGlobalScope('not_archived')->where('is_archived', 1);
+    }
+
+    public function scopeNextYear($query)
+    {
+        return $query->withoutGlobalScope('not_next_year')->where('next_year', 1);
+    }
+
+    public function scopeWithNextYear($query)
+    {
+        return $query->withoutGlobalScope('not_next_year');
     }
 }

@@ -176,9 +176,12 @@ class CSVController extends Controller
             'Scholar No',
             'DOB',
             'Class Name',
+            'Section',
             'Student Name',
             'Father Name',
-            'Session Name',
+            'Current Session',
+            'Admission Session',
+            'Batch',
             'Mobile Number',
             'Gender',
             'Present Address',
@@ -201,9 +204,23 @@ class CSVController extends Controller
             $jsonData = $jsonRows[$item->id] ?? [];
             $studentName = trim(($jsonData['studentname_prefix'] ?? '') . ' ' . ($item->student_name ?? $jsonData['studentname'] ?? ''));
             $fatherName = trim(($jsonData['fathername_prefix'] ?? '') . ' ' . ($jsonData['student_father_name'] ?? $jsonData['fathername'] ?? ''));
-            $sessionName = $jsonData['batch'] ?? $jsonData['intended_session'] ?? $item->session_name ?? '';
+            $rawCurrentSession = $item->session_name ?? '';
+            $currentSession = str_replace('_', '-', $rawCurrentSession);
+            $isNextY = !empty($jsonData['next_year']) && ($jsonData['next_year'] == 1 || $jsonData['next_year'] === '1');
+            $admissionSession = $jsonData['admission_session'] ?? $jsonData['intended_session'] ?? null;
+            if ($isNextY && empty($admissionSession) && !empty($rawCurrentSession)) {
+                $sessParts = preg_split('/[_-]/', $rawCurrentSession);
+                if (count($sessParts) === 2 && is_numeric($sessParts[0]) && is_numeric($sessParts[1])) {
+                    $admissionSession = ((int)$sessParts[0] + 1) . '-' . ((int)$sessParts[1] + 1);
+                }
+            }
+            if (empty($admissionSession)) {
+                $admissionSession = $rawCurrentSession;
+            }
+            $admissionSession = str_replace('_', '-', $admissionSession);
+            $batchVal = str_replace('_', '-', $jsonData['batch'] ?? $admissionSession);
             $mobileNumber = $jsonData['father_mobile'] ?? $jsonData['mobile_number'] ?? $item->mobile_number ?? '';
-            $sectionName = $jsonData['section_name'] ?? '';
+            $sectionName = $item->section_name ?? ($jsonData['section_name'] ?? '');
 
             $csv->insertOne([
                 $index + 1,
@@ -211,9 +228,12 @@ class CSVController extends Controller
                 $item->scholar_no ?? '',
                 $this->formatCsvDate($item->date_of_birth ?? null),
                 $item->class_name ?? '',
+                $sectionName,
                 $studentName,
                 $fatherName,
-                $sessionName,
+                $currentSession,
+                $admissionSession,
+                $batchVal,
                 $mobileNumber,
                 $this->formatCsvValue($jsonData['gender'] ?? ''),
                 $this->formatCsvValue($jsonData['present_address'] ?? ''),

@@ -27,7 +27,7 @@ class PrimaryGrupController extends Controller
             // Check if the selected class allows this option
             if (
                 ($option === 'E1' || $option === 'E2') &&
-                in_array($class_name, ['Nursery', 'Kg1', 'Kg2'])
+                in_array($class_name, ['Nursery', 'KG1', 'KG2', 'Kg1', 'Kg2'])
             ) {
                 if ($request->has($option)) {
                     $selectedOptions[] = $option;

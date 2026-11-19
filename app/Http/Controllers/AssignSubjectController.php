@@ -154,38 +154,67 @@ class AssignSubjectController extends Controller
                         'is_delete' => 0,
                     ]
                 );
-                /* DB::table('subject_assign_student')->updateOrInsert(
-                    [
-                        'class_name' => $assign['class_name'],
-                        'students_details' => $assign['student_id'],
-                    ],
-                    [
-                        'assign_this_combtoall' => $assign['combination_name'],
-                        'is_delete' => 0,
-                        'updated_at' => now()
-                    ]
-                ); */
+
+                $student = DB::connection('dynamic')->table('student_registration')->where('id', $assign['student_id'])->first();
+                if ($student && !empty($student->json_str)) {
+                    $comb = DB::connection('dynamic')->table('subject_combinations')->where('id', $assign['combination_name'])->first();
+                    $json = json_decode($student->json_str, true);
+                    if (is_array($json)) {
+                        $json['combination_id'] = $assign['combination_name'];
+                        if ($comb && !empty($comb->streams)) {
+                            $json['stream_id'] = $comb->streams;
+                        }
+                        DB::connection('dynamic')->table('student_registration')->where('id', $student->id)->update([
+                            'json_str' => json_encode($json),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
             }
 
             return response()->json(['status' => 'success']);
         }else{
+            $dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
+            if (!empty($dbName)) {
+                \Illuminate\Support\Facades\Config::set('database.connections.dynamic.database', $dbName);
+                DB::purge('dynamic');
+            }
+            $connPrefix = \Illuminate\Support\Facades\Config::get('database.connections.dynamic.database') ? 'dynamic.' : '';
+
             $validated = $request->validate([
                 'studentclass' => 'required',
-                'student_id' => 'required|exists:student_registration,id',
-                'combination_name' => 'required|exists:subject_combinations,id',
+                'student_id' => 'required|exists:' . $connPrefix . 'student_registration,id',
+                'combination_name' => 'required|exists:' . $connPrefix . 'subject_combinations,id',
             ]);
-            DB::table('subject_assign_student')->updateOrInsert(
+            DB::connection('dynamic')->table('subject_assign_student')->updateOrInsert(
                 [
-                    'class_name' => $validated['studentclass'],
                     'students_details' => $validated['student_id'],
                 ],
                 [
+                    'class_name' => $validated['studentclass'],
                     'section_name' => $request->section_name,
                     'assign_this_combtoall' => $validated['combination_name'],
                     'is_delete' => 0,
                     'updated_at' => now()
                 ]
             );
+
+            $student = DB::connection('dynamic')->table('student_registration')->where('id', $validated['student_id'])->first();
+            if ($student && !empty($student->json_str)) {
+                $comb = DB::connection('dynamic')->table('subject_combinations')->where('id', $validated['combination_name'])->first();
+                $json = json_decode($student->json_str, true);
+                if (is_array($json)) {
+                    $json['combination_id'] = $validated['combination_name'];
+                    if ($comb && !empty($comb->streams)) {
+                        $json['stream_id'] = $comb->streams;
+                    }
+                    DB::connection('dynamic')->table('student_registration')->where('id', $student->id)->update([
+                        'json_str' => json_encode($json),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
             return redirect()->route('AssignSubject')->with('success','AssignSubject has been Updated successfully.');
         }
 

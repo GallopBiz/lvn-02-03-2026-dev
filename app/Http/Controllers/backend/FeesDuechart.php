@@ -66,6 +66,9 @@ class FeesDuechart extends Controller
         $students = DB::connection('dynamic')->table('student_registration')
             ->where('is_archived', 0)
             ->where('class_name', $classname)
+            ->where(function ($q) {
+                $q->where('next_year', 0)->orWhereNull('next_year');
+            })
             ->get();
         $generatedCharts = DB::connection('dynamic')->table('generate_duechartstatus')
             ->where('class_name', $classname)
@@ -189,7 +192,7 @@ class FeesDuechart extends Controller
                     //     unset($decode1["fees_date"][$index]);
                     //     unset($decode1["due_date"][$index]);
                     //     unset($decode1["term"][$index]);
-
+                    // 
                     //     // Reindex the arrays
                     //     $decode1["account_name"] = array_values($decode1["account_name"]);
                     //     $decode1["fees"] = array_values($decode1["fees"]);
@@ -266,7 +269,7 @@ class FeesDuechart extends Controller
                     //     unset($decode1["fees_date"][$index1]);
                     //     unset($decode1["due_date"][$index1]);
                     //     unset($decode1["term"][$index1]);
-
+                    // 
                     //     // Reindex the arrays
                     //     $decode1["account_name"] = array_values($decode1["account_name"]);
                     //     $decode1["fees"] = array_values($decode1["fees"]);
@@ -317,7 +320,7 @@ class FeesDuechart extends Controller
             //     // }
             //     // Create a new array to hold the modified subarrays
             //     $newData = [];
-
+            // 
             //     foreach ($decode1 as $key => $values) {
             //         // Check if the index to remove is within bounds for this subarray
             //         if ($indexToRemove !== false && isset($values[$indexToRemove])) {
@@ -326,7 +329,7 @@ class FeesDuechart extends Controller
             //             // Reindex the array
             //             $values = array_values($values);
             //         }
-
+            // 
             //         // Add the modified subarray to the new array
             //         $newData[$key] = $values;
             //     }
@@ -336,7 +339,7 @@ class FeesDuechart extends Controller
             //             $feesSum += intval($fee); // Convert to integer and add to the sum
             //         }
             //     }
-                
+            //     
             //     $json = json_encode($newData);
             //     $json1 = [
             //         'id' => $decode[0]['id'],
@@ -404,26 +407,6 @@ class FeesDuechart extends Controller
             ->with('data', $insertArrnext);
     }
 
-    // public function generate_due_chart_list($id,$session){
-    //     // $data = session('data');
-    //     // $data = Generate_duechartstatus::All();
-
-    //    $data = DB::table('generate_duechartstatus')
-    //         ->join('student_registration', 'generate_duechartstatus.student_id', '=', 'student_registration.id')
-    //         ->select('generate_duechartstatus.*', 'student_registration.student_name')
-    //         ->where('generate_duechartstatus.class_name', $id)
-    //         ->get();
-    //     $info['id'] = $id;
-    //     $info['session'] = $session;
-    //     $data = $data->map(function ($i) {
-    //         return (array) $i;
-    //     })->toArray();
-    //     $classlist = DB::table('class_name')->select('class_name')->distinct()->get();
-    //     return view('backend.FeesDue-chart.Generate_due_chart_list', compact('info','data','classlist'));
-    //     // return view('backend.FeesDue-chart.Generate_due_chart_list',compact('data'));
-    // }
-
-
     public function generate_due_chart_list($id, Request $request, $session_send = null) {
         $searchTerm = $request->input('search_term');
         $query = DB::connection('dynamic')->table('generate_duechartstatus')
@@ -445,21 +428,4 @@ class FeesDuechart extends Controller
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
         return view('backend.FeesDue-chart.Generate_due_chart_list', compact('info', 'data', 'classlist'));
     }
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }

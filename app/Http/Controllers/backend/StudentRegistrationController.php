@@ -37,20 +37,67 @@ class StudentRegistrationController extends Controller
 
         $dynamicConnectionName = 'dynamic';
         $dynamicConfig = Config::get("database.connections.{$dynamicConnectionName}");
-        $dynamicConfig['database'] = $db_name;
-        Config::set('database.connections.dynamic', $dynamicConfig);
-        DB::reconnect('dynamic');
+        if (($dynamicConfig['database'] ?? null) !== $db_name) {
+            $dynamicConfig['database'] = $db_name;
+            Config::set('database.connections.dynamic', $dynamicConfig);
+            DB::purge('dynamic');
+            DB::reconnect('dynamic');
+        }
 
     }
 
     private function activeStudentRegistrationQuery()
     {
-        return DB::connection('dynamic')
+        $query = DB::connection('dynamic')
             ->table('student_registration')
-            ->where(function ($query) {
-                $query->where('is_archived', 0)
+            ->where(function ($q) {
+                $q->where('is_archived', 0)
                     ->orWhereNull('is_archived');
+            })
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', '!=', 't');
             });
+
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'next_year')) {
+            $query->where(function ($q) {
+                $q->where('next_year', 0)
+                    ->orWhereNull('next_year');
+            });
+        }
+
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status')) {
+            $query->where(function ($q) {
+                $q->whereNull('transfer_status')
+                    ->orWhere('transfer_status', '!=', 'transferred');
+            });
+        }
+
+        return $query;
+    }
+
+    private function nextYearStudentRegistrationQuery()
+    {
+        $query = DB::connection('dynamic')
+            ->table('student_registration')
+            ->where(function ($q) {
+                $q->where('is_archived', 0)
+                    ->orWhereNull('is_archived');
+            })
+            ->where(function ($q) {
+                $q->whereNull('status')
+                    ->orWhere('status', '!=', 't');
+            })
+            ->where('next_year', 1);
+
+        if (Schema::connection('dynamic')->hasColumn('student_registration', 'transfer_status')) {
+            $query->where(function ($q) {
+                $q->whereNull('transfer_status')
+                    ->orWhere('transfer_status', '!=', 'transferred');
+            });
+        }
+
+        return $query;
     }
 
     public function index(Request $request)
@@ -160,22 +207,35 @@ public function downloadcertificate($id)
 }
 
     /*List All Inquiry*/
-    public function student_registrations()
+    public function student_registrations(Request $request = null)
     {   
-        $all_inquiry = $this->activeStudentRegistrationQuery()->where('status','=','r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get() ; 
-        // return view('backend.student_registrations.index',compact('all_inquiry'));
+        $activeTab = ($request && $request->filled('tab')) ? $request->get('tab') : request('tab', 'current');
+        if ($activeTab === 'next_year') {
+            $all_inquiry = $this->nextYearStudentRegistrationQuery()->where('status', '=', 'r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
+        } else {
+            $all_inquiry = $this->activeStudentRegistrationQuery()->where('status','=','r')->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
+        }
 
         $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+        $archivedCount = DB::connection('dynamic')->table('student_registration')->where('is_archived', 1)->count();
+        $currentCount = $this->activeStudentRegistrationQuery()->where('status', '=', 'r')->count();
+        $nextYearCount = $this->nextYearStudentRegistrationQuery()->where('status', '=', 'r')->count();
 
-        return view('backend.student_registrations.index', compact('all_inquiry','classlist'));
+        return view('backend.student_registrations.index', compact('all_inquiry','classlist', 'archivedCount', 'activeTab', 'currentCount', 'nextYearCount'));
+    }
 
+    public function next_year_student_registrations(Request $request)
+    {
+        $request->merge(['tab' => 'next_year']);
+        return $this->student_registrations($request);
     } 
     
     public function curren_year_student_registrations(){
         $currentSchoolYear = session('db_names');
 		// print_r($currentSchoolYear);die;
         $all_inquiry = $this->activeStudentRegistrationQuery()->where('status','=','r')->where('session_name', $currentSchoolYear)->get(); 
-        return view('backend.student_registrations.currentsessionregistration', compact('all_inquiry'));
+        $archivedCount = DB::connection('dynamic')->table('student_registration')->where('is_archived', 1)->where('session_name', $currentSchoolYear)->count();
+        return view('backend.student_registrations.currentsessionregistration', compact('all_inquiry', 'archivedCount'));
 
     } 
 
@@ -528,14 +588,161 @@ public function downloadcertificate($id)
 
         // print_r($jsonStr);
 
+        $selectedClass = $request->classname;
+        if (strcasecmp($selectedClass, 'kg1') === 0) $selectedClass = 'KG1';
+        if (strcasecmp($selectedClass, 'kg2') === 0) $selectedClass = 'KG2';
+
+        $isNextYear = !empty($request->next_year) && ($request->next_year == 1 || $request->next_year === '1');
+        $inquiryRecord = null;
+        if (!empty($request->iid) || !empty($request->inquiry_id)) {
+            $inqLookupId = !empty($request->iid) ? $request->iid : $request->inquiry_id;
+            $inquiryRecord = DB::connection('dynamic')->table('inquiry_registration')->where('id', $inqLookupId)->first();
+        }
+        if (!$isNextYear && $inquiryRecord && (!empty($inquiryRecord->next_year) && ($inquiryRecord->next_year == 1 || $inquiryRecord->next_year === '1'))) {
+            $isNextYear = true;
+        }
+
+        $selectedSection = $request->section_name ?? $request->section ?? null;
+        $applicableClasses = [
+            'nursery', 'kg1', 'kg2',
+            '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
+            '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ];
+        $isApplicable = in_array(strtolower(trim($selectedClass ?? '')), $applicableClasses, true);
+
+        if ($isApplicable) {
+            if ($isNextYear) {
+                // Next Year new admissions are temporarily held in Section D until session transition
+                if (empty($selectedSection)) {
+                    $selectedSection = 'D';
+                }
+            } else {
+                // New Admissions for current session: Apply Round Robin based on current section strength
+                // if section is not explicitly chosen or is Section D
+                if (empty($selectedSection) || $selectedSection === 'D') {
+                    $regularSections = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+                    $counts = [
+                        'Aryabhatta' => 0,
+                        'Kautilya'   => 0,
+                        'Ramanujan'  => 0,
+                    ];
+
+                    $existingStudents = DB::connection('dynamic')->table('student_registration')
+                        ->where('class_name', $selectedClass)
+                        ->where(function ($q) {
+                            $q->where('is_archived', 0)
+                                ->orWhereNull('is_archived');
+                        })
+                        ->where(function ($q) {
+                            $q->whereNull('status')->orWhereNotIn('status', ['t', 'archived']);
+                        })
+                        ->where(function ($q) {
+                            $q->where('next_year', 0)
+                                ->orWhereNull('next_year');
+                        })
+                        ->get();
+
+                    foreach ($existingStudents as $es) {
+                        $sName = trim((string)$es->section_name);
+                        foreach ($regularSections as $rSec) {
+                            if (strcasecmp($sName, $rSec) === 0) {
+                                $counts[$rSec]++;
+                                break;
+                            }
+                        }
+                    }
+
+                    $bestSection = 'Aryabhatta';
+                    $minCount = $counts['Aryabhatta'];
+                    foreach ($regularSections as $candidate) {
+                        if ($counts[$candidate] < $minCount) {
+                            $minCount = $counts[$candidate];
+                            $bestSection = $candidate;
+                        }
+                    }
+
+                    $selectedSection = $bestSection;
+                }
+            }
+        }
+
+        $isSeniorClass = in_array(trim((string)$selectedClass), ['11', '12'], true);
+        if ($isSeniorClass) {
+            $streamId = $request->stream_id ?? null;
+            if (!empty($streamId) && (empty($selectedSection) || $selectedSection === 'D')) {
+                $streamRecord = DB::connection('dynamic')->table('streams')->where('id', $streamId)->first();
+                $streamName = $streamRecord ? strtoupper(trim($streamRecord->streams)) : '';
+                if ($streamName === 'SCIENCE' || (int)$streamId === 3) {
+                    $selectedSection = 'Kautilya';
+                } elseif (in_array($streamName, ['COMMERCE', 'HUMANITIES'], true) || in_array((int)$streamId, [1, 2], true)) {
+                    $selectedSection = 'Ramanujan';
+                }
+            }
+        }
+
+        $classId = null;
+        if (!empty($selectedClass)) {
+            $classQuery = DB::connection('dynamic')->table('classes')->where('class_name', $selectedClass)->where('is_delete', 0);
+            if (!empty($selectedSection)) {
+                $matchedClass = (clone $classQuery)->where('section_name', $selectedSection)->first();
+                if ($matchedClass) {
+                    $classId = $matchedClass->id;
+                }
+            }
+            if (empty($classId)) {
+                $firstClass = (clone $classQuery)->first();
+                if ($firstClass) {
+                    $classId = $firstClass->id;
+                }
+            }
+        }
+
+        $calcNextSession = function($sess) {
+            $parts = preg_split('/[_-]/', trim((string)$sess));
+            if (count($parts) === 2 && is_numeric($parts[0]) && is_numeric($parts[1])) {
+                return ((int)$parts[0] + 1) . '_' . ((int)$parts[1] + 1);
+            }
+            return $sess;
+        };
+
+        $currentSession = $request->session_name ?: (session('db_names') ?: ($_COOKIE['selectedYear'] ?? '2025_2026'));
+        $admissionSession = $isNextYear ? $calcNextSession($currentSession) : $currentSession;
+
+        $nextYearSection = $isNextYear ? ($selectedSection ?: 'D') : null;
+        $nextYearStream = ($isNextYear && $isSeniorClass) ? ($request->stream_id ?? null) : null;
+        $nextYearComb = ($isNextYear && $isSeniorClass) ? ($request->combination_id ?? null) : null;
+
+        $postData['classname'] = $selectedClass;
+        $postData['section_name'] = $selectedSection;
+        $postData['class_id'] = $classId;
+        $postData['next_year'] = $isNextYear ? 1 : 0;
+        $postData['next_year_section'] = $nextYearSection;
+        $postData['next_year_stream'] = $nextYearStream;
+        $postData['next_year_subject_combination'] = $nextYearComb;
+        $postData['admission_session'] = $admissionSession;
+        $postData['intended_session'] = $admissionSession;
+        if (empty($postData['batch']) || ($isNextYear && $postData['batch'] === $currentSession)) {
+            $postData['batch'] = $admissionSession;
+        }
+
+        $isSeniorClass = in_array(trim((string)$selectedClass), ['11', '12'], true);
+        if ($isSeniorClass) {
+            $postData['stream_id'] = $request->stream_id ?? null;
+            $postData['combination_id'] = $request->combination_id ?? null;
+        }
+
         $insertArr  = [
             'application_for'=>$request->application_for,
             'form_number'=>$request->form_number,
             'date_of_birth'=>$request->student_dob,
-            'class_name'=>$request->classname,
+            'class_name'=>$selectedClass,
+            'section_name'=>$selectedSection,
+            'class_id'=>$classId,
             'student_name'=>$request->studentname,
-            // 'driver'=>$request->driver_name,
+            'driver'=>$request->driver_name ?? '',
             'staff_name' => (!empty($request->staff_name) && is_array($request->staff_name)) ? ($request->staff_name[0] ?? '') : (!empty($request->staff_name) ? $request->staff_name : ''),
+            'mobile_number' => $request->mobile_number ?? '',
+            'phone_number' => $request->phone_number ?? '',
     	    'scholar_no'=>$request->scholar_no,
             'session_name'=>$request->session_name,
             'password'=>Hash::make("LVN@123"),
@@ -543,6 +750,10 @@ public function downloadcertificate($id)
             'inq_mode'=>'on',
             'status'=>'r',
             'type'=>'s',
+            'next_year' => $isNextYear ? 1 : 0,
+            'next_year_section' => $nextYearSection,
+            'next_year_stream' => $nextYearStream,
+            'next_year_subject_combination' => $nextYearComb,
             // 'json_str' => $jsonStr 
             'json_str'=>json_encode($postData),
 			'registration_date'=> !empty($request->registration_date) ? $request->registration_date : date('Y-m-d'),
@@ -558,9 +769,29 @@ public function downloadcertificate($id)
             'remark'         => $request->remark,
         ]);**/
 
-        DB::connection('dynamic')->table("inquiry_registration")->where('id', $request->iid)->update(['is_delete' => 1]);
+        $inqDeleteId = !empty($request->iid) ? $request->iid : (!empty($request->inquiry_id) ? $request->inquiry_id : null);
+        if (!empty($inqDeleteId)) {
+            DB::connection('dynamic')->table("inquiry_registration")->where('id', $inqDeleteId)->update(['is_delete' => 1]);
+        }
         $uid = DB::connection('dynamic')->table('student_registration')->get()->last()->id;
         DB::connection('dynamic')->table('model_has_roles')->insert(['role_id' => 2,'model_id' => $uid]);
+
+        if ($isSeniorClass && !empty($request->combination_id)) {
+            DB::connection('dynamic')->table('subject_assign_student')->updateOrInsert(
+                [
+                    'students_details' => $uid,
+                ],
+                [
+                    'class_name' => $selectedClass,
+                    'section_name' => $selectedSection,
+                    'assign_this_combtoall' => $request->combination_id,
+                    'is_delete' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
+        }
+
        return redirect()->route('registrationviewlist',['id'=>$uid])->with('success', 'Student Successfully Registred With Scholar Number - ' .$request->scholar_no );
     
     }
@@ -613,30 +844,87 @@ public function downloadcertificate($id)
 
     public function getDataByFormNumberstudent_registration(Request $request)
     {       
-            
         $form_number = $request->form_number;
-        $inquiry_data = DB::connection('dynamic')
-         ->table('inquiry_registration')
-         ->select('*')
-         ->where('status', 'i')
-         ->where(function($query) use ($form_number) {
-             $query->where('form_number', $form_number)
-                   ->orWhere('student_name', $form_number)
-                   ->orWhereJsonContains('json_str->fathername', $form_number)
-                   ->orWhereJsonContains('json_str->fathermobile', $form_number)
-                   ->orWhereJsonContains('json_str->mothermobile', $form_number)
-                   ->orWhereJsonContains('json_str->mothername', $form_number);
-         })
-         ->first();
-         $da=json_decode($inquiry_data->json_str);
-         $statename= $da->state;
-         $statevalue = DB::connection('dynamic')
-         ->table('states')
-         ->where('name', $statename)
-         ->get();
-         foreach($statevalue as $v){ $statevalue= $v->id; }
+        $inquiry_id = $request->inquiry_id ?? $request->id;
+
+        $inquiryQuery = DB::connection('dynamic')
+            ->table('inquiry_registration')
+            ->select('*')
+            ->where('status', 'i')
+            ->where(function ($q) {
+                $q->where('is_delete', 0)
+                  ->orWhereNull('is_delete');
+            });
+
+        if (!empty($inquiry_id)) {
+            $inquiry_data = (clone $inquiryQuery)->where('id', $inquiry_id)->first();
+        } else {
+            $inquiry_data = (clone $inquiryQuery)
+                ->where(function($query) use ($form_number) {
+                    $query->where('form_number', $form_number)
+                          ->orWhere('student_name', $form_number)
+                          ->orWhereJsonContains('json_str->fathername', $form_number)
+                          ->orWhereJsonContains('json_str->fathermobile', $form_number)
+                          ->orWhereJsonContains('json_str->mothermobile', $form_number)
+                          ->orWhereJsonContains('json_str->mothername', $form_number);
+                })
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        // Fallback to latest inquiry matching id or form_number only if no active non-deleted record exists
+        if (!$inquiry_data) {
+            $inquiry_data = DB::connection('dynamic')
+                ->table('inquiry_registration')
+                ->select('*')
+                ->where('status', 'i')
+                ->where(function($query) use ($form_number, $inquiry_id) {
+                    if (!empty($inquiry_id)) {
+                        $query->where('id', $inquiry_id);
+                    } else {
+                        $query->where('form_number', $form_number)
+                              ->orWhere('student_name', $form_number)
+                              ->orWhereJsonContains('json_str->fathername', $form_number)
+                              ->orWhereJsonContains('json_str->fathermobile', $form_number)
+                              ->orWhereJsonContains('json_str->mothermobile', $form_number)
+                              ->orWhereJsonContains('json_str->mothername', $form_number);
+                    }
+                })
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if (!$inquiry_data) {
+            return ['inq_data' => null, 'inq_str_data' => null, 'statevalue' => null, 'next_year' => 0];
+        }
+
+        $da = !empty($inquiry_data->json_str) ? json_decode($inquiry_data->json_str) : null;
+        $statename = $da->state ?? null;
+        $statevalue = null;
+        if (!empty($statename)) {
+            $stateRow = DB::connection('dynamic')
+                ->table('states')
+                ->where('name', $statename)
+                ->first();
+            $statevalue = $stateRow ? $stateRow->id : null;
+        }
+
+        if (!empty($inquiry_data->class_name)) {
+            if (strcasecmp($inquiry_data->class_name, 'kg1') === 0) $inquiry_data->class_name = 'KG1';
+            if (strcasecmp($inquiry_data->class_name, 'kg2') === 0) $inquiry_data->class_name = 'KG2';
+        }
+
+        $nextYear = (!empty($inquiry_data->next_year) && ($inquiry_data->next_year == 1 || $inquiry_data->next_year === '1')) ? 1 : 0;
+        if (!$nextYear && !empty($da->next_year) && ($da->next_year == 1 || $da->next_year === '1')) {
+            $nextYear = 1;
+        }
          
-        $passArr = ['inq_data'=>$inquiry_data,'inq_str_data'=>json_decode($inquiry_data->json_str),'statevalue'=>$statevalue];
+        $passArr = [
+            'inq_data' => $inquiry_data,
+            'inq_str_data' => $da,
+            'statevalue' => $statevalue,
+            'next_year' => $nextYear,
+        ];
  
         return $passArr;
     }
@@ -678,10 +966,25 @@ public function downloadcertificate($id)
     /*Add registration*/
     public function add_student_registrations(){
         /*r status for registration*/
-        $inqArr = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','=','Form Selected')->where('status','=','i')->where('is_delete','=','0')->get();
+        $inqArr = DB::connection('dynamic')->table('inquiry_registration')->where('save_status','=','Form Selected')->where('status','=','i')->where('is_delete','=','0')->orderBy('id', 'desc')->get();
 
         $stutdentsArr = $this->activeStudentRegistrationQuery()->get(); 
-        $classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
+        $preOrder = ['Nursery', 'KG1', 'KG2', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+        $classlist = DB::connection('dynamic')->table('classes')
+            ->whereNotNull('class_name')
+            ->where('is_delete', 0)
+            ->select('class_name')
+            ->distinct()
+            ->get()
+            ->sort(function ($a, $b) use ($preOrder) {
+                $posA = array_search($a->class_name, $preOrder);
+                $posB = array_search($b->class_name, $preOrder);
+                if ($posA !== false && $posB !== false) return $posA <=> $posB;
+                if ($posA !== false) return -1;
+                if ($posB !== false) return 1;
+                return strnatcasecmp($a->class_name, $b->class_name);
+            })
+            ->values();
         if (Schema::connection('dynamic')->hasTable('hrms_employees')) {
             $drivername = HrmsEmployee::query()
                 ->selectRaw("id, first_name, last_name, TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) as ename, contact_number")
@@ -713,6 +1016,161 @@ public function downloadcertificate($id)
     
         $uid = $uid +1;
         return view('backend.student_registrations.add', compact('caste','inqArr','drivername','stutdentsArr','classlist','uid','staffList'));
+    }
+
+    public function getClassSectionStrength(Request $request)
+    {
+        $className = trim($request->input('class_name', ''));
+        if (empty($className)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Class name is required',
+            ], 400);
+        }
+
+        if (strcasecmp($className, 'kg1') === 0) $className = 'KG1';
+        if (strcasecmp($className, 'kg2') === 0) $className = 'KG2';
+
+        $applicableClasses = [
+            'nursery', 'kg1', 'kg2',
+            '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
+            '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ];
+        $isApplicable = in_array(strtolower($className), $applicableClasses, true);
+
+        $students = DB::connection('dynamic')->table('student_registration')
+            ->where(function ($query) {
+                $query->where('is_archived', 0)->orWhereNull('is_archived');
+            })
+            ->where(function ($query) {
+                $query->where('next_year', 0)->orWhereNull('next_year');
+            })
+            ->where(function ($query) {
+                $query->whereNull('status')->orWhere('status', '!=', 't');
+            })
+            ->where(function ($query) use ($className) {
+                $query->where('class_name', $className);
+                if (in_array(strtoupper($className), ['KG1', 'KG2'])) {
+                    $query->orWhere('class_name', ucfirst(strtolower($className)));
+                }
+            })
+            ->get(['id', 'section_name', 'class_id']);
+
+        $counts = [
+            'Aryabhatta' => 0,
+            'Kautilya' => 0,
+            'Ramanujan' => 0,
+            'D' => 0,
+        ];
+
+        foreach ($students as $s) {
+            $sec = trim($s->section_name ?? '');
+            if (strcasecmp($sec, 'Aryabhatta') === 0) {
+                $counts['Aryabhatta']++;
+            } elseif (strcasecmp($sec, 'Kautilya') === 0) {
+                $counts['Kautilya']++;
+            } elseif (strcasecmp($sec, 'Ramanujan') === 0) {
+                $counts['Ramanujan']++;
+            } else {
+                $counts['D']++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'class_name' => $className,
+            'is_applicable' => $isApplicable,
+            'sections' => [
+                ['section' => 'Aryabhatta', 'strength' => $counts['Aryabhatta']],
+                ['section' => 'Kautilya', 'strength' => $counts['Kautilya']],
+                ['section' => 'Ramanujan', 'strength' => $counts['Ramanujan']],
+                ['section' => 'D', 'strength' => $counts['D'], 'label' => 'D (Temporary)'],
+            ],
+            'total' => array_sum($counts),
+        ]);
+    }
+
+    public function getClassStreams(Request $request)
+    {
+        $dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
+        if (!empty($dbName)) {
+            Config::set('database.connections.dynamic.database', $dbName);
+            DB::purge('dynamic');
+        }
+
+        $className = trim((string) $request->input('class_name', ''));
+        if (!in_array($className, ['11', '12'], true)) {
+            return response()->json([
+                'success' => true,
+                'is_senior' => false,
+                'class_name' => $className,
+                'streams' => [],
+            ]);
+        }
+
+        $classRecord = DB::connection('dynamic')->table('class_name')->where('class_name', $className)->first();
+        $classIds = array_values(array_filter([$classRecord ? $classRecord->id : null, $className]));
+
+        $streamIds = DB::connection('dynamic')->table('subject_combinations')
+            ->where('is_delete', 0)
+            ->whereIn('class_id', $classIds)
+            ->pluck('streams')
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        $streamsQuery = DB::connection('dynamic')->table('streams')->where('is_delete', 0);
+        if (!empty($streamIds) && !$request->boolean('all')) {
+            $streamsQuery->whereIn('id', $streamIds);
+        }
+        $streams = $streamsQuery->orderBy('streams', 'asc')->get(['id', 'streams as stream_name']);
+
+        return response()->json([
+            'success' => true,
+            'is_senior' => true,
+            'class_name' => $className,
+            'streams' => $streams,
+        ]);
+    }
+
+    public function getStreamCombinations(Request $request)
+    {
+        $dbName = session('db_names') ?? request()->cookie('db_names') ?? request()->input('db_names');
+        if (!empty($dbName)) {
+            Config::set('database.connections.dynamic.database', $dbName);
+            DB::purge('dynamic');
+        }
+
+        $className = trim((string) $request->input('class_name', ''));
+        $streamId = $request->input('stream_id');
+
+        if (!in_array($className, ['11', '12'], true) || empty($streamId)) {
+            return response()->json([
+                'success' => true,
+                'is_senior' => in_array($className, ['11', '12'], true),
+                'class_name' => $className,
+                'stream_id' => $streamId,
+                'combinations' => [],
+            ]);
+        }
+
+        $classRecord = DB::connection('dynamic')->table('class_name')->where('class_name', $className)->first();
+        $classIds = array_values(array_filter([$classRecord ? $classRecord->id : null, $className]));
+
+        $combinations = DB::connection('dynamic')->table('subject_combinations')
+            ->where('is_delete', 0)
+            ->whereIn('class_id', $classIds)
+            ->where('streams', $streamId)
+            ->orderBy('combination_name', 'asc')
+            ->get(['id', 'combination_name', 'alise_name']);
+
+        return response()->json([
+            'success' => true,
+            'is_senior' => true,
+            'class_name' => $className,
+            'stream_id' => $streamId,
+            'combinations' => $combinations,
+        ]);
     }
 
     public function selection_process(){
@@ -855,27 +1313,44 @@ public function downloadcertificate($id)
     
 	public function student_registration_filer(Request $request)
 	{
+		$activeTab = $request->input('tab', 'current');
 		$session_name = $request->input('session_name');
 		$form_number = $request->input('form_number');
 		$serial_number = $request->input('serial_number');
 		$class_name = $request->input('classname');
 		$studentname = $request->input('student_name');
 		$application_for = $request->input('application_for');
+		$scholar_no = $request->input('scholar_no');
+		$parent_name = $request->input('parent_name');
+		$mobile_number = $request->input('mobile_number');
+		$quick_search = $request->input('quick_search') ?? $request->input('search');
 
 		$jsonArr = [
+			'tab' => $activeTab,
 			'session_name' => $session_name,
 			'student_name' => $studentname,
 			'serial_number' => $serial_number,
 			'class_name' => $class_name,
 			'form_number' => $form_number,
 			'application_for' => $application_for,
+			'scholar_no' => $scholar_no,
+			'parent_name' => $parent_name,
+			'mobile_number' => $mobile_number,
+			'quick_search' => $quick_search,
 		];
 
 		// Start query builder with active student registrations (status = 'r')
-		$records1 = $this->activeStudentRegistrationQuery()
-			->where('status', '=', 'r')
-			->orderBy('created_at', 'desc')
-			->orderBy('id', 'desc');
+		if ($activeTab === 'next_year') {
+			$records1 = $this->nextYearStudentRegistrationQuery()
+				->where('status', '=', 'r')
+				->orderBy('created_at', 'desc')
+				->orderBy('id', 'desc');
+		} else {
+			$records1 = $this->activeStudentRegistrationQuery()
+				->where('status', '=', 'r')
+				->orderBy('created_at', 'desc')
+				->orderBy('id', 'desc');
+		}
 
 		if (!empty($session_name)) {
 			$sessionVariants = array_unique([
@@ -883,7 +1358,14 @@ public function downloadcertificate($id)
 				str_replace('-', '_', trim($session_name)),
 				str_replace('_', '-', trim($session_name))
 			]);
-			$records1->whereIn('session_name', $sessionVariants);
+			$records1->where(function($q) use ($sessionVariants) {
+				$q->whereIn('session_name', $sessionVariants);
+				foreach ($sessionVariants as $sv) {
+					$q->orWhereJsonContains('json_str->admission_session', $sv)
+					  ->orWhereJsonContains('json_str->intended_session', $sv)
+					  ->orWhereJsonContains('json_str->batch', $sv);
+				}
+			});
 		}
 
 		if (!empty($form_number)) {
@@ -910,13 +1392,56 @@ public function downloadcertificate($id)
 			$records1->where('student_name', 'like', '%' . trim($studentname) . '%');
 		}
 
+		if (!empty($scholar_no)) {
+			$records1->where('scholar_no', 'like', '%' . trim($scholar_no) . '%');
+		}
+
+		if (!empty($parent_name)) {
+			$pterm = trim($parent_name);
+			$records1->where(function ($q) use ($pterm) {
+				$q->where('json_str->fathername', 'like', '%' . $pterm . '%')
+				  ->orWhere('json_str->student_father_name', 'like', '%' . $pterm . '%')
+				  ->orWhere('json_str->mothername', 'like', '%' . $pterm . '%')
+				  ->orWhere('json_str->student_mother_name', 'like', '%' . $pterm . '%');
+			});
+		}
+
+		if (!empty($mobile_number)) {
+			$mterm = trim($mobile_number);
+			$records1->where(function ($q) use ($mterm) {
+				$q->where('mobile_number', 'like', '%' . $mterm . '%')
+				  ->orWhere('json_str->father_mobile', 'like', '%' . $mterm . '%')
+				  ->orWhere('json_str->mother_mobile', 'like', '%' . $mterm . '%')
+				  ->orWhere('json_str->phone_number', 'like', '%' . $mterm . '%');
+			});
+		}
+
+		if (!empty($quick_search)) {
+			$qterm = trim($quick_search);
+			$records1->where(function ($q) use ($qterm) {
+				$q->where('student_name', 'like', '%' . $qterm . '%')
+				  ->orWhere('scholar_no', 'like', '%' . $qterm . '%')
+				  ->orWhere('mobile_number', 'like', '%' . $qterm . '%')
+				  ->orWhere('form_number', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->fathername', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->student_father_name', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->mothername', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->student_mother_name', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->father_mobile', 'like', '%' . $qterm . '%')
+				  ->orWhere('json_str->mother_mobile', 'like', '%' . $qterm . '%');
+			});
+		}
+
 		if (!empty($application_for)) {
 			$records1->where('application_for', trim($application_for));
 		}
 
 		$all_inquiry = $records1->get();
 		$classlist = DB::connection('dynamic')->table('classes')->select('class_name')->distinct()->get();
-		return view('backend.student_registrations.index', compact('all_inquiry', 'jsonArr', 'classlist'));
+		$archivedCount = DB::connection('dynamic')->table('student_registration')->where('is_archived', 1)->count();
+		$currentCount = $this->activeStudentRegistrationQuery()->where('status', '=', 'r')->count();
+		$nextYearCount = $this->nextYearStudentRegistrationQuery()->where('status', '=', 'r')->count();
+		return view('backend.student_registrations.index', compact('all_inquiry', 'jsonArr', 'classlist', 'archivedCount', 'activeTab', 'currentCount', 'nextYearCount'));
 	}
 
 	
