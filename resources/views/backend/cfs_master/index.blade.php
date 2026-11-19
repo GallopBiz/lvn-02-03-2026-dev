@@ -181,7 +181,7 @@
                   @foreach($course_fees_head_master as $each)
                   <tr>
                      <th scope="row">{{$loop->iteration}}</th>
-                     <td>{{$each->ac_head_name}}</td>
+                     <td>{{ strtoupper(correct_caution_money_display($each->ac_head_name)) }}</td>
                      <td><input name="imei" class="form-control orderFees" id="IMEI" type="text" placeholder="" /></td>
                      <td><input type="checkbox" id="vehicle1" name="vehicle1" value="Bike"></td>
                   </tr>
@@ -342,7 +342,7 @@
                            <option value="">-- Select The Head --</option>
                               @if(!empty($course_fees_head_master))
                                  @foreach($course_fees_head_master as $each)
-                                 <option value="{{$each->ac_head_name}}" value="{{$each->ac_head_name}}">{{$each->ac_head_name}}</option>
+                                 <option value="{{$each->ac_head_name}}" value="{{$each->ac_head_name}}">{{ strtoupper(correct_caution_money_display($each->ac_head_name)) }}</option>
                                  @endforeach
                               @endif
                            </select>
@@ -668,7 +668,7 @@ $('.structure_table').on('click', '.removeItem', function(event) {
                   @if(!empty($course_fees_head_master))
                   <option value="" >-- Select The Head --</option>
                      @foreach($course_fees_head_master as $each)
-                     <option value="{{$each->ac_head_name}}" value="{{$each->ac_head_name}}">{{$each->ac_head_name}}</option>
+                     <option value="{{$each->ac_head_name}}" value="{{$each->ac_head_name}}">{{ strtoupper(correct_caution_money_display($each->ac_head_name)) }}</option>
                      @endforeach
                   @endif
                </select>

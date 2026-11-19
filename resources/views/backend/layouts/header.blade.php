@@ -414,6 +414,21 @@
   }
 }
 
+/* Sidebar z-index hierarchy so sticky table headers and page elements never overlap the sidebar menus */
+.side-content-wrap {
+  position: relative;
+  z-index: 1040 !important;
+}
+.layout-sidebar-large .sidebar-left {
+  z-index: 1045 !important;
+}
+.layout-sidebar-large .sidebar-left-secondary {
+  z-index: 1040 !important;
+}
+.layout-sidebar-large .sidebar-overlay {
+  z-index: 1035 !important;
+}
+
 </style>
 
       <div class="main-header">

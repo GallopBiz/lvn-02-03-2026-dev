@@ -63,7 +63,7 @@ font-size: 0.813rem;
    #zero_configuration_table thead th {
       position: sticky !important;
       top: 0 !important;
-      z-index: 100 !important;
+      z-index: 5 !important;
       background: #f1f3f7 !important;
       color: #333333 !important;
       font-weight: 700 !important;

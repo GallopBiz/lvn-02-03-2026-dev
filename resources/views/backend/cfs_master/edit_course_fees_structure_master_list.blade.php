@@ -217,7 +217,7 @@
                 @foreach($course_fees_head_master as $each)
                     var option = document.createElement('option');
                     option.value = '{{$each->ac_head_name}}';
-                    option.textContent = '{{$each->ac_head_name}}';
+                    option.textContent = '{{ strtoupper(correct_caution_money_display($each->ac_head_name)) }}';
                     selectAccountName.appendChild(option);
                 @endforeach
             @endif
@@ -418,7 +418,7 @@
             @foreach($course_fees_head_master as $each)
                 var option = document.createElement('option');
                 option.value = '{{$each->ac_head_name}}';
-                option.textContent = '{{$each->ac_head_name}}';
+                option.textContent = '{{ strtoupper(correct_caution_money_display($each->ac_head_name)) }}';
                 selectAccountName.appendChild(option);
             @endforeach
         @endif

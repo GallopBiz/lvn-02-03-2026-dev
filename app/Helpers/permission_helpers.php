@@ -51,3 +51,37 @@ if (!function_exists('is_admin_user')) {
     }
 }
 
+if (!function_exists('correct_caution_money_display')) {
+    /**
+     * Correct misspelled 'Caution Money' strings for display purposes only.
+     * Does NOT alter underlying database values or calculation keys.
+     *
+     * @param string|null $text
+     * @return string
+     */
+    function correct_caution_money_display(?string $text): string
+    {
+        if ($text === null || $text === '') {
+            return '';
+        }
+
+        // Replace common misspellings such as CUATION MONEY, Cuation, CUATION, etc.
+        $patterns = [
+            '/\bcuat?ion\s*money\b/i' => 'Caution Money',
+            '/\bcuat?ion\b/i'        => 'Caution',
+        ];
+
+        foreach ($patterns as $pattern => $replacement) {
+            $text = preg_replace_callback($pattern, function ($matches) use ($replacement) {
+                // If the matched string was all uppercase, return replacement in uppercase
+                if (ctype_upper(preg_replace('/[^a-zA-Z]/', '', $matches[0]))) {
+                    return strtoupper($replacement);
+                }
+                return $replacement;
+            }, $text);
+        }
+
+        return $text;
+    }
+}
+
