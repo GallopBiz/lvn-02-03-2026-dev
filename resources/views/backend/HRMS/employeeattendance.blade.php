@@ -351,7 +351,9 @@
                                             $isWeekendOff = $date->isSunday();
                                             $isOffDay = $isWeekendOff || !empty($holiday);
 
-                                            $shift = $employeeShifts->get($employeeId);
+                                            $dateStr = $date->toDateString();
+                                            $shift = ($dateWiseShifts[$employeeId][$dateStr] ?? null)
+                                                ?: (\App\Services\Hrms\ShiftResolver::getApplicableShift($employee, $dateStr) ?? $employeeShifts->get($employeeId));
 
                                             $halfDayLeave = isset($leaveRequests) ? $leaveRequests->first(function ($lr) use ($employeeId, $date) {
                                                 return $lr->employee_id == $employeeId
@@ -381,7 +383,6 @@
                                             $missingOut = false;
 
                                             if ($record && $shift && $shift->start_time && $shift->end_time && !$isOffDay) {
-                                                $dateStr = $date->toDateString();
                                                 $shiftStart = strtotime($dateStr . ' ' . $shift->start_time);
                                                 $shiftEnd = strtotime($dateStr . ' ' . $shift->end_time);
                                                 $threshold = (int) ($shift->late_coming_threshold ?? 0);
@@ -442,7 +443,7 @@
                                                     $tooltipText .= $isWeekendOff ? " (Weekly Off Work)" : " (Holiday Work: " . ($holiday->HolidayName ?? 'Holiday') . ")";
                                                 }
                                                 if ($shift && $shift->start_time && $shift->end_time && !$isOffDay) {
-                                                    $tooltipText .= "\nShift: " . $shift->start_time . ' - ' . $shift->end_time;
+                                                    $tooltipText .= "\nShift: " . \Carbon\Carbon::parse($shift->start_time)->format('h:i A') . ' - ' . \Carbon\Carbon::parse($shift->end_time)->format('h:i A');
                                                 }
                                                 $tooltipText .= "\nIn: " . ($record->in_time ? \Carbon\Carbon::parse($record->in_time)->format('h:i A') : 'N/A');
                                                 if ($isLateIn && !$halfDayLeave) $tooltipText .= " (Late by " . formatDurationInHoursAndMinutes($lateMinutes) . ")";

@@ -16,6 +16,8 @@ use DB;
 use App\Models\Holidays;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Config;
+use App\Services\Hrms\ShiftResolver;
 class EmployeeAttendanceController extends Controller
 {
 	private function parseBiometricLogLine(string $log): ?array
@@ -64,13 +66,16 @@ class EmployeeAttendanceController extends Controller
                 $q->orWhere('id', $employeeId);
             }
         })->orderBy('first_name')->orderBy('last_name')->get();
-        $shiftsById = HrmsShift::on('dynamic')
+        $dynamicConn = Config::get('database.connections.dynamic.database') ? 'dynamic' : config('database.default');
+        $shiftsById = HrmsShift::on($dynamicConn)
             ->whereIn('id', $employees->pluck('shift_id')->filter()->unique())
             ->get()
             ->keyBy('id');
         $employeeShifts = $employees->mapWithKeys(function ($employee) use ($shiftsById) {
             return [$employee->id => $shiftsById->get($employee->shift_id)];
         });
+
+        $dateWiseShifts = ShiftResolver::getApplicableShiftsForRange($employees, $startDate, $endDate, $dynamicConn);
 
         $attendanceData = HrmsEmployeeAttendance::with('employee')
             ->whereNotNull('employee_id')
@@ -94,6 +99,7 @@ class EmployeeAttendanceController extends Controller
             'attendanceData',
             'employees',
             'employeeShifts',
+            'dateWiseShifts',
             'startDate',
             'endDate',
             'leaveRequests'
