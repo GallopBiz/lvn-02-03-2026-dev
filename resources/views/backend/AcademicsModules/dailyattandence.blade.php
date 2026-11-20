@@ -24,6 +24,17 @@
     .table td { vertical-align: middle; }
     .student-search { max-width: 320px; }
     .attendance-panel .pagination { margin-bottom: 0; }
+    #importAttendanceModal { z-index: 1055 !important; }
+    #importAttendanceModal.show { display: block !important; }
+    #importAttendanceModal .modal-content { background-color: #ffffff !important; color: #1e293b !important; }
+    #importAttendanceModal label { color: #1e293b !important; font-weight: 600 !important; }
+    #importAttendanceModal .text-muted { color: #475569 !important; }
+    #importAttendanceModal .form-control { color: #1e293b !important; border-color: #cbd5e1 !important; background-color: #ffffff !important; }
+    #importAttendanceModal .form-control:focus { color: #0f172a !important; border-color: #4f46e5 !important; }
+    #importAttendanceModal .custom-file-label { color: #334155 !important; border-color: #cbd5e1 !important; background-color: #ffffff !important; }
+    #importAttendanceModal .custom-file-label::after { background-color: #f1f5f9 !important; color: #1e293b !important; font-weight: 600 !important; }
+    #importAttendanceModal small { color: #475569 !important; }
+    .modal-backdrop { z-index: 1050 !important; }
     @media (max-width: 991px) { .summary-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
     @media (max-width: 575px) { .summary-grid { grid-template-columns: 1fr; } .attendance-panel { padding: 14px; } }
 </style>
@@ -37,6 +48,9 @@
             @endif
         </h2>
         <div class="d-flex align-items-center">
+            <button type="button" class="btn btn-success btn-sm mr-2" id="btnImportAttendanceHeader" data-toggle="modal" data-bs-toggle="modal" data-target="#importAttendanceModal" data-bs-target="#importAttendanceModal" onclick="openImportAttendanceModal(event)">
+                <i class="i-Upload mr-1 font-weight-bold"></i> Import Attendance (CSV / Excel)
+            </button>
             <button type="button" class="btn btn-outline-secondary btn-sm mr-2" onclick="goBackToSource('{{ url()->previous() !== url()->current() ? url()->previous() : route('academic.attendance.monthly-report') }}')">
                 <i class="i-Arrow-Left mr-1 font-weight-bold"></i> Back
             </button>
@@ -123,7 +137,10 @@
                 </div>
                 <div class="col-lg-3 col-md-8 form-group d-flex align-items-end">
                     <button class="btn btn-primary mr-2" type="submit">Load Students</button>
-                    <a class="btn btn-outline-secondary" href="{{ route('dailyattandence') }}">Reset</a>
+                    <a class="btn btn-outline-secondary mr-2" href="{{ route('dailyattandence') }}">Reset</a>
+                    <button type="button" class="btn btn-outline-success font-weight-bold" id="btnImportAttendanceToolbar" data-toggle="modal" data-bs-toggle="modal" data-target="#importAttendanceModal" data-bs-target="#importAttendanceModal" onclick="openImportAttendanceModal(event)" title="Import monthly attendance from CSV / Excel">
+                        <i class="i-Upload mr-1"></i> Import
+                    </button>
                 </div>
             </div>
         </form>
@@ -652,5 +669,229 @@
         }
         window.location.href = fallbackUrl;
     }
+
+    function openImportAttendanceModal(e) {
+        if (e && typeof e.preventDefault === 'function') {
+            e.preventDefault();
+        }
+        var modalEl = document.getElementById('importAttendanceModal');
+        if (!modalEl) {
+            console.error('Modal #importAttendanceModal not found');
+            return;
+        }
+
+        // Relocate modal under <body> to avoid stacking-context traps or overflow clipping
+        if (modalEl.parentNode !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+
+        // 1. Try jQuery Bootstrap modal
+        if (window.jQuery && typeof jQuery.fn.modal === 'function') {
+            try {
+                jQuery('#importAttendanceModal').modal('show');
+                return;
+            } catch (err) {
+                console.warn('jQuery modal show error:', err);
+            }
+        }
+
+        // 2. Try Bootstrap 5 Modal
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            try {
+                var modalObj = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modalObj.show();
+                return;
+            } catch (err) {
+                console.warn('Bootstrap 5 modal show error:', err);
+            }
+        }
+
+        // 3. Fallback pure DOM display
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.removeAttribute('aria-hidden');
+        modalEl.setAttribute('aria-modal', 'true');
+        document.body.classList.add('modal-open');
+
+        if (!document.getElementById('importModalBackdropFallback') && !document.querySelector('.modal-backdrop')) {
+            var bd = document.createElement('div');
+            bd.className = 'modal-backdrop fade show';
+            bd.id = 'importModalBackdropFallback';
+            bd.onclick = function() { closeImportAttendanceModal(); };
+            document.body.appendChild(bd);
+        }
+    }
+
+    function closeImportAttendanceModal(e) {
+        if (e && typeof e.preventDefault === 'function') {
+            e.preventDefault();
+        }
+        var modalEl = document.getElementById('importAttendanceModal');
+        if (!modalEl) return;
+
+        if (window.jQuery && typeof jQuery.fn.modal === 'function') {
+            try {
+                jQuery('#importAttendanceModal').modal('hide');
+            } catch (err) {}
+        }
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            try {
+                var modalObj = bootstrap.Modal.getInstance(modalEl);
+                if (modalObj) modalObj.hide();
+            } catch (err) {}
+        }
+
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.removeAttribute('aria-modal');
+        document.body.classList.remove('modal-open');
+
+        var bdFallback = document.getElementById('importModalBackdropFallback');
+        if (bdFallback) bdFallback.remove();
+        var allBackdrops = document.querySelectorAll('.modal-backdrop');
+        allBackdrops.forEach(function(el) { el.remove(); });
+    }
+
+    window.openImportAttendanceModal = openImportAttendanceModal;
+    window.closeImportAttendanceModal = closeImportAttendanceModal;
+
+    // Relocate modal into body on load and bind document delegation handlers
+    document.addEventListener('DOMContentLoaded', function() {
+        var modalEl = document.getElementById('importAttendanceModal');
+        if (modalEl && modalEl.parentNode !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        var trigger = e.target.closest('[data-target="#importAttendanceModal"], [data-bs-target="#importAttendanceModal"], #btnImportAttendanceHeader, #btnImportAttendanceToolbar');
+        if (trigger) {
+            e.preventDefault();
+            openImportAttendanceModal(e);
+        }
+        var dismiss = e.target.closest('#importAttendanceModal [data-dismiss="modal"], #importAttendanceModal [data-bs-dismiss="modal"]');
+        if (dismiss) {
+            e.preventDefault();
+            closeImportAttendanceModal(e);
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' || e.keyCode === 27) {
+            var modalEl = document.getElementById('importAttendanceModal');
+            if (modalEl && (modalEl.classList.contains('show') || modalEl.style.display === 'block')) {
+                closeImportAttendanceModal(e);
+            }
+        }
+    });
 </script>
+
+<!-- Import Monthly Attendance Modal -->
+<div class="modal fade" id="importAttendanceModal" tabindex="-1" role="dialog" aria-labelledby="importAttendanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+            <form action="{{ route('dailyattandence.import') }}" method="POST" enctype="multipart/form-data" id="bulkAttendanceImportForm" onsubmit="document.getElementById('importSubmitBtn').disabled = true; document.getElementById('importSubmitBtn').innerHTML = '<i class=\'fa fa-spinner fa-spin mr-1\'></i> Importing...';">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title text-white font-weight-bold" id="importAttendanceModalLabel">
+                        <i class="i-Upload mr-1"></i> Import Monthly Attendance
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" data-bs-dismiss="modal" onclick="closeImportAttendanceModal(event)" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert small mb-3 shadow-none" style="background-color: #f0f7ff; border: 1px solid #bfdbfe; color: #1e293b;">
+                        <div class="d-flex align-items-start">
+                            <i class="i-Information mr-2 text-primary" style="font-size: 17px; margin-top: 1px;"></i>
+                            <div>
+                                <strong style="color: #0b3d82; font-size: 13px;">How it works:</strong>
+                                <span style="color: #1e293b; line-height: 1.5; display: inline-block;">Upload your monthly attendance CSV or Excel file. The template identifies students accurately by <strong>Scholar No</strong> and Student Name. The system automatically reads working days (1 to 31), marks Present/Absent/Leave, and skips Sundays, holidays, and summary columns.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if($isStaffAttendanceUser)
+                        @php
+                            $assignedClassObj = $selectedClass ?: ($classes->firstWhere('id', (int) $filters['class_id']) ?: $classes->first());
+                            $assignedClassName = optional($assignedClassObj)->class_name ?: (string) $filters['class_id'];
+                            $assignedSection = $filters['section_name'] ?: ($sections->first() ?: 'All');
+                        @endphp
+                        <input type="hidden" name="class_id" value="{{ optional($assignedClassObj)->id ?: $filters['class_id'] }}">
+                        <input type="hidden" name="section_name" value="{{ $assignedSection }}">
+                        <div class="card mb-3" style="background-color: #f8fafc; border: 1px solid #93c5fd;">
+                            <div class="card-body p-3">
+                                <span class="small d-block text-uppercase font-weight-bold" style="color: #475569;">Assigned Class (Staff Mode)</span>
+                                <h6 class="font-weight-bold text-primary mb-0 mt-1">
+                                    <i class="i-ID-Card mr-1"></i> Class {{ $assignedClassName }} &mdash; Section: {{ $assignedSection }}
+                                </h6>
+                                @if($classes->count() > 1)
+                                    <small class="d-block mt-2" style="color: #475569;">
+                                        <i class="i-Information mr-1 text-info"></i> You have <strong>{{ $classes->count() }} assigned classes</strong>. The active class is shown above. To import for another assigned class, switch the class filter on the main page.
+                                    </small>
+                                @endif
+                            </div>
+                        </div>
+                    @else
+                        <div class="row">
+                            <div class="col-md-6 form-group mb-3">
+                                <label class="font-weight-bold" style="color: #1e293b;">Class</label>
+                                <select name="class_id" id="importClassSelect" class="form-control" style="color: #1e293b;">
+                                    <option value="">Auto-detect from CSV header</option>
+                                    @foreach($classes as $c)
+                                        <option value="{{ $c->id }}" @selected((string)$filters['class_id'] === (string)$c->id)>{{ $c->class_name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6 form-group mb-3">
+                                <label class="font-weight-bold" style="color: #1e293b;">Section</label>
+                                <select name="section_name" id="importSectionSelect" class="form-control" style="color: #1e293b;">
+                                    <option value="">Auto-detect from CSV header</option>
+                                    @foreach($sections as $sec)
+                                        <option value="{{ $sec }}" @selected($filters['section_name'] === $sec)>{{ $sec }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    @endif
+
+                    <div class="row">
+                        <div class="col-md-7 form-group mb-3">
+                            <label class="font-weight-bold" style="color: #1e293b;">Month & Year <span style="color: #475569; font-weight: normal;">(Optional)</span></label>
+                            <input type="month" name="month_year" value="{{ date('Y-m', strtotime($filters['date'] ?: now())) }}" class="form-control" id="importMonthInput" style="color: #1e293b;">
+                            <small class="d-block mt-1" style="color: #475569;">Auto-detected from CSV if left unchanged</small>
+                        </div>
+                        <div class="col-md-5 form-group mb-3">
+                            <label class="font-weight-bold" style="color: #1e293b;">Academic Session</label>
+                            <input type="text" name="academic_session" value="{{ $filters['academic_session'] }}" class="form-control" placeholder="2026-2027" style="color: #1e293b;">
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="font-weight-bold" style="color: #1e293b;">Attendance File <span class="text-danger">*</span></label>
+                        <div class="custom-file">
+                            <input type="file" name="attendance_file" class="custom-file-input" id="attendanceFileInput" accept=".csv, .xlsx, .xls, .txt" required onchange="this.nextElementSibling.innerText = this.files[0] ? this.files[0].name : 'Choose CSV or Excel file...'">
+                            <label class="custom-file-label" for="attendanceFileInput" style="color: #334155;">Choose CSV or Excel file...</label>
+                        </div>
+                        <small class="d-block mt-1" style="color: #475569;">Accepts CSV or Excel (.xlsx) from your software.</small>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center p-2 rounded border mt-3" style="background-color: #f8fafc; border-color: #cbd5e1 !important;">
+                        <span class="small font-weight-bold" style="color: #1e293b;"><i class="i-Download mr-1 text-primary"></i> Need a format?</span>
+                        <a href="{{ route('dailyattandence.sample-csv', ['class_id' => $filters['class_id'], 'section_name' => $filters['section_name'], 'month' => date('m', strtotime($filters['date'] ?: now())), 'year' => date('Y', strtotime($filters['date'] ?: now()))]) }}" class="btn btn-primary btn-sm font-weight-bold">
+                            Download Class Template
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-outline-secondary font-weight-bold" data-dismiss="modal" data-bs-dismiss="modal" onclick="closeImportAttendanceModal(event)" style="color: #334155; border-color: #cbd5e1;">Cancel</button>
+                    <button type="submit" class="btn btn-success font-weight-bold px-4" id="importSubmitBtn">
+                        <i class="i-Upload mr-1"></i> Upload & Import Attendance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection

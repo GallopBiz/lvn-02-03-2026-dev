@@ -2019,4 +2019,716 @@ class AttendanceController extends Controller
     {
         return 'Attendance for this month is locked. An administrator must unlock it before changes can be made.';
     }
+
+    /**
+     * Download a sample CSV template for daily attendance bulk import.
+     */
+    public function sampleCsv(Request $request)
+    {
+        $isStaffUser = $this->isStaffAttendanceUser();
+        $classId = $request->query('class_id');
+        $sectionName = $request->query('section_name');
+        $month = (int) ($request->query('month') ?: now()->format('m'));
+        $year = (int) ($request->query('year') ?: now()->format('Y'));
+
+        if ($isStaffUser) {
+            if (empty($classId) || empty($sectionName) || !$this->canStaffAccessClassSection($classId, $sectionName, true)) {
+                $assignment = $this->accessibleTeacherSubjects(true)->first();
+                if ($assignment) {
+                    $classId = $assignment->class_id;
+                    $sectionName = $assignment->section_name;
+                }
+            }
+        }
+
+        $classObj = $classId ? $this->resolveClass($classId) : null;
+        $className = optional($classObj)->class_name ?: (string) ($classId ?: 'Class');
+        $sectionName = $sectionName ?: 'Section';
+
+        $monthDate = Carbon::createFromDate($year, $month, 1);
+        $monthName = $monthDate->format('F');
+        $daysInMonth = $monthDate->daysInMonth;
+
+        $students = ($classId && $sectionName)
+            ? $this->studentsForClass($classId, $sectionName, true)->get()
+            : collect();
+
+        $cleanSecFile = preg_replace('/[^A-Za-z0-9_-]/', '_', $sectionName);
+        $filename = "attendance_template_{$className}_{$cleanSecFile}_{$monthName}_{$year}.csv";
+
+        return response()->streamDownload(function () use ($monthName, $year, $className, $sectionName, $daysInMonth, $monthDate, $students) {
+            $handle = fopen('php://output', 'w');
+
+            // Line 1: Metadata row
+            $metaRow = array_fill(0, 35, '');
+            $metaRow[0] = "Month : {$monthName} - {$year}";
+            $metaRow[1] = "Class : {$className} {$sectionName}";
+            fputcsv($handle, $metaRow);
+
+            // Line 2: Header grouping
+            $groupRow = array_fill(0, 35, '');
+            $groupRow[0] = 'Sr';
+            $groupRow[1] = 'Scholar No';
+            $groupRow[2] = 'Student Name';
+            $groupRow[3] = 'Days';
+            fputcsv($handle, $groupRow);
+
+            // Line 3: Day numbers (1 to 31)
+            $dayRow = ['', '', ''];
+            for ($d = 1; $d <= 31; $d++) {
+                $dayRow[] = (string) $d;
+            }
+            fputcsv($handle, $dayRow);
+
+            // Lines 4+: Students with Sundays pre-marked as 'S'
+            $sr = 1;
+            if ($students->isNotEmpty()) {
+                foreach ($students as $student) {
+                    $row = [$sr++, (string) ($student->scholar_no ?? ''), $student->student_name];
+                    for ($d = 1; $d <= 31; $d++) {
+                        if ($d <= $daysInMonth) {
+                            $curDate = Carbon::createFromDate($year, $monthDate->month, $d);
+                            $row[] = $curDate->isSunday() ? 'S' : '';
+                        } else {
+                            $row[] = '';
+                        }
+                    }
+                    fputcsv($handle, $row);
+                }
+            } else {
+                $sampleRow = [1, '1001', 'Sample Student Name'];
+                for ($d = 1; $d <= 31; $d++) {
+                    if ($d <= $daysInMonth) {
+                        $curDate = Carbon::createFromDate($year, $monthDate->month, $d);
+                        $sampleRow[] = $curDate->isSunday() ? 'S' : '';
+                    } else {
+                        $sampleRow[] = '';
+                    }
+                }
+                fputcsv($handle, $sampleRow);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
+     * Import monthly daily attendance from CSV or Excel file.
+     */
+    public function import(Request $request)
+    {
+        $request->validate([
+            'attendance_file' => 'required|file|max:10240',
+            'class_id' => 'nullable',
+            'section_name' => 'nullable|string',
+            'month_year' => 'nullable|string',
+            'academic_session' => 'nullable|string',
+            'teacher_id' => 'nullable|integer',
+        ], [
+            'attendance_file.required' => 'Please choose a CSV or Excel file to upload.',
+        ]);
+
+        $file = $request->file('attendance_file');
+        $rows = $this->parseUploadedSpreadsheet($file);
+
+        if (empty($rows)) {
+            return back()->with('error', 'The uploaded file is empty or could not be processed.');
+        }
+
+        // 1. Detect Metadata from File Row 0
+        $metaMonth = null;
+        $metaYear = null;
+        $metaClassName = null;
+        $metaSectionName = null;
+
+        $firstRow = $rows[0] ?? [];
+        foreach ($firstRow as $cell) {
+            $cellStr = trim((string) $cell);
+            if (preg_match('/Month\s*:\s*([A-Za-z]+)\s*-\s*(\d{4})/i', $cellStr, $m)) {
+                $time = strtotime($m[1] . ' 1 2000');
+                if ($time !== false) {
+                    $metaMonth = (int) date('m', $time);
+                    $metaYear = (int) $m[2];
+                }
+            }
+            if (preg_match('/Class\s*:\s*([^\s,]+)(?:\s+(.+))?/i', $cellStr, $m)) {
+                $metaClassName = trim($m[1]);
+                $metaSectionName = trim($m[2] ?? '');
+            }
+        }
+
+        // 2. Resolve Year and Month: Auto-detect from file if present, otherwise fallback to form input
+        $selectedMonthYear = $request->input('month_year');
+        if ($metaYear && $metaMonth) {
+            $year = $metaYear;
+            $month = $metaMonth;
+        } elseif ($selectedMonthYear && preg_match('/^(\d{4})-(\d{1,2})$/', $selectedMonthYear, $m)) {
+            $year = (int) $m[1];
+            $month = (int) $m[2];
+        } else {
+            $year = (int) now()->format('Y');
+            $month = (int) now()->format('m');
+        }
+
+        $targetMonth = Carbon::createFromDate($year, $month, 1);
+        $daysInMonth = $targetMonth->daysInMonth;
+
+        // 3. Resolve Class and Section
+        $isStaffUser = $this->isStaffAttendanceUser();
+        $classId = $request->input('class_id');
+        $sectionName = $request->input('section_name');
+
+        if ($isStaffUser) {
+            $assignedSubjects = $this->accessibleTeacherSubjects(true)->get();
+            if ($assignedSubjects->isEmpty()) {
+                return back()->with('error', 'You are not assigned as a class teacher for any class.');
+            }
+
+            // If CSV header contains a class, check if the staff user is authorized for that specific class
+            if ($metaClassName) {
+                [$resolvedMetaClassId, $resolvedMetaSec] = $this->normalizeClassAndSection($metaClassName, $metaSectionName);
+                if ($resolvedMetaClassId && $resolvedMetaSec && $this->canStaffAccessClassSection($resolvedMetaClassId, $resolvedMetaSec, true)) {
+                    $classId = $resolvedMetaClassId;
+                    $sectionName = $resolvedMetaSec;
+                }
+            }
+
+            // Default to active/first assignment if still empty
+            if (empty($classId) || empty($sectionName)) {
+                $firstAssignment = $assignedSubjects->first();
+                $classId = $firstAssignment->class_id;
+                $sectionName = $firstAssignment->section_name;
+            }
+
+            // Strict security check: ensure staff can only mark/import for their own assigned classes
+            if (!$this->canStaffAccessClassSection($classId, $sectionName, true)) {
+                return back()->with('error', 'You are only authorized to mark/import attendance for your assigned class(es).');
+            }
+        } else {
+            // Admin: If not selected in form, resolve from file metadata
+            if ((empty($classId) || empty($sectionName)) && $metaClassName) {
+                [$resolvedClassId, $resolvedSec] = $this->normalizeClassAndSection($metaClassName, $metaSectionName);
+                $classId = $classId ?: $resolvedClassId;
+                $sectionName = $sectionName ?: $resolvedSec;
+            }
+        }
+
+        if (empty($classId) || empty($sectionName)) {
+            return back()->with('error', 'Please select both Class and Section to import attendance.');
+        }
+
+        $selectedClass = $this->resolveClass($classId);
+        if (!$selectedClass) {
+            return back()->with('error', 'Could not find the specified class in the database.');
+        }
+        $resolvedClassId = $selectedClass->id;
+        $className = $selectedClass->class_name;
+
+        // 4. Resolve Academic Session & Teacher
+        $session = $request->input('academic_session') ?: $this->defaultSession($request);
+        $teacherId = $isStaffUser ? $this->staffEmployeeId() : ($request->input('teacher_id') ?: null);
+
+        // 5. Detect Day Columns (1..31)
+        $dayColMap = [];
+        $headerRowIdx = null;
+        for ($r = 0; $r <= min(5, count($rows) - 1); $r++) {
+            $colMap = [];
+            foreach ($rows[$r] as $cIdx => $val) {
+                $val = trim((string) $val);
+                if (is_numeric($val) && (int) $val >= 1 && (int) $val <= 31) {
+                    $colMap[(int) $val] = $cIdx;
+                }
+            }
+            if (count($colMap) >= 15 || (isset($colMap[1], $colMap[2]) && ($colMap[2] - $colMap[1] === 1))) {
+                $dayColMap = $colMap;
+                $headerRowIdx = $r;
+                break;
+            }
+        }
+
+        if (empty($dayColMap) || $headerRowIdx === null) {
+            return back()->with('error', 'Could not locate day columns (1 to 31) in the uploaded file.');
+        }
+
+        $firstDayCol = min($dayColMap);
+
+        // Detect column roles (Scholar No, Student Name, Serial No) in header rows before Day 1
+        $scholarColIdx = null;
+        $nameColIdx = null;
+        $srColIdx = null;
+
+        for ($c = 0; $c < $firstDayCol; $c++) {
+            for ($r = 0; $r <= $headerRowIdx; $r++) {
+                $headerCell = strtolower(trim((string) ($rows[$r][$c] ?? '')));
+                if ($scholarColIdx === null && preg_match('/scholar|admission|adm[\s._-]?no|reg[\s._-]?no/i', $headerCell)) {
+                    $scholarColIdx = $c;
+                }
+                if ($nameColIdx === null && preg_match('/student|name/i', $headerCell) && !preg_match('/scholar/i', $headerCell)) {
+                    $nameColIdx = $c;
+                }
+                if ($srColIdx === null && preg_match('/^(sr|s\.?no|serial|roll)/i', $headerCell)) {
+                    $srColIdx = $c;
+                }
+            }
+        }
+
+        // Default heuristic if not explicitly labelled in headers
+        if ($firstDayCol >= 3 && $scholarColIdx === null) {
+            $scholarColIdx = 1;
+            $nameColIdx = $nameColIdx ?? 2;
+        } elseif ($firstDayCol === 2 && $nameColIdx === null) {
+            $nameColIdx = 1;
+        }
+
+        // 6. Fetch Students for the Class
+        $students = $this->studentsForClass($resolvedClassId, $sectionName, true)->get();
+        if ($students->isEmpty()) {
+            return back()->with('error', "No active students found for Class {$className} - {$sectionName}.");
+        }
+
+        $normalizeScholar = function ($val) {
+            return strtolower(trim((string) $val));
+        };
+        $normalizeName = function ($val) {
+            return preg_replace('/\s+/', ' ', strtolower(trim((string) $val)));
+        };
+
+        $byScholar = [];
+        $byName = [];
+        foreach ($students as $s) {
+            $cleanName = $normalizeName($s->student_name);
+            $byName[$cleanName] = $s;
+
+            if (!empty($s->scholar_no)) {
+                $cleanSch = $normalizeScholar($s->scholar_no);
+                $byScholar[$cleanSch] = $s;
+                $noLeadingZeros = ltrim($cleanSch, '0');
+                if ($noLeadingZeros !== '' && $noLeadingZeros !== $cleanSch) {
+                    $byScholar[$noLeadingZeros] = $s;
+                }
+            }
+        }
+
+        // 7. Parse Student Attendance Rows
+        $studentAttendance = [];
+        $unmatchedNames = [];
+
+        for ($i = $headerRowIdx + 1; $i < count($rows); $i++) {
+            $row = $rows[$i];
+
+            $prefixCells = [];
+            for ($c = 0; $c < $firstDayCol; $c++) {
+                $prefixCells[$c] = trim((string) ($row[$c] ?? ''));
+            }
+
+            $nonEmpty = array_filter($prefixCells, fn ($v) => $v !== '');
+            if (empty($nonEmpty)) {
+                continue;
+            }
+
+            $joined = strtolower(implode(' ', $prefixCells));
+            if (preg_match('/^(total|days|student|month|wd|present|current month|previous month)/i', $joined)) {
+                continue;
+            }
+
+            $matchedStudent = null;
+
+            // Strategy 1: Match by detected Scholar No column
+            if ($scholarColIdx !== null && !empty($prefixCells[$scholarColIdx])) {
+                $schVal = $normalizeScholar($prefixCells[$scholarColIdx]);
+                if (isset($byScholar[$schVal])) {
+                    $matchedStudent = $byScholar[$schVal];
+                }
+            }
+
+            // Strategy 2: Check all prefix cells against Scholar No
+            if (!$matchedStudent) {
+                foreach ($prefixCells as $cIdx => $cellVal) {
+                    if ($cIdx === $srColIdx || $cellVal === '') {
+                        continue;
+                    }
+                    $schVal = $normalizeScholar($cellVal);
+                    if (isset($byScholar[$schVal])) {
+                        // Prevent low serial numbers (e.g. 1, 2) from matching scholar no if another cell matches student name
+                        if (is_numeric($cellVal) && (int) $cellVal <= 100) {
+                            $hasOtherNameMatch = false;
+                            foreach ($prefixCells as $otherIdx => $otherVal) {
+                                if ($otherIdx !== $cIdx && isset($byName[$normalizeName($otherVal)])) {
+                                    $hasOtherNameMatch = true;
+                                    break;
+                                }
+                            }
+                            if ($hasOtherNameMatch) {
+                                continue;
+                            }
+                        }
+                        $matchedStudent = $byScholar[$schVal];
+                        break;
+                    }
+                }
+            }
+
+            // Strategy 3: Match by detected Name column
+            if (!$matchedStudent && $nameColIdx !== null && !empty($prefixCells[$nameColIdx])) {
+                $cleanName = $normalizeName($prefixCells[$nameColIdx]);
+                if (isset($byName[$cleanName])) {
+                    $matchedStudent = $byName[$cleanName];
+                } else {
+                    foreach ($byName as $k => $v) {
+                        if (str_starts_with($cleanName, $k) || str_starts_with($k, $cleanName)) {
+                            $matchedStudent = $v;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Strategy 4: Fallback scan prefix cells for Name
+            if (!$matchedStudent) {
+                foreach ($prefixCells as $cellVal) {
+                    if ($cellVal === '' || is_numeric($cellVal)) {
+                        continue;
+                    }
+                    $cleanName = $normalizeName($cellVal);
+                    if (isset($byName[$cleanName])) {
+                        $matchedStudent = $byName[$cleanName];
+                        break;
+                    } else {
+                        foreach ($byName as $k => $v) {
+                            if (str_starts_with($cleanName, $k) || str_starts_with($k, $cleanName)) {
+                                $matchedStudent = $v;
+                                break;
+                            }
+                        }
+                        if ($matchedStudent) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$matchedStudent) {
+                $unmatchedNames[] = implode(' | ', $nonEmpty);
+                continue;
+            }
+
+            foreach ($dayColMap as $dayNum => $colIdx) {
+                if ($dayNum > $daysInMonth) {
+                    continue;
+                }
+                $rawVal = strtoupper(trim((string) ($row[$colIdx] ?? '')));
+                $studentAttendance[$matchedStudent->id][$dayNum] = $rawVal;
+            }
+        }
+
+        if (empty($studentAttendance)) {
+            $msg = 'No student attendance data could be matched from the uploaded file.';
+            if (!empty($unmatchedNames)) {
+                $msg .= ' Unmatched names / rows: ' . implode(', ', array_slice($unmatchedNames, 0, 5));
+            }
+            return back()->with('error', $msg);
+        }
+
+        // 8. Identify Working Days & Save to Database
+        $importedDays = 0;
+        $updatedDates = [];
+        $skippedFutureDays = 0;
+        $skippedLockedDays = 0;
+        $skippedNonWorkingDays = 0;
+
+        DB::transaction(function () use (
+            $daysInMonth,
+            $year,
+            $month,
+            $resolvedClassId,
+            $className,
+            $sectionName,
+            $session,
+            $teacherId,
+            $students,
+            $studentAttendance,
+            $isStaffUser,
+            &$importedDays,
+            &$updatedDates,
+            &$skippedFutureDays,
+            &$skippedLockedDays,
+            &$skippedNonWorkingDays
+        ) {
+            for ($d = 1; $d <= $daysInMonth; $d++) {
+                $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $d);
+
+                $hasPunches = false;
+                $dayPunches = [];
+
+                foreach ($students as $stu) {
+                    $raw = $studentAttendance[$stu->id][$d] ?? '';
+                    $status = match ($raw) {
+                        'P', 'PRESENT' => 'present',
+                        'A', 'ABSENT' => 'absent',
+                        'L', 'LEAVE' => 'leave',
+                        'PL' => 'pl',
+                        'HD', 'HALF_DAY', 'HALF DAY' => 'half_day',
+                        default => null,
+                    };
+
+                    if ($status) {
+                        $hasPunches = true;
+                        $dayPunches[$stu->id] = $status;
+                    }
+                }
+
+                if (!$hasPunches) {
+                    continue;
+                }
+
+                // Guard against accidental attendance marked on Sundays or Gazetted Holidays
+                $nonWorkingDay = $this->nonWorkingDayInfo($dateStr);
+                if ($nonWorkingDay) {
+                    $skippedNonWorkingDays++;
+                    continue;
+                }
+
+                if ($this->isFutureAttendanceDate($dateStr)) {
+                    $skippedFutureDays++;
+                    continue;
+                }
+
+                if ($isStaffUser && AttendanceMonthlyLock::isMonthLocked($resolvedClassId, $sectionName, $year, $month)) {
+                    $skippedLockedDays++;
+                    continue;
+                }
+
+                $existing = Attendance::where('is_delete', 0)
+                    ->whereDate('attendance_date', $dateStr)
+                    ->where('class_id', $resolvedClassId)
+                    ->where('section_name', $sectionName)
+                    ->first();
+
+                if ($existing && $existing->is_locked && $isStaffUser) {
+                    $skippedLockedDays++;
+                    continue;
+                }
+
+                $counts = collect($dayPunches)->countBy();
+                $leaveCount = (int) ($counts['leave'] ?? 0);
+
+                $attendance = Attendance::updateOrCreate(
+                    [
+                        'id' => optional($existing)->id,
+                        'attendance_date' => $dateStr,
+                        'class_id' => $resolvedClassId,
+                        'section_name' => $sectionName,
+                    ],
+                    [
+                        'Teacher_id' => $teacherId,
+                        'teacher_id' => $teacherId,
+                        'class_name' => $className,
+                        'academic_session' => $session,
+                        'total_students' => count($dayPunches),
+                        'present_count' => (int) ($counts['present'] ?? 0),
+                        'absent_count' => (int) ($counts['absent'] ?? 0) + $leaveCount,
+                        'leave_count' => $leaveCount,
+                        'half_day_count' => (int) ($counts['half_day'] ?? 0),
+                        'pl_count' => (int) ($counts['pl'] ?? 0),
+                        'is_delete' => 0,
+                    ]
+                );
+
+                foreach ($dayPunches as $studentId => $status) {
+                    AttendanceDetail::updateOrCreate(
+                        ['attendance_id' => $attendance->id, 'student_id' => $studentId],
+                        ['status' => $status]
+                    );
+                }
+
+                $importedDays++;
+                $updatedDates[] = $dateStr;
+            }
+        });
+
+        if ($importedDays === 0) {
+            return back()->with('error', 'No working attendance days could be imported (dates were either future dates, locked, or marked as off-days).');
+        }
+
+        $matchedCount = count($studentAttendance);
+        $totalClassStudents = $students->count();
+        $monthName = $targetMonth->format('F Y');
+
+        $successMsg = "Successfully imported {$importedDays} working days of attendance for Class {$className} - {$sectionName} ({$monthName}). Matched {$matchedCount} of {$totalClassStudents} students.";
+        if (!empty($unmatchedNames)) {
+            $successMsg .= " Note: " . count($unmatchedNames) . " name(s) in CSV could not be matched (" . implode(', ', array_slice(array_unique($unmatchedNames), 0, 3)) . ").";
+        }
+        if ($skippedLockedDays > 0) {
+            $successMsg .= " Skipped {$skippedLockedDays} locked day(s).";
+        }
+        if ($skippedFutureDays > 0) {
+            $successMsg .= " Skipped {$skippedFutureDays} future day(s).";
+        }
+        if ($skippedNonWorkingDays > 0) {
+            $successMsg .= " Skipped {$skippedNonWorkingDays} non-working day(s) (Sundays / Holidays).";
+        }
+
+        return redirect()->route('dailyattandence', [
+            'class_id' => $resolvedClassId,
+            'section_name' => $sectionName,
+            'date' => end($updatedDates) ?: $targetMonth->toDateString(),
+            'academic_session' => $session,
+        ])->with('success', $successMsg);
+    }
+
+    private function normalizeClassAndSection(?string $classStr, ?string $sectionStr): array
+    {
+        if (!$classStr) {
+            return [null, null];
+        }
+
+        $cleanClass = trim($classStr);
+        $romanMap = [
+            'i' => '01', 'ii' => '02', 'iii' => '03', 'iv' => '04', 'v' => '05',
+            'vi' => '06', 'vii' => '07', 'viii' => '08', 'ix' => '09', 'x' => '10',
+            'xi' => '11', 'xii' => '12',
+            '1' => '01', '2' => '02', '3' => '03', '4' => '04', '5' => '05',
+            '6' => '06', '7' => '07', '8' => '08', '9' => '09',
+        ];
+
+        $mappedClassName = $romanMap[strtolower($cleanClass)] ?? $cleanClass;
+
+        $class = Classes::query()
+            ->where('class_name', $mappedClassName)
+            ->orWhere('class_name', $cleanClass)
+            ->orWhere('id', $cleanClass)
+            ->first();
+
+        $classId = optional($class)->id;
+        $className = optional($class)->class_name ?: $mappedClassName;
+
+        $cleanSec = trim((string) $sectionStr);
+        $matchedSec = $cleanSec;
+
+        if ($cleanSec !== '') {
+            $sections = $this->sections($classId ?: $className);
+            foreach ($sections as $s) {
+                if (strcasecmp($s, $cleanSec) === 0 || str_starts_with(strtolower($s), strtolower($cleanSec)) || str_starts_with(strtolower($cleanSec), strtolower($s))) {
+                    $matchedSec = $s;
+                    break;
+                }
+            }
+        }
+
+        return [$classId ?: $className, $matchedSec];
+    }
+
+    private function parseUploadedSpreadsheet($file): array
+    {
+        $path = $file->getRealPath();
+        $ext = strtolower($file->getClientOriginalExtension());
+
+        if ($ext === 'xlsx') {
+            return $this->parseXlsxContent($path);
+        }
+
+        return $this->parseCsvContent($path);
+    }
+
+    private function parseCsvContent(string $path): array
+    {
+        $rows = [];
+        if (($handle = fopen($path, 'r')) !== false) {
+            while (($row = fgetcsv($handle)) !== false) {
+                $rows[] = $row;
+            }
+            fclose($handle);
+        }
+        return $rows;
+    }
+
+    private function parseXlsxContent(string $path): array
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            return $this->parseCsvContent($path);
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            return [];
+        }
+
+        $sharedStrings = [];
+        if (($xmlIndex = $zip->locateName('xl/sharedStrings.xml')) !== false) {
+            $xmlData = $zip->getFromIndex($xmlIndex);
+            $sxml = simplexml_load_string($xmlData);
+            if ($sxml && isset($sxml->si)) {
+                foreach ($sxml->si as $si) {
+                    if (isset($si->t)) {
+                        $sharedStrings[] = (string) $si->t;
+                    } elseif (isset($si->r)) {
+                        $text = '';
+                        foreach ($si->r as $r) {
+                            $text .= (string) $r->t;
+                        }
+                        $sharedStrings[] = $text;
+                    } else {
+                        $sharedStrings[] = '';
+                    }
+                }
+            }
+        }
+
+        $sheetIndex = $zip->locateName('xl/worksheets/sheet1.xml');
+        if ($sheetIndex === false) {
+            $zip->close();
+            return [];
+        }
+
+        $sheetXml = simplexml_load_string($zip->getFromIndex($sheetIndex));
+        $zip->close();
+
+        if (!$sheetXml || !isset($sheetXml->sheetData->row)) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($sheetXml->sheetData->row as $row) {
+            $rowData = [];
+            $maxCol = 0;
+            foreach ($row->c as $cell) {
+                $ref = (string) $cell['r'];
+                preg_match('/([A-Z]+)(\d+)/', $ref, $m);
+                $colLetters = $m[1] ?? 'A';
+                $colIdx = 0;
+                $len = strlen($colLetters);
+                for ($k = 0; $k < $len; $k++) {
+                    $colIdx = $colIdx * 26 + (ord($colLetters[$k]) - ord('A') + 1);
+                }
+                $colIdx -= 1;
+
+                $val = '';
+                $type = (string) $cell['t'];
+                if ($type === 's') {
+                    $sId = (int) $cell->v;
+                    $val = $sharedStrings[$sId] ?? '';
+                } elseif ($type === 'inlineStr') {
+                    $val = (string) $cell->is->t;
+                } else {
+                    $val = (string) $cell->v;
+                }
+
+                $rowData[$colIdx] = $val;
+                if ($colIdx > $maxCol) {
+                    $maxCol = $colIdx;
+                }
+            }
+
+            $fullRow = [];
+            for ($c = 0; $c <= $maxCol; $c++) {
+                $fullRow[$c] = $rowData[$c] ?? '';
+            }
+            $rows[] = $fullRow;
+        }
+
+        return $rows;
+    }
 }

@@ -539,6 +539,8 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('dailyattandence-lock/{attendance}',[AcademicAttendanceController::class, 'lock'])->name('dailyattandence.lock');
     Route::post('dailyattandence-unlock/{attendance}',[AcademicAttendanceController::class, 'unlock'])->name('dailyattandence.unlock');
     Route::delete('dailyattandence-delete/{attendance}',[AcademicAttendanceController::class, 'destroy'])->name('dailyattandence.delete');
+    Route::post('dailyattandence-import',[AcademicAttendanceController::class, 'import'])->name('dailyattandence.import');
+    Route::get('dailyattandence-sample-csv',[AcademicAttendanceController::class, 'sampleCsv'])->name('dailyattandence.sample-csv');
     Route::get('primarygroup',[PrimaryGrupController::class, 'index'])->name('primarygroup');
     Route::get('groupmaster',[GrupController::class, 'index'])->name('groupmaster');
     Route::get('headmaster',[HeadController::class, 'index'])->name('headmaster');
