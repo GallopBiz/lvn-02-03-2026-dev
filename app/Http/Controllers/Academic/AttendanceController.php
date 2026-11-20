@@ -49,6 +49,11 @@ class AttendanceController extends Controller
         $classes = $this->classes($isStaffUser);
         $selectedClass = $filters['class_id'] ? $this->resolveClass($filters['class_id']) : null;
         $sections = $this->sections($filters['class_id'], $isStaffUser);
+        $allSections = $this->allDistinctSections($isStaffUser);
+        $classSectionMap = [];
+        foreach ($classes as $c) {
+            $classSectionMap[$c->id] = $this->sections($c->id, $isStaffUser)->values()->toArray();
+        }
         $teachers = TeacherSubject::with('Teacher')->where('is_delete', 0)->groupBy('teacher_id')->get();
         if ($isStaffUser && $filters['class_id'] && $filters['section_name']
             && !$this->canStaffAccessClassSection($filters['class_id'], $filters['section_name'], true)) {
@@ -133,6 +138,8 @@ class AttendanceController extends Controller
             'classes' => $classes,
             'selectedClass' => $selectedClass,
             'sections' => $sections,
+            'allSections' => $allSections,
+            'classSectionMap' => $classSectionMap,
             'teachers' => $teachers,
             'students' => $students,
             'filters' => $filters,
@@ -1538,9 +1545,12 @@ class AttendanceController extends Controller
             ->filter(fn ($s) => $s !== '')
             ->unique();
 
-        $knownOrder = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
-        $sortedSections = $allSections->sortBy(function ($sec) use ($knownOrder) {
-            $idx = array_search($sec, $knownOrder);
+        $standardSections = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+        $matchingStandard = $allSections->filter(fn ($s) => in_array($s, $standardSections))->values();
+        $effectiveSections = $matchingStandard->isNotEmpty() ? $matchingStandard : $allSections;
+
+        $sortedSections = $effectiveSections->sortBy(function ($sec) use ($standardSections) {
+            $idx = array_search($sec, $standardSections);
             return $idx === false ? 999 . $sec : sprintf('%03d', $idx);
         })->values();
 
@@ -1568,6 +1578,55 @@ class AttendanceController extends Controller
         }
 
         return $sortedSections;
+    }
+
+    private function allDistinctSections(bool $classTeacherOnly = false)
+    {
+        $classSections = Classes::query()->pluck('section_name')
+            ->filter()
+            ->flatMap(fn ($s) => array_map('trim', explode(',', $s)));
+
+        $studentSections = Student_registration::query()
+            ->whereNotNull('section_name')
+            ->where('section_name', '!=', '')
+            ->distinct()
+            ->pluck('section_name');
+
+        $all = $classSections->concat($studentSections)
+            ->filter()
+            ->map(fn ($s) => trim($s))
+            ->filter(fn ($s) => $s !== '')
+            ->unique();
+
+        $standardSections = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+        $matchingStandard = $all->filter(fn ($s) => in_array($s, $standardSections))->values();
+        $effective = $matchingStandard->isNotEmpty() ? $matchingStandard : $all;
+
+        $sorted = $effective->sortBy(function ($sec) use ($standardSections) {
+            $idx = array_search($sec, $standardSections);
+            return $idx === false ? 999 . $sec : sprintf('%03d', $idx);
+        })->values();
+
+        if ($sorted->isEmpty()) {
+            $sorted = collect($standardSections);
+        }
+
+        if ($this->isStaffAttendanceUser()) {
+            $allowedSections = $this->accessibleTeacherSubjects($classTeacherOnly)
+                ->pluck('section_name')
+                ->filter()
+                ->values();
+
+            if (!$classTeacherOnly && $allowedSections->contains('All')) {
+                return $sorted;
+            }
+
+            if (!$allowedSections->contains('All') && $allowedSections->isNotEmpty()) {
+                return $sorted->filter(fn ($s) => $allowedSections->contains($s))->values();
+            }
+        }
+
+        return $sorted;
     }
 
     private function studentsForClass($classId, ?string $sectionName = null, bool $strictSectionClassMatch = false)

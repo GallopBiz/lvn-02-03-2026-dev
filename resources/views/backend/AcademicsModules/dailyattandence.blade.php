@@ -785,6 +785,45 @@
             }
         }
     });
+
+    window.attendanceClassSectionMap = @json($classSectionMap ?? []);
+    window.attendanceAllSections = @json(isset($allSections) ? $allSections->values()->toArray() : []);
+    window.attendanceStandardSections = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+
+    function updateSectionDropdown(classSelectEl, sectionSelectEl, defaultLabel, filterStandardOnly) {
+        if (!classSelectEl || !sectionSelectEl) return;
+        var classId = classSelectEl.value;
+        var currentVal = sectionSelectEl.value;
+        var availableSections = [];
+
+        if (classId && window.attendanceClassSectionMap && window.attendanceClassSectionMap[classId] && window.attendanceClassSectionMap[classId].length > 0) {
+            availableSections = window.attendanceClassSectionMap[classId];
+        } else if (window.attendanceAllSections && window.attendanceAllSections.length > 0) {
+            availableSections = window.attendanceAllSections;
+        }
+
+        if (filterStandardOnly) {
+            var standardFiltered = availableSections.filter(function(sec) {
+                return window.attendanceStandardSections.indexOf(sec) !== -1;
+            });
+            availableSections = (standardFiltered.length > 0) ? standardFiltered : window.attendanceStandardSections;
+        }
+
+        var html = '<option value="">' + (defaultLabel || 'Select section') + '</option>';
+        availableSections.forEach(function(sec) {
+            var selected = (sec === currentVal) ? ' selected' : '';
+            html += '<option value="' + sec + '"' + selected + '>' + sec + '</option>';
+        });
+        sectionSelectEl.innerHTML = html;
+    }
+
+    document.getElementById('importClassSelect')?.addEventListener('change', function() {
+        updateSectionDropdown(this, document.getElementById('importSectionSelect'), 'Auto-detect from CSV header', true);
+    });
+
+    document.getElementById('classSelectInput')?.addEventListener('change', function() {
+        updateSectionDropdown(this, document.getElementById('sectionSelectInput'), 'Select section', true);
+    });
 </script>
 
 <!-- Import Monthly Attendance Modal -->
@@ -848,7 +887,18 @@
                                 <label class="font-weight-bold" style="color: #1e293b;">Section</label>
                                 <select name="section_name" id="importSectionSelect" class="form-control" style="color: #1e293b;">
                                     <option value="">Auto-detect from CSV header</option>
-                                    @foreach($sections as $sec)
+                                    @php
+                                        $standardAllowed = ['Aryabhatta', 'Kautilya', 'Ramanujan'];
+                                        $modalSections = ($sections && $sections->isNotEmpty()) ? $sections : ($allSections ?? collect());
+                                        $hasStandard = collect($modalSections)->contains(fn($s) => in_array($s, $standardAllowed));
+                                        $filteredModalSections = $hasStandard
+                                            ? collect($modalSections)->filter(fn($s) => in_array($s, $standardAllowed))->values()
+                                            : collect($modalSections)->values();
+                                        if ($filteredModalSections->isEmpty()) {
+                                            $filteredModalSections = collect($standardAllowed);
+                                        }
+                                    @endphp
+                                    @foreach($filteredModalSections as $sec)
                                         <option value="{{ $sec }}" @selected($filters['section_name'] === $sec)>{{ $sec }}</option>
                                     @endforeach
                                 </select>
