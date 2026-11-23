@@ -72,6 +72,7 @@ return [
                     [ 'title' => 'Daily Online Fees Settlements', 'route' => 'student-daily-online-fees-settlement', 'roles' => ['Admin'] ],
                     [ 'title' => 'Daily / Yearly Collection', 'route' => 'daily-collection', 'roles' => ['Admin'] ],
                     [ 'title' => 'Student Ledger', 'route' => 'student_ledger', 'roles' => ['Admin'] ],
+                    [ 'title' => 'Refund Voucher', 'route' => 'refund-vouchers.index', 'roles' => ['Admin'] ],
                 ],
             ],
             [

@@ -279,6 +279,7 @@
                   @php
                   $totalDr = 0;
 				  $totalrefundable_cr=0;
+                  $totalrefundable_dr=0;
                   $totalDrAfterDiscount = 0;
                   $totalDiscount = 0;
                   $totalCr = 0;
@@ -339,10 +340,12 @@
                               $discount = floatval($row['amount_dr_discount'] ?? 0);
                               $cr = floatval($row['amount_cr'] ?? 0);
                               $refundable_cr = floatval($row['refundable_cr'] ?? 0);
+                              $refundable_dr = floatval($row['refundable_dr'] ?? 0);
                               $totalDr += $dr;
                               $totalDrAfterDiscount += $drAfterDiscount;
                               $totalDiscount += $discount;
                               $totalCr += $cr;
+                              $totalrefundable_dr += $refundable_dr;
                               if($cr ==0 && $refundable_cr == 3000){
                               $totalrefundable_cr=  $refundable_cr;
                               }else{
@@ -367,7 +370,7 @@
                                   @endif
                               </td>
                               <td>{{ $row['amount_cr'] !== '' ? number_format($row['amount_cr'], 2) : '' }}</td>
-                              <td></td>
+                              <td>{{ isset($row['refundable_dr']) && $row['refundable_dr'] !== '' ? number_format($row['refundable_dr'], 2) : '' }}</td>
                               <td>{{ isset($row['refundable_cr']) && $row['refundable_cr'] !== '' ? number_format($row['refundable_cr'], 2) : '' }}</td>
                               <td style="font-size:10px;max-width:200px;" >{{ $row['remarks'] }}</td>
                               <td class="no-print-col">
@@ -386,6 +389,8 @@
                                   </div>
                                 @elseif(!empty($student_data) && $row['amount_cr']!=='' && str_contains($row['remarks'], 'Opening Balance') && !empty($student_data->scholar_no))
                                   <a href="{{ url('admission-receipt/' . $student_data->scholar_no) }}{{ !empty($row['receipt_number']) ? '?receipt=' . $row['receipt_number'] : '' }}" target="_blank" class="text-primary text-decoration-underline" style="font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;">Print Receipt</a>
+                                @elseif(!empty($row['source']) && $row['source'] === 'refund_voucher' && !empty($row['voucher_id']))
+                                  <a href="{{ route('refund-vouchers.print', $row['voucher_id']) }}" target="_blank" class="text-danger text-decoration-underline font-weight-bold" style="font-size: 13px; white-space: nowrap; cursor: pointer;">Print Voucher</a>
                                 @endif
                               </td>
                           </tr>
@@ -403,8 +408,8 @@
                               @endif
                           </td>
                           <td>{{ number_format($totalCr, 2) }}</td>
-						  <td></td>
-						  <td>{{ $totalrefundable_cr }}</td>
+						  <td>{{ number_format($totalrefundable_dr, 2) }}</td>
+						  <td>{{ number_format($totalrefundable_cr, 2) }}</td>
                           <td colspan="1">
                               @if($totalDiscount > 0)
                                   <span style="color: orange;">Discount Applied: {{ number_format($totalDiscount, 2) }}</span>
@@ -414,9 +419,16 @@
                       </tr>
 
                       <tr style="font-weight: bold; background-color: #e0f7fa;">
-                          <td colspan="4" class="text-end" style="text-align:left !important;">Balance</td>
+                          <td colspan="4" class="text-end" style="text-align:left !important;">Balance Due / Caution Money Outstanding</td>
                           <td colspan="6">
-                              {{ number_format(abs($totalDr - $totalCr), 2) }}
+                              Fee Due: ₹{{ number_format(abs($totalDr - $totalCr), 2) }}
+                              &nbsp;&nbsp;|&nbsp;&nbsp;
+                              Caution Money Outstanding: ₹{{ number_format(max(0, $totalrefundable_cr - $totalrefundable_dr), 2) }}
+                              @if($totalrefundable_dr > 0 && ($totalrefundable_cr - $totalrefundable_dr) <= 0)
+                                  <span class="badge badge-success ml-2" style="background:#28a745;color:#fff;padding:3px 8px;font-size:11px;">Fully Refunded</span>
+                              @elseif($totalrefundable_dr > 0)
+                                  <span class="badge badge-warning ml-2" style="background:#ffc107;color:#000;padding:3px 8px;font-size:11px;">Partially Refunded (₹{{ number_format($totalrefundable_dr, 2) }})</span>
+                              @endif
                           </td>
                       </tr>
                   <tr style="font-weight: bold; background-color: #e0f7fa;">

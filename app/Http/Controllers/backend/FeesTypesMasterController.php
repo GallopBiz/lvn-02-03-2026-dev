@@ -425,6 +425,55 @@ class FeesTypesMasterController extends Controller
                     ];
             }
         }
+
+        // Add active Refund Vouchers (Debit entry against Caution Money / refundable head)
+        if (!empty($student_data)) {
+            $studentId = $student_data->id;
+            $scholarNo = $student_data->scholar_no ?? null;
+
+            if (\Illuminate\Support\Facades\Schema::connection('dynamic')->hasTable('refund_vouchers')) {
+                $refundVouchers = DB::connection('dynamic')->table('refund_vouchers')
+                    ->where(function ($q) use ($studentId, $scholarNo) {
+                        $q->where('student_id', $studentId);
+                        if (!empty($scholarNo)) {
+                            $q->orWhere('scholar_no', $scholarNo);
+                        }
+                    })
+                    ->where('status', 'completed')
+                    ->whereNull('deleted_at')
+                    ->get();
+
+                foreach ($refundVouchers as $rv) {
+                    $rvDate = \Carbon\Carbon::parse($rv->voucher_date)->format('d-m-Y');
+                    $rvRemark = "Refund Voucher #" . $rv->voucher_no . " (" . strtoupper($rv->refund_head) . " REFUND)";
+                    if ($rv->payment_mode === 'Cheque' && !empty($rv->cheque_no)) {
+                        $rvRemark .= " / Chq No: " . $rv->cheque_no;
+                        if (!empty($rv->bank_name)) {
+                            $rvRemark .= " [" . $rv->bank_name . "]";
+                        }
+                    } elseif ($rv->payment_mode === 'Cash') {
+                        $rvRemark .= " / Mode: Cash";
+                    }
+                    if (!empty($rv->remarks)) {
+                        $rvRemark .= " — " . $rv->remarks;
+                    }
+
+                    $mergedRows[] = [
+                        'type' => 'dr',
+                        'due_date' => '-',
+                        'entry_date' => $rvDate,
+                        'amount_dr' => '',
+                        'amount_cr' => '',
+                        'refundable_dr' => (float) $rv->refund_amount,
+                        'refundable_cr' => '',
+                        'remarks' => $rvRemark,
+                        'source' => 'refund_voucher',
+                        'voucher_id' => $rv->id,
+                        'voucher_no' => $rv->voucher_no,
+                    ];
+                }
+            }
+        }
         
         // Sort merged array by entry_date (assume date in Y-m-d format)
         usort($mergedRows, function($a, $b) {

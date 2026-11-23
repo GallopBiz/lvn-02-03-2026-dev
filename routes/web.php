@@ -1024,6 +1024,19 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::post('late-fee-adjustments/save', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'saveAdjustment'])->name('late-fee-adjustments.save');
     Route::post('late-fee-adjustments/reset/{id}', [\App\Http\Controllers\backend\LateFeeAdjustmentController::class, 'resetAdjustment'])->name('late-fee-adjustments.reset');
 
+    // Student Refund Voucher Module (Caution Money & Refundable Heads)
+    Route::prefix('refund-vouchers')->group(function () {
+        Route::get('/', [\App\Http\Controllers\backend\RefundVoucherController::class, 'index'])->name('refund-vouchers.index');
+        Route::get('/create', [\App\Http\Controllers\backend\RefundVoucherController::class, 'create'])->name('refund-vouchers.create');
+        Route::post('/store', [\App\Http\Controllers\backend\RefundVoucherController::class, 'store'])->name('refund-vouchers.store');
+        Route::get('/search-student', [\App\Http\Controllers\backend\RefundVoucherController::class, 'searchStudent'])->name('refund-vouchers.search-student');
+        Route::get('/student-balance/{studentId}', [\App\Http\Controllers\backend\RefundVoucherController::class, 'getStudentBalance'])->name('refund-vouchers.student-balance');
+        Route::get('/print-register', [\App\Http\Controllers\backend\RefundVoucherController::class, 'printRegister'])->name('refund-vouchers.print-register');
+        Route::get('/print/{id}', [\App\Http\Controllers\backend\RefundVoucherController::class, 'print'])->name('refund-vouchers.print');
+        Route::get('/show/{id}', [\App\Http\Controllers\backend\RefundVoucherController::class, 'show'])->name('refund-vouchers.show');
+        Route::post('/cancel/{id}', [\App\Http\Controllers\backend\RefundVoucherController::class, 'cancel'])->name('refund-vouchers.cancel');
+    });
+
     Route::get('fees-types-master', [FeesTypesMasterController::class, 'index'])->name('fees-types-master');
     Route::post('save-fees-types-master', [FeesTypesMasterController::class, 'create']);
     Route::get('fees-types-master-edit/{id}', [FeesTypesMasterController::class, 'edit']);

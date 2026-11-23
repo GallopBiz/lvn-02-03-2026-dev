@@ -146,6 +146,7 @@
                                             <a class="dropdown-item" href="{{ route('registrationeditlist', $oldRecordStudentId) }}">Edit Student Registration</a>
                                             <a class="dropdown-item" href="{{ route('feesmasterviewlist', $oldRecordStudentId) }}">Fees Master View</a>
                                             <a class="dropdown-item" href="{{ route('view-student-ledger', $oldRecordStudentId) }}">Student Ledger</a>
+                                            <a class="dropdown-item text-primary font-weight-bold" href="{{ route('refund-vouchers.create', ['student_id' => $oldRecordStudentId, 'scholar_no' => $certificate->scholar_no]) }}">Generate Refund Voucher</a>
                                             <a class="dropdown-item" href="{{ route('fees_payments', $oldRecordStudentId) }}">Fees Payment</a>
                                             <a class="dropdown-item" href="{{ route('scholarbusassign', ['student_id' => $oldRecordStudentId, 'student_search' => $certificate->scholar_no]) }}">Bus Assignment</a>
                                             <a class="dropdown-item" href="{{ route('student-attandence-report', $attendanceParams) }}">Attendance Report</a>
