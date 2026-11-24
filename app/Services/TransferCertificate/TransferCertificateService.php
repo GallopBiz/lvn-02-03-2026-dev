@@ -52,6 +52,7 @@ class TransferCertificateService
                 $certificate = $existing;
                 $certificate->fill([
                     'status' => 'issued',
+                    'section_name' => !empty($formData['section']) ? $formData['section'] : $certificate->section_name,
                     'tc_form_data' => array_merge($certificate->tc_form_data ?? [], $formData),
                     'remarks' => $data['remarks'] ?? $certificate->remarks,
                 ])->save();
@@ -62,7 +63,7 @@ class TransferCertificateService
                     'scholar_no' => $student->scholar_no,
                     'session_name' => $certificateSessionName,
                     'class_name' => $student->class_name,
-                    'section_name' => $this->valueFromJson($student->json_str, 'section_name') ?? $student->section_name,
+                    'section_name' => !empty($formData['section']) ? $formData['section'] : ($this->valueFromJson($student->json_str, 'section_name') ?? $student->section_name),
                     'student_name' => $student->student_name,
                     'status' => 'issued',
                     'issue_date' => $data['issue_date'],

@@ -224,10 +224,22 @@
                     @forelse($collectiveRows as $row)
                         <tr>
                             <td>{{ $loop->iteration }}</td>
-                            <td>{{ $row['student_name'] }}</td>
+                            <td>
+                                {{ $row['student_name'] }}
+                                @if(!empty($row['registration_date']) && $row['working_days'] != $workingDays)
+                                    <small class="text-muted d-block" style="font-size: 11px;" title="Registered on {{ $row['registration_date'] }}">
+                                        Admitted: {{ \Carbon\Carbon::parse($row['effective_start_date'])->format('d-m-Y') }}
+                                    </small>
+                                @endif
+                            </td>
                             <td>{{ $row['scholar_no'] }}</td>
                             <td>{{ number_format($row['present_days'], 2) }}</td>
-                            <td>{{ $row['working_days'] }}</td>
+                            <td>
+                                {{ $row['working_days'] }}
+                                @if($row['working_days'] != $workingDays)
+                                    <span class="text-muted" style="font-size: 11px;" title="Calculated from registration date (School Total: {{ $workingDays }})">/ {{ $workingDays }}</span>
+                                @endif
+                            </td>
                             <td>{{ number_format($row['percentage'], 2) }}%</td>
                             <td>
                                 @if($row['is_below_minimum'])

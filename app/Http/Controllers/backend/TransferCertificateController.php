@@ -280,6 +280,8 @@ class TransferCertificateController extends Controller
 
         return response()->json($students->map(function ($student) {
             $json = json_decode($student->json_str ?? '{}', true) ?: [];
+            $section = $this->resolveStudentSection($student, $student->session_name);
+            $rollNo = $this->rollNoForStudent((int) $student->id, $student->scholar_no, $student->class_name, $student->session_name);
 
             return [
                 'id' => $student->id,
@@ -287,7 +289,8 @@ class TransferCertificateController extends Controller
                 'student_name' => $student->student_name,
                 'scholar_no' => $student->scholar_no,
                 'class_name' => $student->class_name,
-                'section_name' => $json['section_name'] ?? null,
+                'section_name' => $section,
+                'roll_no' => $rollNo,
                 'session_name' => $student->session_name,
             ];
         }));
@@ -305,24 +308,27 @@ class TransferCertificateController extends Controller
         abort_if(!$student, 404);
 
         $json = json_decode($student->json_str ?? '{}', true) ?: [];
-        $section = $json['section_name'] ?? $student->section_name ?? null;
         $sessionName = $student->session_name ?: $this->resolveSelectedSessionYear($request);
+        $section = $this->resolveStudentSection($student, $sessionName);
+        $rollNo = $this->rollNoForStudent((int) $student->id, $student->scholar_no, $student->class_name, $sessionName);
         $subjectClassName = $request->input('class_name', $student->class_name);
         $subjects = $this->subjectsForStudent((int) $student->id, $subjectClassName);
-        $attendance = $this->attendanceForStudent((int) $student->id, $sessionName, $student->class_name);
+        $attendance = $this->attendanceForStudent((int) $student->id, $sessionName, $student->class_name, $student->scholar_no);
         $dateOfBirth = $this->dateForInput($student->date_of_birth ?: ($json['student_dob'] ?? null));
+        $categoryAndCaste = $this->resolveStudentCategoryAndCaste($student, $sessionName);
 
         return response()->json([
             'id' => $student->id,
             'name' => $this->displayValue($student->student_name ?: ($json['studentname'] ?? null)),
+            'roll_no' => $rollNo,
             'scholar_no' => $this->displayValue($student->scholar_no),
             'scholar_serial_no' => $this->displayValue($student->scholar_no),
             'class_name' => $this->displayValue($student->class_name),
-            'section_name' => $this->displayValue($section),
+            'section_name' => $section,
             'session_name' => $this->displayValue($sessionName),
             'mother_name' => $this->displayValue($json['mother_name'] ?? $json['mothername'] ?? null),
             'father_name' => $this->displayValue($json['student_father_name'] ?? $json['fathername'] ?? $json['father_name'] ?? null),
-            'caste' => $this->displayValue($json['student_caste'] ?? $json['caste'] ?? $json['caste_name'] ?? $json['cast'] ?? null),
+            'caste' => $this->displayValue($categoryAndCaste),
             'nationality' => $this->displayValue($json['nationality'] ?? 'Indian'),
             'date_of_admitted' => $this->dateForInput($json['admission_date'] ?? $student->registration_date ?? null),
             'class_to_which_admitted' => $this->displayValue($json['admitted_class'] ?? $json['class_to_which_admitted'] ?? $json['classname'] ?? $student->application_for ?? null),
@@ -423,31 +429,466 @@ class TransferCertificateController extends Controller
             ->pluck('s.subject_name');
     }
 
-    private function attendanceForStudent(int $studentId, ?string $sessionName, ?string $className = null): array
+    /**
+     * Resolve attendance (both collective and daily) for student across sessions
+     */
+    private function attendanceForStudent(int $studentId, ?string $sessionName, ?string $className = null, ?string $scholarNo = null): array
     {
-        if (
-            !Schema::connection('dynamic')->hasTable('academic_attendance_collective_details')
-            || !Schema::connection('dynamic')->hasTable('academic_attendance_collectives')
-        ) {
-            return ['present_days' => '', 'working_days' => ''];
+        $sessions = $this->getAvailableAcademicDatabases();
+
+        foreach ($sessions as $db) {
+            $currStudentId = $studentId;
+
+            if ($db) {
+                if (!$this->tableExists($db, 'student_registration')) {
+                    continue;
+                }
+                $st = DB::table("{$db}.student_registration")->where('id', $studentId)->first();
+                if (!$st && $scholarNo) {
+                    $st = DB::table("{$db}.student_registration")->where('scholar_no', $scholarNo)->first();
+                }
+                if ($st) {
+                    $currStudentId = $st->id;
+                }
+            }
+
+            // 1. Try collective attendance (first with annual exam filter, then latest collective record)
+            if ($this->tableExists($db, 'academic_attendance_collective_details') && $this->tableExists($db, 'academic_attendance_collectives')) {
+                $tableCollectives = $db ? "{$db}.academic_attendance_collectives" : 'academic_attendance_collectives';
+                $tableCollectiveDetails = $db ? "{$db}.academic_attendance_collective_details" : 'academic_attendance_collective_details';
+                $conn = $db ? null : 'dynamic';
+
+                $builder = $conn ? DB::connection($conn)->table("{$tableCollectiveDetails} as d") : DB::table("{$tableCollectiveDetails} as d");
+
+                $record = (clone $builder)
+                    ->join("{$tableCollectives} as c", 'c.id', '=', 'd.collective_id')
+                    ->where('d.student_id', $currStudentId)
+                    ->where(function ($q) {
+                        $q->where('c.is_delete', 0)->orWhereNull('c.is_delete');
+                    })
+                    ->when($className, fn ($q) => $q->where('c.class_name', $className))
+                    ->tap(fn ($q) => $this->applyAnnualExamFilter($q, $sessionName, 'c'))
+                    ->orderByDesc('c.end_date')
+                    ->orderByDesc('d.id')
+                    ->first(['d.present_days', 'd.working_days']);
+
+                if (!$record || (float) ($record->working_days ?? 0) <= 0) {
+                    $record = (clone $builder)
+                        ->join("{$tableCollectives} as c", 'c.id', '=', 'd.collective_id')
+                        ->where('d.student_id', $currStudentId)
+                        ->where(function ($q) {
+                            $q->where('c.is_delete', 0)->orWhereNull('c.is_delete');
+                        })
+                        ->when($className, fn ($q) => $q->where('c.class_name', $className))
+                        ->orderByDesc('c.end_date')
+                        ->orderByDesc('d.id')
+                        ->first(['d.present_days', 'd.working_days']);
+                }
+
+                if ($record && (float) ($record->working_days ?? 0) > 0) {
+                    $p = (float) $record->present_days;
+                    $w = (float) $record->working_days;
+                    return [
+                        'present_days' => ((int) $p == $p) ? (int) $p : round($p, 2),
+                        'working_days' => ((int) $w == $w) ? (int) $w : round($w, 2),
+                    ];
+                }
+            }
+
+            // 2. Try daily attendance (academic_attendance + academic_attendance_details)
+            if ($this->tableExists($db, 'academic_attendance_details') && $this->tableExists($db, 'academic_attendance')) {
+                $tableAtt = $db ? "{$db}.academic_attendance" : 'academic_attendance';
+                $tableAttDetails = $db ? "{$db}.academic_attendance_details" : 'academic_attendance_details';
+                $conn = $db ? null : 'dynamic';
+
+                $dailyBuilder = $conn ? DB::connection($conn)->table("{$tableAttDetails} as aad") : DB::table("{$tableAttDetails} as aad");
+
+                $dailyQuery = $dailyBuilder
+                    ->join("{$tableAtt} as aa", 'aad.attendance_id', '=', 'aa.id')
+                    ->where('aad.student_id', $currStudentId)
+                    ->where(function ($q) {
+                        $q->where('aa.is_delete', 0)->orWhereNull('aa.is_delete');
+                    });
+
+                $totalDays = (clone $dailyQuery)->distinct('aa.attendance_date')->count('aa.attendance_date');
+                if ($totalDays > 0) {
+                    $presentCount = (clone $dailyQuery)
+                        ->selectRaw("SUM(CASE 
+                            WHEN LOWER(aad.status) IN ('present', 'p', 'pl') THEN 1 
+                            WHEN LOWER(aad.status) IN ('half_day', 'half-day', 'hd') THEN 0.5 
+                            ELSE 0 
+                        END) as total")
+                        ->value('total');
+
+                    $presentDays = (float) ($presentCount ?? 0);
+                    return [
+                        'present_days' => ((int) $presentDays == $presentDays) ? (int) $presentDays : round($presentDays, 2),
+                        'working_days' => $totalDays,
+                    ];
+                }
+            }
         }
 
-        $sessionWithDash = $sessionName ? str_replace('_', '-', $sessionName) : null;
-
-        $record = DB::connection('dynamic')
-            ->table('academic_attendance_collective_details as d')
-            ->join('academic_attendance_collectives as c', 'c.id', '=', 'd.collective_id')
-            ->where('d.student_id', $studentId)
-            ->when($className, fn ($q) => $q->where('c.class_name', $className))
-            ->tap(fn ($q) => $this->applyAnnualExamFilter($q, $sessionName, 'c'))
-            ->orderByDesc('c.end_date')
-            ->orderByDesc('d.id')
-            ->first(['d.present_days', 'd.working_days']);
-
         return [
-            'present_days' => $record->present_days ?? '',
-            'working_days' => $record->working_days ?? '',
+            'present_days' => '',
+            'working_days' => '',
         ];
+    }
+
+    /**
+     * Resolve latest Roll No from academic/roll-no-tools (academic_student_roll_no)
+     */
+    private function rollNoForStudent(int $studentId, ?string $scholarNo = null, ?string $className = null, ?string $sessionName = null): string
+    {
+        $sessions = $this->getAvailableAcademicDatabases();
+
+        foreach ($sessions as $db) {
+            $currStudentId = $studentId;
+
+            if ($db) {
+                if (!$this->tableExists($db, 'student_registration')) {
+                    continue;
+                }
+                $st = DB::table("{$db}.student_registration")->where('id', $studentId)->first();
+                if (!$st && $scholarNo) {
+                    $st = DB::table("{$db}.student_registration")->where('scholar_no', $scholarNo)->first();
+                }
+                if ($st) {
+                    $currStudentId = $st->id;
+                }
+            }
+
+            if ($this->tableExists($db, 'academic_student_roll_no')) {
+                $tableRoll = $db ? "{$db}.academic_student_roll_no" : 'academic_student_roll_no';
+                $conn = $db ? null : 'dynamic';
+                $builder = $conn ? DB::connection($conn)->table($tableRoll) : DB::table($tableRoll);
+
+                $query = $builder
+                    ->where(function ($q) use ($currStudentId) {
+                        $q->where('student_id', (string) $currStudentId)
+                          ->orWhere('student_id', $currStudentId);
+                    })
+                    ->whereNotNull('roll_no')
+                    ->where('roll_no', '!=', '');
+
+                if ($sessionName) {
+                    $sessionVariants = array_unique(array_filter([
+                        $sessionName,
+                        str_replace('_', '-', $sessionName),
+                        str_replace('-', '_', $sessionName),
+                    ]));
+                    $query->where(function ($q) use ($sessionVariants) {
+                        $q->whereIn('session_id', $sessionVariants)
+                          ->orWhereNull('session_id')
+                          ->orWhere('session_id', '');
+                    });
+                }
+
+                $rollNo = (string) $query->orderByDesc('id')->value('roll_no');
+                if (!empty($rollNo) && trim($rollNo) !== '') {
+                    return trim($rollNo);
+                }
+            }
+
+            // Fallback to student_registration table / json_str
+            $tableStudent = $db ? "{$db}.student_registration" : 'student_registration';
+            $conn = $db ? null : 'dynamic';
+            $stBuilder = $conn ? DB::connection($conn)->table($tableStudent) : DB::table($tableStudent);
+
+            $stRecord = $stBuilder->where('id', $currStudentId)->first();
+            if ($stRecord) {
+                $json = json_decode($stRecord->json_str ?? '{}', true) ?: [];
+                $rollCandidate = $stRecord->roll_no ?? ($json['roll_no'] ?? ($json['rollno'] ?? null));
+                if (!empty($rollCandidate) && trim((string) $rollCandidate) !== '') {
+                    return trim((string) $rollCandidate);
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Resolve student assigned section across columns, roll tools, and sessions
+     */
+    private function resolveStudentSection($student, ?string $sessionName = null): string
+    {
+        if (!$student) {
+            return '';
+        }
+
+        // 1. Direct section_name on student
+        if (!empty($student->section_name) && trim((string) $student->section_name) !== '' && strtoupper(trim((string) $student->section_name)) !== 'N/A') {
+            return trim((string) $student->section_name);
+        }
+
+        // 2. Section in JSON str
+        $json = json_decode($student->json_str ?? '{}', true) ?: [];
+        if (!empty($json['section_name']) && trim((string) $json['section_name']) !== '' && strtoupper(trim((string) $json['section_name'])) !== 'N/A') {
+            return trim((string) $json['section_name']);
+        }
+        if (!empty($json['section']) && trim((string) $json['section']) !== '' && strtoupper(trim((string) $json['section'])) !== 'N/A') {
+            return trim((string) $json['section']);
+        }
+
+        $scholarNo = $student->scholar_no ?? ($json['scholar_no'] ?? null);
+        $studentId = $student->id;
+        $sessions = $this->getAvailableAcademicDatabases();
+
+        foreach ($sessions as $db) {
+            $currStudentId = $studentId;
+
+            if ($db) {
+                if (!$this->tableExists($db, 'student_registration')) {
+                    continue;
+                }
+                $st = DB::table("{$db}.student_registration")->where('id', $studentId)->first();
+                if (!$st && $scholarNo) {
+                    $st = DB::table("{$db}.student_registration")->where('scholar_no', $scholarNo)->first();
+                }
+                if ($st) {
+                    $currStudentId = $st->id;
+                    if (!empty($st->section_name) && trim((string) $st->section_name) !== '' && strtoupper(trim((string) $st->section_name)) !== 'N/A') {
+                        return trim((string) $st->section_name);
+                    }
+                    $stJson = json_decode($st->json_str ?? '{}', true) ?: [];
+                    if (!empty($stJson['section_name']) && trim((string) $stJson['section_name']) !== '' && strtoupper(trim((string) $stJson['section_name'])) !== 'N/A') {
+                        return trim((string) $stJson['section_name']);
+                    }
+                }
+            }
+
+            // 3. From academic_student_roll_no.section_id (stores section names like 'Aryabhatta', 'Kautilya')
+            if ($this->tableExists($db, 'academic_student_roll_no')) {
+                $tableRoll = $db ? "{$db}.academic_student_roll_no" : 'academic_student_roll_no';
+                $conn = $db ? null : 'dynamic';
+                $builder = $conn ? DB::connection($conn)->table($tableRoll) : DB::table($tableRoll);
+
+                $rollSec = $builder
+                    ->where(function ($q) use ($currStudentId) {
+                        $q->where('student_id', (string) $currStudentId)
+                          ->orWhere('student_id', $currStudentId);
+                    })
+                    ->whereNotNull('section_id')
+                    ->where('section_id', '!=', '')
+                    ->where('section_id', '!=', '0')
+                    ->orderByDesc('id')
+                    ->value('section_id');
+
+                if (!empty($rollSec) && trim((string) $rollSec) !== '') {
+                    return trim((string) $rollSec);
+                }
+            }
+
+            // 4. From classes table if class_id is present
+            if (!empty($student->class_id) && $this->tableExists($db, 'classes')) {
+                $tableClasses = $db ? "{$db}.classes" : 'classes';
+                $conn = $db ? null : 'dynamic';
+                $builder = $conn ? DB::connection($conn)->table($tableClasses) : DB::table($tableClasses);
+
+                $clsSec = $builder->where('id', $student->class_id)->value('section_name');
+                if (!empty($clsSec) && trim((string) $clsSec) !== '') {
+                    return trim((string) $clsSec);
+                }
+            }
+
+            // 5. Next year section
+            if (!empty($student->next_year_section) && trim((string) $student->next_year_section) !== '') {
+                return trim((string) $student->next_year_section);
+            }
+            if (!empty($json['next_year_section']) && trim((string) $json['next_year_section']) !== '') {
+                return trim((string) $json['next_year_section']);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Resolve student Category and Caste inline across registration columns, json_str, and sessions
+     */
+    private function resolveStudentCategoryAndCaste($student, ?string $sessionName = null): string
+    {
+        if (!$student) {
+            return '';
+        }
+
+        $json = json_decode($student->json_str ?? '{}', true) ?: [];
+        $rawCategory = $json['category'] ?? ($json['student_category'] ?? ($student->category ?? null));
+        $rawCaste = $json['student_caste'] ?? ($json['caste'] ?? ($json['caste_name'] ?? ($json['cast'] ?? ($student->caste ?? null))));
+
+        $scholarNo = $student->scholar_no ?? ($json['scholar_no'] ?? null);
+        $studentId = $student->id;
+
+        // If either category or caste is missing, check other session databases
+        if (empty($rawCategory) || empty($rawCaste) || in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+            $sessions = $this->getAvailableAcademicDatabases();
+
+            foreach ($sessions as $db) {
+                if (!$db || !$this->tableExists($db, 'student_registration')) {
+                    continue;
+                }
+
+                $st = DB::table("{$db}.student_registration")->where('id', $studentId)->first();
+                if (!$st && $scholarNo) {
+                    $st = DB::table("{$db}.student_registration")->where('scholar_no', $scholarNo)->first();
+                }
+
+                if ($st) {
+                    $sJson = json_decode($st->json_str ?? '{}', true) ?: [];
+                    if (empty($rawCategory)) {
+                        $rawCategory = $sJson['category'] ?? ($sJson['student_category'] ?? ($st->category ?? null));
+                    }
+                    if (empty($rawCaste) || in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+                        $candidateCaste = $sJson['student_caste'] ?? ($sJson['caste'] ?? ($sJson['caste_name'] ?? ($sJson['cast'] ?? ($st->caste ?? null))));
+                        if (!empty($candidateCaste) && !in_array(strtolower(trim((string) $candidateCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+                            $rawCaste = $candidateCaste;
+                        }
+                    }
+
+                    if (!empty($rawCategory) && !empty($rawCaste) && !in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Clean & normalize Category
+        $rawCategory = is_string($rawCategory) ? trim($rawCategory) : '';
+        if (in_array(strtolower($rawCategory), ['', '0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+            $rawCategory = null;
+        }
+
+        $categoryDisplay = null;
+        if ($rawCategory) {
+            $upperCat = strtoupper($rawCategory);
+            if (in_array($upperCat, ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED', 'OPEN'])) {
+                $categoryDisplay = 'General';
+            } elseif (in_array($upperCat, ['OBC', 'SC', 'ST'])) {
+                $categoryDisplay = $upperCat;
+            } else {
+                $categoryDisplay = ucfirst(trim($rawCategory));
+            }
+        }
+
+        // Clean & resolve Caste
+        $rawCaste = is_string($rawCaste) ? trim($rawCaste) : '';
+        if (is_numeric($rawCaste) && (int) $rawCaste > 0) {
+            $casteName = DB::connection('dynamic')->table('caste_name')->where('id', (int) $rawCaste)->value('caste_name');
+            if ($casteName) {
+                $rawCaste = trim((string) $casteName);
+            }
+        }
+
+        if (in_array(strtolower($rawCaste), ['', '0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+            $rawCaste = null;
+        }
+
+        // Remove redundancy if caste merely duplicates category
+        if ($categoryDisplay && $rawCaste) {
+            if (strcasecmp($categoryDisplay, $rawCaste) === 0) {
+                $rawCaste = null;
+            } elseif ($categoryDisplay === 'General' && in_array(strtoupper($rawCaste), ['GEN', 'GEN.', 'GENERAL', 'UR', 'OPEN'])) {
+                $rawCaste = null;
+            }
+        }
+
+        if ($categoryDisplay && $rawCaste) {
+            $casteFormatted = (strtoupper($rawCaste) === $rawCaste || strtolower($rawCaste) === $rawCaste)
+                ? ucwords(strtolower($rawCaste))
+                : $rawCaste;
+            return "{$categoryDisplay} (Category) - {$casteFormatted} (Caste)";
+        } elseif ($categoryDisplay) {
+            return $categoryDisplay;
+        } elseif ($rawCaste) {
+            $casteFormatted = (strtoupper($rawCaste) === $rawCaste || strtolower($rawCaste) === $rawCaste)
+                ? ucwords(strtolower($rawCaste))
+                : $rawCaste;
+            return "{$casteFormatted} (Caste)";
+        }
+
+        return '';
+    }
+
+    /**
+     * Get available academic session database names in chronological order
+     */
+    private function getAvailableAcademicDatabases(?Request $request = null): array
+    {
+        $currentSession = $this->resolveSelectedSessionYear($request ?: request()) ?: (Config::get('database.connections.dynamic.database') ?: '2026_2027');
+        $currStart = 2026;
+        if (preg_match('/^(\d{4})[_-](\d{4})$/', (string) $currentSession, $m)) {
+            $currStart = (int) $m[1];
+        }
+        $prevSession = ($currStart - 1) . '_' . ($currStart);
+        $currSession = $currStart . '_' . ($currStart + 1);
+
+        $isMysql = (Config::get('database.connections.dynamic.driver') === 'mysql' || Config::get('database.default') === 'mysql');
+        $sessionsToCheck = [];
+
+        if ($isMysql) {
+            try {
+                $availableDbs = array_map(function ($d) {
+                    return array_values((array) $d)[0];
+                }, DB::select("SHOW DATABASES"));
+
+                $matchingDbs = [];
+                foreach ($availableDbs as $dName) {
+                    if (preg_match('/^(\d{4})[_-](\d{4})$/', $dName, $dm)) {
+                        $matchingDbs[$dName] = (int) $dm[1];
+                    }
+                }
+                asort($matchingDbs);
+
+                foreach ($matchingDbs as $dName => $sYear) {
+                    if ($sYear <= $currStart || $dName === $currentSession) {
+                        $sessionsToCheck[] = $dName;
+                    }
+                }
+                if (in_array($prevSession, $availableDbs) && !in_array($prevSession, $sessionsToCheck)) {
+                    $sessionsToCheck[] = $prevSession;
+                }
+                if (in_array($currSession, $availableDbs) && !in_array($currSession, $sessionsToCheck)) {
+                    $sessionsToCheck[] = $currSession;
+                }
+                if (in_array($currentSession, $availableDbs) && !in_array($currentSession, $sessionsToCheck)) {
+                    $sessionsToCheck[] = $currentSession;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        if (empty($sessionsToCheck)) {
+            $sessionsToCheck[] = null; // null uses active dynamic connection
+        } else {
+            // Put current session first for faster lookups
+            if (in_array($currentSession, $sessionsToCheck)) {
+                $sessionsToCheck = array_diff($sessionsToCheck, [$currentSession]);
+                array_unshift($sessionsToCheck, $currentSession);
+            }
+        }
+
+        return array_values(array_unique($sessionsToCheck));
+    }
+
+    /**
+     * Check if a table exists in dynamic connection or specific database
+     */
+    private function tableExists(?string $db, string $table): bool
+    {
+        if (!$db) {
+            return Schema::connection('dynamic')->hasTable($table);
+        }
+
+        try {
+            $res = DB::select("SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ? LIMIT 1", [$db, $table]);
+            return !empty($res);
+        } catch (\Throwable $e) {
+            try {
+                return Schema::connection('dynamic')->hasTable($table);
+            } catch (\Throwable $e2) {
+                return false;
+            }
+        }
     }
 
     private function dateForInput($value): string
@@ -550,14 +991,23 @@ class TransferCertificateController extends Controller
     {
         $sessionPart = $sessionName ?: now()->format('Y');
         $prefix = 'TC/' . str_replace('_', '-', $sessionPart) . '/';
-        $nextNumber = TransferCertificate::where('session_name', $sessionName)->count() + 1;
 
-        do {
-            $certificateNo = $prefix . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
-            $nextNumber++;
-        } while (TransferCertificate::where('certificate_no', $certificateNo)->exists());
+        if (!Schema::connection('dynamic')->hasTable('tc_certificates') && !Schema::hasTable('tc_certificates')) {
+            return $prefix . '00001';
+        }
 
-        return $certificateNo;
+        try {
+            $nextNumber = TransferCertificate::where('session_name', $sessionName)->count() + 1;
+
+            do {
+                $certificateNo = $prefix . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
+                $nextNumber++;
+            } while (TransferCertificate::where('certificate_no', $certificateNo)->exists());
+
+            return $certificateNo;
+        } catch (\Throwable $e) {
+            return $prefix . '00001';
+        }
     }
 
     private function restoreStudentAfterTcDelete(TransferCertificate $certificate): void
@@ -645,9 +1095,11 @@ class TransferCertificateController extends Controller
         DB::setDefaultConnection('dynamic');
     }
 
-    private function resolveSelectedSessionYear(Request $request): ?string
+    private function resolveSelectedSessionYear(?Request $request = null): ?string
     {
-        $selectedYear = $request->session()->get('selectedYear') ?: $request->cookie('selectedYear') ?: $request->input('year');
+        $req = $request ?: request();
+        $sessionVal = ($req && $req->hasSession()) ? $req->session()->get('selectedYear') : null;
+        $selectedYear = $sessionVal ?: ($req ? ($req->cookie('selectedYear') ?: $req->input('year')) : null);
 
         return is_string($selectedYear) ? $selectedYear : null;
     }

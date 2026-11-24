@@ -1159,6 +1159,13 @@ class Term1MarksheetController extends Controller
             ->orderBy('student_name')
             ->get();
 
+        // Enforce student visibility rule: Selected Date >= Student Registration Date
+        $asOfDate = request()->input('date', request()->input('print_date', request()->input('exam_date')));
+        if (empty($asOfDate)) {
+            $asOfDate = now()->toDateString();
+        }
+        $students = $this->filterStudentsByRegistrationDate($students, $asOfDate);
+
         $reportAccess = app(\App\Services\StaffReportAccessService::class);
         if (!$reportAccess->isStaffUser()) {
             return $students;
@@ -2230,5 +2237,55 @@ class Term1MarksheetController extends Controller
         } catch (\Throwable $e) {
             return now()->format('Y-m-d');
         }
+    }
+
+    /**
+     * Resolve official student registration / admission date.
+     * Checks registration_date column first, then json_str fallbacks.
+     */
+    private function resolveStudentRegistrationDate($student): ?string
+    {
+        $rawDate = $student->registration_date ?? null;
+        if (empty($rawDate) || $rawDate === '0000-00-00') {
+            $json = is_array($student->json_str ?? null)
+                ? $student->json_str
+                : json_decode($student->json_str ?? '', true);
+            $rawDate = $json['admission_date'] ?? $json['registration_date'] ?? $json['date_of_admission'] ?? null;
+        }
+
+        if (empty($rawDate) || $rawDate === '0000-00-00') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($rawDate)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Filter students so only students admitted on or before the selected date/end-date are visible.
+     * Rule: Selected Date >= Student Registration Date.
+     */
+    private function filterStudentsByRegistrationDate($students, ?string $asOfDate)
+    {
+        if (empty($asOfDate) || $students->isEmpty()) {
+            return $students;
+        }
+
+        try {
+            $asOfDateStr = Carbon::parse($asOfDate)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return $students;
+        }
+
+        return $students->filter(function ($student) use ($asOfDateStr) {
+            $regDate = $this->resolveStudentRegistrationDate($student);
+            if (!empty($regDate)) {
+                return $asOfDateStr >= $regDate;
+            }
+            return true;
+        })->values();
     }
 }

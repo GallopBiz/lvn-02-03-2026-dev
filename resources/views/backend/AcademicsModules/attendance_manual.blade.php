@@ -111,11 +111,7 @@
 <div class="main-content manual-att-page pt-3">
     <div class="breadcrumb d-flex justify-content-between align-items-center flex-wrap">
         <div>
-            <h2 class="mb-1 font-weight-bold">Manual Student Attendance & Working Days</h2>
-            <div class="d-flex align-items-center flex-wrap gap-2">
-                <span class="badge badge-admin"><i class="i-Administrator mr-1"></i> Admin Only Feature</span>
-                <span class="text-muted ml-2" style="font-size: 13px;">Manually set and adjust school working days and each student's present days for report cards & academic records.</span>
-            </div>
+            <h2 class="mb-0 font-weight-bold">Manual Student Attendance & Working Days</h2>
         </div>
         <div class="no-print mt-2 mt-md-0 d-flex align-items-center flex-wrap">
             <button type="button" class="btn btn-outline-secondary btn-sm mr-2" onclick="goBackToSource('{{ url()->previous() !== url()->current() ? url()->previous() : route('academic.attendance.monthly-report') }}')">
@@ -299,8 +295,8 @@
                             <i class="i-Yes mr-1"></i> Fill 100% Present
                         </button>
 
-                        <a href="{{ request()->fullUrlWithQuery(['prefill_daily' => 1]) }}" class="btn btn-sm btn-outline-secondary" onclick="return confirm('Prefill present days from daily attendance logs? Any current unsaved adjustments on this screen will be replaced.')" title="Fetches count of daily attendance marked present">
-                            <i class="i-Data-Download mr-1"></i> Prefill from Daily Attendance
+                        <a href="{{ request()->fullUrlWithQuery(['prefill_daily' => 1]) }}" class="btn btn-sm btn-outline-secondary" onclick="return confirm('Prefill working days and present days from Collective Attendance calculation? Any current unsaved adjustments on this screen will be replaced.')" title="Fetches calculated working days (based on registration dates) and present days from Collective Attendance">
+                            <i class="i-Data-Download mr-1"></i> Prefill from Collective Attendance
                         </a>
 
                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPresentDays()" title="Reset all present days to 0">
@@ -345,6 +341,11 @@
                                     <td>{{ $row['roll_no'] ?: '-' }}</td>
                                     <td>
                                         <span class="font-weight-bold text-dark">{{ $row['student_name'] }}</span>
+                                        @if(!empty($row['registration_date']) && !empty($row['effective_start_date']) && $row['working_days'] != $schoolWorkingDays)
+                                            <small class="text-muted d-block" style="font-size: 11px;" title="Registered on {{ $row['registration_date'] }}">
+                                                Admitted: {{ \Carbon\Carbon::parse($row['effective_start_date'])->format('d-m-Y') }}
+                                            </small>
+                                        @endif
                                         <input type="hidden" name="students[{{ $row['student_id'] }}][student_name]" value="{{ $row['student_name'] }}">
                                     </td>
                                     <td class="text-muted" style="font-size: 13px;">{{ $row['father_name'] ?: '-' }}</td>

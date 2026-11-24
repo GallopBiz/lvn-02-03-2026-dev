@@ -9,6 +9,7 @@
     $yesNo = ['' => '--Select--', 'YES' => 'YES', 'NO' => 'NO'];
     $resultOptions = ['' => '--Select--', 'PASSED' => 'PASSED', 'FAILED' => 'FAILED', 'COMPARTMENT' => 'COMPARTMENT', 'PROMOTED' => 'PROMOTED'];
     $failedOptions = ['' => '--Select--', 'N.A' => 'N.A', 'NO' => 'NO', 'ONCE' => 'ONCE', 'TWICE' => 'TWICE'];
+    $conductOptions = ['--' => '--', 'Good' => 'Good', 'Very Good' => 'Very Good', 'Excellent' => 'Excellent'];
 @endphp
 
 <style>
@@ -81,7 +82,7 @@
 
                     <div class="form-group">
                         <label>Roll No. <span class="text-danger">*</span></label>
-                        <input type="text" name="tc_form_data[roll_no]" class="form-control" value="{{ $pick('roll_no') }}" required>
+                        <input type="text" name="tc_form_data[roll_no]" id="tc_roll_no" class="form-control" value="{{ $pick('roll_no') }}" required>
                     </div>
 
                     <div class="form-group">
@@ -110,7 +111,7 @@
                         <input type="text" name="tc_form_data[father_name]" id="tc_father_name" class="form-control" value="{{ $pick('father_name') }}">
                     </div>
                     <div class="form-group">
-                        <label>Caste</label>
+                        <label>Category & Caste (Whether SC/ST)</label>
                         <input type="text" name="tc_form_data[caste]" id="tc_caste" class="form-control" value="{{ $pick('caste') }}">
                     </div>
                     <div class="form-group">
@@ -238,7 +239,17 @@
                     </div>
                     <div class="form-group">
                         <label>General Conduct</label>
-                        <input type="text" name="conduct" class="form-control" value="{{ old('conduct', $certificate->conduct ?? 'Good') }}">
+                        <select name="conduct" id="tc_conduct" class="form-control">
+                            @php
+                                $selectedConduct = old('conduct', $certificate->conduct ?? 'Good');
+                            @endphp
+                            @foreach($conductOptions as $val => $lbl)
+                                <option value="{{ $val }}" @selected($selectedConduct == $val)>{{ $lbl }}</option>
+                            @endforeach
+                            @if(!empty($selectedConduct) && !array_key_exists($selectedConduct, $conductOptions))
+                                <option value="{{ $selectedConduct }}" selected>{{ $selectedConduct }}</option>
+                            @endif
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Application Date</label>
@@ -310,6 +321,7 @@ function loadStudentDetails() {
             return response.json();
         })
         .then(data => {
+            fillValue('tc_roll_no', data.roll_no);
             fillValue('tc_name', data.name);
             fillValue('tc_scholar_serial_no', data.scholar_serial_no);
             fillValue('tc_session_name', data.session_name);
@@ -343,6 +355,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (window.jQuery) {
         window.jQuery('#student_id').on('select2:select change', loadStudentDetails);
+    }
+
+    if (studentSelect && studentSelect.value && !document.getElementById('tc_roll_no')?.value) {
+        loadStudentDetails();
     }
 });
 

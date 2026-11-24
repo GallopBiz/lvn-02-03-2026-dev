@@ -95,6 +95,19 @@
     $schoolDuesDate = $formatDate($value('school_dues_paid_upto'));
     $applicationDate = $formatDate($value('application_date'));
     $issueDate = $formatDate($certificate->issue_date);
+    $metaIssueDate = '';
+    if (!empty($certificate->issue_date)) {
+        try {
+            $metaIssueDate = \Carbon\Carbon::parse($certificate->issue_date)->format('d-m-Y');
+        } catch (\Throwable) {
+            $metaIssueDate = (string) $certificate->issue_date;
+        }
+    }
+    $tcSeqNo = $certificate->certificate_no;
+    if (preg_match('/(?:^|\/)(\d+)$/', (string) $certificate->certificate_no, $matches)) {
+        $tcSeqNo = $matches[1];
+    }
+    $tcMetaValue = $metaIssueDate ? "{$tcSeqNo}/{$metaIssueDate}" : $tcSeqNo;
     $penApaarId = $value('pen_apaar_id') ?: trim($value('pen_no') . ($value('apaar_id') ? ' / ' . $value('apaar_id') : ''));
 
     $rows = [
@@ -105,8 +118,8 @@
         ['label' => 'Whether the candidate belongs to SC or ST', 'value' => $value('caste')],
         ['label' => 'Date of admission in the school with Class', 'value' => trim($admissionDate . ($admittedClass ? ' ' . $formatClass($admittedClass) : ''))],
         ['label' => 'Date of birth (in Christian Era)', 'label_note' => 'according to admission register', 'split' => [
-            ['label' => 'In figures', 'value' => $dob],
-            ['label' => 'In words', 'value' => $dobWords],
+            ['label' => 'In figures', 'value' => $dob, 'is_dob' => true],
+            ['label' => 'In words', 'value' => $dobWords, 'is_dob' => true],
         ]],
         ['label' => 'Class in which the pupil last studied', 'split' => [
             ['label' => 'In figures', 'value' => $classStudiedText],
@@ -165,8 +178,8 @@
         background: #fff;
         color: #111;
         font-family: "DejaVu Sans", Arial, Helvetica, sans-serif;
-        font-size: {{ $isPdf ? '10.5px' : '11px' }};
-        line-height: {{ $isPdf ? '1.04' : '1.12' }};
+        font-size: {{ $isPdf ? '11.5px' : '12px' }};
+        line-height: {{ $isPdf ? '1.05' : '1.14' }};
         position: relative;
         box-sizing: border-box;
         overflow: visible;
@@ -186,8 +199,8 @@
     }
 
     .tc-tcno-line {
-        font-size: {{ $isPdf ? '10px' : '11px' }};
-        font-weight: 700;
+        font-size: {{ $isPdf ? '11px' : '12px' }};
+        font-weight: normal;
         margin-bottom: 2px;
     }
     /* ===== End header ===== */
@@ -200,56 +213,46 @@
     .tc-meta {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: {{ $isPdf ? '4px' : '8px' }};
-        font-size: {{ $isPdf ? '11px' : '12px' }};
         table-layout: fixed;
+        margin-bottom: {{ $isPdf ? '5px' : '8px' }};
+        font-size: {{ $isPdf ? '12px' : '13px' }};
     }
 
     .tc-meta td {
-        padding: 0 4px 2px 4px;
-        vertical-align: bottom;
+        padding: 0 2px 2px 2px;
+        vertical-align: middle;
         white-space: nowrap;
+        font-weight: normal;
+    }
+
+    .tc-meta-left {
+        text-align: left;
+        width: 62%;
+    }
+
+    .tc-meta-right {
+        text-align: left;
+        width: 31%;
+        padding-left: 0;
     }
 
     .tc-meta-label,
-    .tc-meta-book-label,
     .tc-meta-scholar-label {
-        width: 78px;
-        font-weight: 700;
-        text-align: right;
-        padding-right: 6px;
+        font-weight: normal;
+        display: inline-block;
     }
 
     .tc-meta-colon {
-        width: 8px;
-        text-align: center;
-        font-weight: 700;
+        font-weight: normal;
+        display: inline-block;
         padding: 0 4px;
+        text-align: center;
     }
 
-    .tc-meta-value {
-        font-weight: 700;
-        text-align: left;
-        padding-left: 4px;
-    }
-
-    .tc-meta-spacer {
-        width: 12px;
-    }
-
-    .tc-meta-book-label {
-        width: 50px;
-        font-weight: 700;
-    }
-
-    .tc-meta-book-value {
-        width: 78px;
-        font-weight: 700;
-    }
-
-    .tc-meta-scholar-label {
-        width: 62px;
-        font-weight: 700;
+    .tc-meta-value,
+    .tc-meta-scholar-value {
+        font-weight: normal;
+        display: inline-block;
     }
 
     .tc-list {
@@ -258,7 +261,7 @@
     }
 
     .tc-list td {
-        padding: {{ $isPdf ? '4px' : '5px 5px' }};
+        padding: {{ $isPdf ? '3.5px 4px' : '4px 5px' }};
         vertical-align: top;
     }
 
@@ -268,19 +271,19 @@
 
     .tc-label {
         width: 58%;
-        font-weight: 700;
+        font-weight: normal;
         padding-right: 6px;
     }
 
     .tc-colon {
         width: 4%;
         text-align: center;
-        font-weight: 700;
+        font-weight: normal;
         padding-right: 6px;
     }
 
     .tc-value {
-        font-weight: 600;
+        font-weight: normal;
         text-transform: uppercase;
         word-break: break-word;
         word-wrap: break-word;
@@ -288,17 +291,21 @@
         padding-left: 4px;
     }
 
+    .tc-dob-bold {
+        font-weight: 700 !important;
+    }
+
     .tc-no {
         width: 4%;
         padding-right: 6px !important;
         text-align: right;
-        font-weight: 700;
+        font-weight: normal;
     }
 
     .tc-label-note {
         display: block;
         margin-top: 1px;
-        font-size: {{ $isPdf ? '9px' : '10px' }};
+        font-size: {{ $isPdf ? '10px' : '11px' }};
     }
 
     .tc-subjects-value {
@@ -323,20 +330,20 @@
     }
 
     .tc-split-main-label {
-        font-weight: 700;
+        font-weight: normal;
         padding-right: 6px !important;
     }
 
     .tc-split-sub-label {
         width: 84px;
-        font-weight: 700;
+        font-weight: normal;
         text-transform: none;
         text-align: left;
         white-space: nowrap;
     }
 
     .tc-split-full-label {
-        font-weight: 700;
+        font-weight: normal;
         text-transform: none;
     }
 
@@ -363,7 +370,7 @@
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
-        font-size: {{ $isPdf ? '10.5px' : '11px' }};
+        font-size: {{ $isPdf ? '11.5px' : '12px' }};
         margin-top: {{ $isPdf ? '5mm' : '6mm' }};
     }
 
@@ -393,7 +400,7 @@
     }
     .tc-sign small {
         display: block;
-        font-size: 10px;
+        font-size: 11px;
         margin-top: 6px;
         font-weight: 400;
     }
@@ -491,13 +498,16 @@
 
             <table class="tc-meta">
                 <tr>
-                    <td class="tc-meta-label">TC No./ Date</td>
-                    <td class="tc-meta-colon">:</td>
-                    <td class="tc-meta-value">{{ $certificate->certificate_no }}{{ $issueDate ? '/' . $issueDate : '' }}</td>
-                    <td class="tc-meta-spacer"></td>
-                    <td class="tc-meta-scholar-label">Scholar No.</td>
-                    <td class="tc-meta-colon">:</td>
-                    <td class="tc-meta-value">{{ $certificate->scholar_no }}</td>
+                    <td class="tc-meta-left">
+                        <span class="tc-meta-label">TC No./ Date</span>
+                        <span class="tc-meta-colon">:</span>
+                        <span class="tc-meta-value">{{ $tcMetaValue }}</span>
+                    </td>
+                    <td class="tc-meta-right">
+                        <span class="tc-meta-scholar-label">Scholar No.</span>
+                        <span class="tc-meta-colon">:</span>
+                        <span class="tc-meta-scholar-value">{{ $certificate->scholar_no }}</span>
+                    </td>
                 </tr>
             </table>
 
@@ -527,9 +537,10 @@
                         @if(!empty($row['split']))
                             @php
                                 $firstSplit = $row['split'][0] ?? null;
+                                $isDobFirst = ($row['label'] === 'Date of birth (in Christian Era)' || !empty($firstSplit['is_dob']));
                             @endphp
                             <td class="tc-colon">:</td>
-                            <td class="tc-value">{{ !empty($row['value']) ? $row['value'] : ($firstSplit['value'] ?? '') }}</td>
+                            <td class="tc-value {{ $isDobFirst ? 'tc-dob-bold' : '' }}">{{ !empty($row['value']) ? $row['value'] : ($firstSplit['value'] ?? '') }}</td>
                         @else
                             <td class="tc-colon">:</td>
                             <td class="tc-value {{ $row['label'] === 'Subjects studied' ? 'tc-subjects-value' : '' }}">
@@ -541,6 +552,9 @@
                     </tr>
                     @if(!empty($row['split']))
                         @foreach(!empty($row['value']) ? $row['split'] : array_slice($row['split'], 1) as $split)
+                            @php
+                                $isDobSub = ($row['label'] === 'Date of birth (in Christian Era)' || !empty($split['is_dob']));
+                            @endphp
                             <tr>
                                 <td class="tc-no"></td>
                                 <td class="tc-label">
@@ -560,7 +574,7 @@
                                     @endif
                                 </td>
                                 <td class="tc-colon">:</td>
-                                <td class="tc-value">{{ $split['value'] ?? '' }}</td>
+                                <td class="tc-value {{ $isDobSub ? 'tc-dob-bold' : '' }}">{{ $split['value'] ?? '' }}</td>
                             </tr>
                         @endforeach
                     @endif
