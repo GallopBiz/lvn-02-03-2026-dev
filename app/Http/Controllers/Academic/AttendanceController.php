@@ -1653,11 +1653,25 @@ class AttendanceController extends Controller
             ->filter()
             ->flatMap(fn ($section) => array_map('trim', explode(',', $section)));
 
+        $classAliases = array_unique(array_filter([
+            $className,
+            (string) $classId,
+            ltrim((string) $className, '0'),
+            is_numeric($className) ? sprintf('%02d', (int) $className) : null,
+            class_exists(\App\Academic\AcademicHelper::class) ? \App\Academic\AcademicHelper::normalizeClassIdentifier($className) : null,
+        ]));
+
         $studentSections = Student_registration::query()
-            ->where(function ($q) use ($classId, $className, $classRows) {
-                $q->where('class_name', $className)
-                    ->orWhere('class_name', $classId)
-                    ->orWhereIn('class_id', $classRows->pluck('id'));
+            ->where(function ($q) use ($classId, $className, $classRows, $classAliases) {
+                $q->whereIn('class_name', $classAliases)
+                    ->orWhere(function ($byClassId) use ($classRows, $classAliases) {
+                        $byClassId->whereIn('class_id', $classRows->pluck('id'))
+                            ->where(function ($cq) use ($classAliases) {
+                                $cq->whereIn('class_name', $classAliases)
+                                    ->orWhereNull('class_name')
+                                    ->orWhere('class_name', '');
+                            });
+                    });
             })
             ->whereNotNull('section_name')
             ->where('section_name', '!=', '')
@@ -1760,6 +1774,14 @@ class AttendanceController extends Controller
         $classRows = Classes::query()->where('class_name', $className)->get();
         $classIds = $classRows->pluck('id')->push($classId)->unique()->values();
 
+        $classAliases = array_unique(array_filter([
+            $className,
+            (string) $classId,
+            ltrim((string) $className, '0'),
+            is_numeric($className) ? sprintf('%02d', (int) $className) : null,
+            class_exists(\App\Academic\AcademicHelper::class) ? \App\Academic\AcademicHelper::normalizeClassIdentifier($className) : null,
+        ]));
+
         if ($strictSectionClassMatch && !$sectionName) {
             $classRowIds = $classRows->pluck('id');
             if ($classRowIds->isEmpty()) {
@@ -1767,9 +1789,16 @@ class AttendanceController extends Controller
             }
 
             return Student_registration::query()
-                ->where(function ($query) use ($className, $classRowIds) {
-                    $query->where('class_name', $className)
-                        ->orWhereIn('class_id', $classRowIds);
+                ->where(function ($query) use ($className, $classRowIds, $classAliases) {
+                    $query->whereIn('class_name', $classAliases)
+                        ->orWhere(function ($byClassId) use ($classRowIds, $classAliases) {
+                            $byClassId->whereIn('class_id', $classRowIds)
+                                ->where(function ($cq) use ($classAliases) {
+                                    $cq->whereIn('class_name', $classAliases)
+                                        ->orWhereNull('class_name')
+                                        ->orWhere('class_name', '');
+                                });
+                        });
                 })
                 ->orderBy('student_name')
                 ->select('id', 'form_number', 'scholar_no', 'student_name', 'class_name', 'section_name', 'session_name', 'registration_date', 'json_str');
@@ -1794,10 +1823,15 @@ class AttendanceController extends Controller
             };
 
             return Student_registration::query()
-                ->where(function ($query) use ($sectionClassIds, $className, $sectionMatches) {
+                ->where(function ($query) use ($sectionClassIds, $className, $classAliases, $sectionMatches) {
                     if ($sectionClassIds->isNotEmpty()) {
-                        $query->where(function ($bySectionClass) use ($sectionClassIds, $sectionMatches) {
+                        $query->where(function ($bySectionClass) use ($sectionClassIds, $classAliases, $sectionMatches) {
                             $bySectionClass->whereIn('class_id', $sectionClassIds)
+                                ->where(function ($cq) use ($classAliases) {
+                                    $cq->whereIn('class_name', $classAliases)
+                                        ->orWhereNull('class_name')
+                                        ->orWhere('class_name', '');
+                                })
                                 ->where(function ($sectionQuery) use ($sectionMatches) {
                                     $sectionQuery->where($sectionMatches)
                                         ->orWhere(function ($unassigned) {
@@ -1814,9 +1848,11 @@ class AttendanceController extends Controller
                         });
                     }
 
-                    $query->orWhere(function ($legacy) use ($className, $sectionMatches) {
-                        $legacy->where('class_name', $className)
-                            ->where($sectionMatches);
+                    $query->orWhere(function ($legacy) use ($className, $classAliases, $sectionMatches) {
+                        $legacy->where(function ($cq) use ($className, $classAliases) {
+                            $cq->where('class_name', $className)
+                                ->orWhereIn('class_name', $classAliases);
+                        })->where($sectionMatches);
                     });
                 })
                 ->orderBy('student_name')
@@ -1824,10 +1860,16 @@ class AttendanceController extends Controller
         }
 
         return Student_registration::query()
-            ->where(function ($query) use ($classId, $className, $classIds) {
-                $query->where('class_name', $classId)
-                    ->orWhere('class_name', $className)
-                    ->orWhereIn('class_id', $classIds);
+            ->where(function ($query) use ($classId, $className, $classIds, $classAliases) {
+                $query->whereIn('class_name', $classAliases)
+                    ->orWhere(function ($byClassId) use ($classIds, $classAliases) {
+                        $byClassId->whereIn('class_id', $classIds)
+                            ->where(function ($cq) use ($classAliases) {
+                                $cq->whereIn('class_name', $classAliases)
+                                    ->orWhereNull('class_name')
+                                    ->orWhere('class_name', '');
+                            });
+                    });
             })
             ->when($sectionName, function ($query) use ($sectionName) {
                 $query->where(function ($inner) use ($sectionName) {

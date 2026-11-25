@@ -500,11 +500,25 @@ class ManualAttendanceController extends Controller
         $className = optional($class)->class_name ?: (string) $classId;
         $classIds = Classes::query()->where('class_name', $className)->pluck('id')->push($classId)->unique()->values();
 
+        $classAliases = array_unique(array_filter([
+            $className,
+            (string) $classId,
+            ltrim((string) $className, '0'),
+            is_numeric($className) ? sprintf('%02d', (int) $className) : null,
+            class_exists(\App\Academic\AcademicHelper::class) ? \App\Academic\AcademicHelper::normalizeClassIdentifier($className) : null,
+        ]));
+
         return Student_registration::query()
-            ->where(function ($query) use ($classId, $className, $classIds) {
-                $query->where('class_name', $classId)
-                    ->orWhere('class_name', $className)
-                    ->orWhereIn('class_id', $classIds);
+            ->where(function ($query) use ($classId, $className, $classIds, $classAliases) {
+                $query->whereIn('class_name', $classAliases)
+                    ->orWhere(function ($byClassId) use ($classIds, $classAliases) {
+                        $byClassId->whereIn('class_id', $classIds)
+                            ->where(function ($cq) use ($classAliases) {
+                                $cq->whereIn('class_name', $classAliases)
+                                    ->orWhereNull('class_name')
+                                    ->orWhere('class_name', '');
+                            });
+                    });
             })
             ->when($sectionName, function ($query) use ($sectionName) {
                 $query->where(function ($inner) use ($sectionName) {

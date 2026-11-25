@@ -202,6 +202,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
         $student->section_name = 'Kautilya';
         $student->student_name = 'Isolation Test Student';
         $student->form_number = 'ISOLATION_TEST_001';
+        $student->registration_date = '2026-04-01';
         $student->save();
 
         Attendance::where('Teacher_id', 101)->delete();
@@ -286,6 +287,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
         $studentB->section_name = 'Kautilya';
         $studentB->student_name = 'Teacher B Student';
         $studentB->form_number = 'TB_STUDENT_001';
+        $studentB->registration_date = '2026-04-01';
         $studentB->save();
 
         // Teacher B logs in and marks attendance on the SAME date (2026-11-17)
