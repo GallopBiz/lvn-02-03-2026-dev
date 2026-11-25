@@ -93,6 +93,10 @@ class CheckMenuPermission
                 'leaverequests.staff',
                 'compoffrequests-staff',
                 'compoffrequests.staff',
+                'dailyattandence-delete/*',
+                'dailyattandence.delete',
+                'dailyattandence-bulk-delete',
+                'dailyattandence.bulk-delete',
             ];
 
             foreach ($staffExemptRoutes as $exempt) {

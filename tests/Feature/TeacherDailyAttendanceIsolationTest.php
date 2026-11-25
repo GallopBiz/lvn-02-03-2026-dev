@@ -248,6 +248,8 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
         $teacherA = $this->createTeacher(101, 'Teacher One', 'Academic');
         $teacherB = $this->createTeacher(102, 'Teacher Two', 'Academic');
 
+        $classBId = (string) (Classes::where('class_name', '07')->where('section_name', 'like', '%Kautilya%')->value('id') ?? 33);
+
         TeacherSubject::whereIn('teacher_id', [101, 102])->delete();
         TeacherSubject::create([
             'teacher_id' => 101,
@@ -258,7 +260,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
         ]);
         TeacherSubject::create([
             'teacher_id' => 102,
-            'class_id' => '10',
+            'class_id' => $classBId,
             'section_name' => 'Kautilya',
             'role' => 'Class Teacher',
             'is_delete' => 0,
@@ -282,7 +284,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
 
         // Student for Teacher B's class
         $studentB = new Student_registration();
-        $studentB->class_id = '10';
+        $studentB->class_id = $classBId;
         $studentB->class_name = '07';
         $studentB->section_name = 'Kautilya';
         $studentB->student_name = 'Teacher B Student';
@@ -296,7 +298,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
 
         $response = $this->from(route('dailyattandence'))->post(route('dailyattandence'), [
             'attendance_date' => '2026-11-17',
-            'class_id' => '10',
+            'class_id' => $classBId,
             'section_name' => 'Kautilya',
             'academic_session' => '2025-2026',
             'attendance' => [
@@ -309,7 +311,7 @@ class TeacherDailyAttendanceIsolationTest extends TestCase
         // Verify attendance record exists in DB for Teacher B
         $this->assertDatabaseHas('academic_attendance', [
             'Teacher_id' => 102,
-            'class_id' => '10',
+            'class_id' => $classBId,
             'section_name' => 'Kautilya',
             'attendance_date' => '2026-11-17',
             'is_delete' => 0,

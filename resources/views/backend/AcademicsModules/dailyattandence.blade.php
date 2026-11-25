@@ -290,39 +290,57 @@
 
     @if(!$editingAttendance)
         <div class="attendance-panel">
-            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap mb-3" style="gap: 12px;">
                 <div class="mb-2">
                     <h4 class="mb-1">Recent Attendance</h4>
-                    <span class="text-muted small">Arranged by date. Check already filled attendance by date or search.</span>
+                    <span class="text-muted small">Arranged by date. Check already filled attendance by date range or search.</span>
                 </div>
-                <form method="GET" action="{{ route('dailyattandence') }}" class="d-flex align-items-center flex-wrap mb-2" style="gap: 10px;">
-                    @if(request('class_id'))
-                        <input type="hidden" name="class_id" value="{{ request('class_id') }}">
-                    @endif
-                    @if(request('section_name'))
-                        <input type="hidden" name="section_name" value="{{ request('section_name') }}">
-                    @endif
-                    @if(request('per_page'))
-                        <input type="hidden" name="per_page" value="{{ request('per_page') }}">
-                    @endif
-                    <div class="d-flex align-items-center">
-                        <label class="mr-2 mb-0 small font-weight-bold text-muted text-nowrap">Date:</label>
-                        <input type="date" name="history_date" value="{{ request('history_date', request('filter_date')) }}" class="form-control form-control-sm" style="width: 155px;" onchange="this.form.submit()">
-                    </div>
-                    @if(request('history_date') || request('filter_date'))
-                        <a href="{{ route('dailyattandence', array_filter(['class_id' => request('class_id'), 'section_name' => request('section_name'), 'per_page' => request('per_page')])) }}" class="btn btn-outline-danger btn-sm text-nowrap" title="Clear Date Filter">
-                            <i class="i-Close mr-1"></i> Clear Date
-                        </a>
-                    @endif
-                    <div class="d-flex align-items-center">
-                        <input type="search" id="recentAttendanceSearch" class="form-control form-control-sm" style="width: 210px;" placeholder="Instant search...">
-                    </div>
-                </form>
+                <div class="d-flex align-items-center flex-wrap" style="gap: 8px;">
+                    <form method="GET" action="{{ route('dailyattandence') }}" class="d-flex align-items-center flex-wrap mb-0" style="gap: 6px;" id="recentAttendanceFilterForm">
+                        @if(request('class_id'))
+                            <input type="hidden" name="class_id" value="{{ request('class_id') }}">
+                        @endif
+                        @if(request('section_name'))
+                            <input type="hidden" name="section_name" value="{{ request('section_name') }}">
+                        @endif
+                        @if(request('per_page'))
+                            <input type="hidden" name="per_page" value="{{ request('per_page') }}">
+                        @endif
+                        <div class="d-flex align-items-center">
+                            <label class="mr-1 mb-0 small font-weight-bold text-muted text-nowrap">From:</label>
+                            <input type="date" name="from_date" id="filterFromDate" value="{{ request('from_date') }}" class="form-control form-control-sm" style="width: 140px;">
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <label class="mr-1 mb-0 small font-weight-bold text-muted text-nowrap">To:</label>
+                            <input type="date" name="to_date" id="filterToDate" value="{{ request('to_date') }}" class="form-control form-control-sm" style="width: 140px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm text-nowrap"><i class="i-Filter-2 mr-1"></i> Filter</button>
+                        @if(request('from_date') || request('to_date') || request('history_date') || request('filter_date'))
+                            <a href="{{ route('dailyattandence', array_filter(['class_id' => request('class_id'), 'section_name' => request('section_name'), 'per_page' => request('per_page')])) }}" class="btn btn-outline-danger btn-sm text-nowrap" title="Clear Date Filter">
+                                <i class="i-Close mr-1"></i> Clear
+                            </a>
+                        @endif
+                        <div class="d-flex align-items-center">
+                            <input type="search" id="recentAttendanceSearch" class="form-control form-control-sm" style="width: 170px;" placeholder="Instant search...">
+                        </div>
+                    </form>
+                    <button type="button" class="btn btn-danger btn-sm text-nowrap font-weight-bold shadow-sm" id="btnBulkDeleteAttendance" style="display: none;" onclick="submitBulkDeleteAttendance()">
+                        <i class="i-Close mr-1"></i> Delete Selected (<span id="selectedAttendanceCount">0</span>)
+                    </button>
+                </div>
             </div>
+
+            <form id="bulkDeleteAttendanceForm" method="POST" action="{{ route('dailyattandence.bulk-delete', request()->query()) }}">
+                @csrf
+            </form>
+
             <div class="table-responsive">
                 <table class="table" id="recentAttendanceTable">
                     <thead>
                         <tr>
+                            <th style="width: 35px;" class="text-center">
+                                <input type="checkbox" id="selectAllAttendance" title="Select all unlocked records">
+                            </th>
                             <th>Date</th>
                             <th>Class</th>
                             <th>Section</th>
@@ -339,6 +357,13 @@
                     <tbody>
                         @forelse($recentAttendance as $item)
                             <tr>
+                                <td class="text-center">
+                                    @if($item->is_locked)
+                                        <input type="checkbox" disabled class="attendance-select-checkbox" title="Attendance is locked for this date and cannot be deleted">
+                                    @else
+                                        <input type="checkbox" name="attendance_ids[]" value="{{ $item->id }}" class="attendance-select-checkbox" form="bulkDeleteAttendanceForm" onchange="updateBulkDeleteState()">
+                                    @endif
+                                </td>
                                 <td>{{ optional($item->attendance_date)->format('d-m-Y') }}</td>
                                 <td>{{ optional($item->className)->class_name ?: $item->class_name }}</td>
                                 <td>{{ $item->section_name }}</td>
@@ -360,38 +385,46 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <div class="d-flex flex-wrap">
+                                    <div class="d-flex flex-wrap align-items-center" style="gap: 4px;">
                                         @if(!$item->is_locked)
-                                            <a class="btn btn-sm btn-outline-primary mr-1 mb-1" href="{{ route('dailyattandenceUpdate', $item->id) }}">Edit</a>
+                                            <a class="btn btn-sm btn-outline-primary mb-1" href="{{ route('dailyattandenceUpdate', $item->id) }}">Edit</a>
                                         @endif
                                         @if(!$item->is_locked && $isStaffAttendanceUser)
-                                            <form method="POST" action="{{ route('dailyattandence.lock', $item) }}" class="mr-1 mb-1">
+                                            <form method="POST" action="{{ route('dailyattandence.lock', $item) }}" class="mb-1">
                                                 @csrf
-                                                <button class="btn btn-sm btn-dark" type="submit" onclick="return confirm('Lock this attendance? After locking, only admin can edit or delete it.');">Lock</button>
+                                                <button class="btn btn-sm btn-dark" type="submit" onclick="return confirm('Lock this attendance? After locking, neither staff nor admin can delete it until unlocked.');">Lock</button>
                                             </form>
                                         @endif
                                         @if($item->is_locked && !$isStaffAttendanceUser)
-                                            <form method="POST" action="{{ route('dailyattandence.unlock', $item) }}" class="mr-1 mb-1">
+                                            <form method="POST" action="{{ route('dailyattandence.unlock', $item) }}" class="mb-1">
                                                 @csrf
                                                 <button class="btn btn-sm btn-warning" type="submit" onclick="return confirm('Unlock this attendance?');">Unlock</button>
                                             </form>
                                         @endif
-                                        @canDelete('Academic > Attendance > Daily Attendance')
-                                        @if(!$item->is_locked)
-                                            <form method="POST" action="{{ route('dailyattandence.delete', $item) }}" class="mb-1">
+                                        @if($item->is_locked)
+                                            <button type="button" class="btn btn-sm btn-outline-secondary mb-1" disabled title="Attendance for this date is locked and cannot be deleted">
+                                                <i class="i-Lock-2 mr-1"></i> Locked
+                                            </button>
+                                        @else
+                                            <form method="POST" action="{{ route('dailyattandence.delete', $item) }}" class="mb-1 d-inline" onsubmit="return confirm('Are you sure you want to delete this attendance record?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete this attendance entry?');">Delete</button>
+                                                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
                                             </form>
                                         @endif
-                                        @endcanDelete
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="11" class="text-center text-muted py-4">
-                                    @if(request('history_date') || request('filter_date'))
+                                <td colspan="12" class="text-center text-muted py-4">
+                                    @if(request('from_date') && request('to_date'))
+                                        No attendance recorded between {{ \Carbon\Carbon::parse(request('from_date'))->format('d-m-Y') }} and {{ \Carbon\Carbon::parse(request('to_date'))->format('d-m-Y') }}.
+                                    @elseif(request('from_date'))
+                                        No attendance recorded from {{ \Carbon\Carbon::parse(request('from_date'))->format('d-m-Y') }} onwards.
+                                    @elseif(request('to_date'))
+                                        No attendance recorded up to {{ \Carbon\Carbon::parse(request('to_date'))->format('d-m-Y') }}.
+                                    @elseif(request('history_date') || request('filter_date'))
                                         No attendance recorded for {{ \Carbon\Carbon::parse(request('history_date', request('filter_date')))->format('d-m-Y') }}.
                                     @else
                                         No attendance recorded yet.
@@ -407,6 +440,12 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap mt-3 pt-3 border-top" style="gap: 12px;">
                     <div class="d-flex align-items-center flex-wrap" style="gap: 15px;">
                         <form method="GET" action="{{ route('dailyattandence') }}" class="d-inline-flex align-items-center mb-0">
+                            @if(request('from_date'))
+                                <input type="hidden" name="from_date" value="{{ request('from_date') }}">
+                            @endif
+                            @if(request('to_date'))
+                                <input type="hidden" name="to_date" value="{{ request('to_date') }}">
+                            @endif
                             @if(request('history_date'))
                                 <input type="hidden" name="history_date" value="{{ request('history_date') }}">
                             @endif
@@ -505,6 +544,46 @@
             row.style.display = row.textContent.toLowerCase().indexOf(term) > -1 ? '' : 'none';
         });
     });
+
+    document.getElementById('selectAllAttendance')?.addEventListener('change', function() {
+        var checkboxes = document.querySelectorAll('.attendance-select-checkbox:not(:disabled)');
+        for (var i = 0; i < checkboxes.length; i++) {
+            checkboxes[i].checked = this.checked;
+        }
+        updateBulkDeleteState();
+    });
+
+    function updateBulkDeleteState() {
+        var checkedBoxes = document.querySelectorAll('.attendance-select-checkbox:checked');
+        var count = checkedBoxes.length;
+        var btn = document.getElementById('btnBulkDeleteAttendance');
+        var countSpan = document.getElementById('selectedAttendanceCount');
+        if (countSpan) {
+            countSpan.textContent = count;
+        }
+        if (btn) {
+            btn.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        var allEnabledBoxes = document.querySelectorAll('.attendance-select-checkbox:not(:disabled)');
+        var selectAll = document.getElementById('selectAllAttendance');
+        if (selectAll && allEnabledBoxes.length > 0) {
+            selectAll.checked = (checkedBoxes.length === allEnabledBoxes.length);
+        }
+    }
+
+    function submitBulkDeleteAttendance() {
+        var checkedBoxes = document.querySelectorAll('.attendance-select-checkbox:checked');
+        if (checkedBoxes.length === 0) {
+            alert('Please select at least one attendance record to delete.');
+            return;
+        }
+        if (confirm('Are you sure you want to delete ' + checkedBoxes.length + ' selected attendance record(s)? This action cannot be undone.')) {
+            var form = document.getElementById('bulkDeleteAttendanceForm');
+            if (form) {
+                form.submit();
+            }
+        }
+    }
     updateCounts();
 
     function checkAttendanceBeforeSubmit(triggerElement) {

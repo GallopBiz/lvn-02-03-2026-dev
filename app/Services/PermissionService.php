@@ -359,6 +359,10 @@ class PermissionService
             return true;
         }
 
+        if (self::canStaffDeleteOwnAttendance($action, $user)) {
+            return true;
+        }
+
         if (self::isAdmin($user)) {
             return true;
         }
@@ -475,6 +479,25 @@ class PermissionService
     private static function canViewOwnLeaveRequests(string $action, $user): bool
     {
         return self::canViewOwnStaffRequests($action, $user);
+    }
+
+    private static function canStaffDeleteOwnAttendance(string $action, $user): bool
+    {
+        if (
+            self::normalizeAction($action) !== 'delete'
+            || !Auth::guard('staff')->check()
+            || (int) (Auth::guard('staff')->user()->employee_id ?? 0) <= 0
+        ) {
+            return false;
+        }
+
+        $request = request();
+        $routeName = (string) optional($request->route())->getName();
+        $path = trim($request->path(), '/');
+
+        return in_array($routeName, ['dailyattandence.delete', 'dailyattandence.bulk-delete'], true)
+            || Str::startsWith($path, 'dailyattandence-delete')
+            || $path === 'dailyattandence-bulk-delete';
     }
 
     /**

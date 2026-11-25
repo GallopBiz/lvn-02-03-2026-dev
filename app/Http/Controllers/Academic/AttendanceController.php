@@ -115,8 +115,20 @@ class AttendanceController extends Controller
         $recentAttendanceQuery = $this->accessibleAttendanceQuery()->with('teacher', 'className')
             ->where('is_delete', 0);
 
+        $fromDate = $request->query('from_date');
+        $toDate = $request->query('to_date');
         $filterDate = $request->query('history_date', $request->query('filter_date'));
-        if (!empty($filterDate)) {
+
+        if (!empty($fromDate) && !empty($toDate)) {
+            $startDate = min($fromDate, $toDate);
+            $endDate = max($fromDate, $toDate);
+            $recentAttendanceQuery->whereDate('attendance_date', '>=', $startDate)
+                ->whereDate('attendance_date', '<=', $endDate);
+        } elseif (!empty($fromDate)) {
+            $recentAttendanceQuery->whereDate('attendance_date', '>=', $fromDate);
+        } elseif (!empty($toDate)) {
+            $recentAttendanceQuery->whereDate('attendance_date', '<=', $toDate);
+        } elseif (!empty($filterDate)) {
             $recentAttendanceQuery->where(function ($query) use ($filterDate) {
                 $query->whereDate('attendance_date', $filterDate)
                     ->orWhereDate('created_at', $filterDate);
@@ -438,16 +450,81 @@ class AttendanceController extends Controller
     {
         $attendance = $this->accessibleAttendanceQuery()->findOrFail($attendance->id);
 
-        if ($attendance->is_locked) {
-            return redirect()->route('dailyattandence')->with('error', $this->lockedAttendanceMessage());
-        }
-        if ($this->isStaffAttendanceUser() && $this->isMonthLockedForAttendance($attendance)) {
-            return redirect()->route('dailyattandence')->with('error', $this->lockedMonthlyAttendanceMessage());
+        if ($this->isAttendanceLocked($attendance)) {
+            return redirect()->route('dailyattandence', request()->query())
+                ->with('error', $this->lockedAttendanceMessage());
         }
 
         $attendance->update(['is_delete' => 1]);
 
-        return redirect()->route('dailyattandence')->with('success', 'Attendance deleted successfully.');
+        return redirect()->route('dailyattandence', request()->query())
+            ->with('success', 'Attendance deleted successfully.');
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = $request->input('attendance_ids', []);
+        if (is_string($ids)) {
+            $ids = explode(',', $ids);
+        }
+        $ids = array_filter(array_map('intval', (array) $ids));
+
+        if (empty($ids)) {
+            return redirect()->route('dailyattandence', request()->query())
+                ->with('error', 'Please select at least one attendance record to delete.');
+        }
+
+        $attendances = $this->accessibleAttendanceQuery()
+            ->whereIn('id', $ids)
+            ->where('is_delete', 0)
+            ->get();
+
+        if ($attendances->isEmpty()) {
+            return redirect()->route('dailyattandence', request()->query())
+                ->with('error', 'No accessible attendance records found for deletion.');
+        }
+
+        $lockedRecords = $attendances->filter(function ($att) {
+            return $this->isAttendanceLocked($att);
+        });
+
+        if ($lockedRecords->isNotEmpty()) {
+            return redirect()->route('dailyattandence', request()->query())
+                ->with('error', 'Attendance is locked for one or more selected records and cannot be deleted.');
+        }
+
+        $deletedCount = $attendances->count();
+        Attendance::whereIn('id', $attendances->pluck('id'))->update(['is_delete' => 1]);
+
+        return redirect()->route('dailyattandence', request()->query())
+            ->with('success', "Successfully deleted {$deletedCount} attendance record(s).");
+    }
+
+    public function isAttendanceLocked(Attendance $attendance): bool
+    {
+        if ((bool) $attendance->is_locked) {
+            return true;
+        }
+
+        if ($attendance->attendance_date && $this->isMonthLockedForAttendance($attendance)) {
+            return true;
+        }
+
+        $date = optional($attendance->attendance_date)->format('Y-m-d');
+        if ($date && $attendance->class_id && $attendance->section_name) {
+            $hasLocked = Attendance::query()
+                ->where('attendance_date', $date)
+                ->where('class_id', $attendance->class_id)
+                ->where('section_name', $attendance->section_name)
+                ->where('is_delete', 0)
+                ->where('is_locked', 1)
+                ->exists();
+            if ($hasLocked) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function lock(Attendance $attendance)
@@ -2237,7 +2314,7 @@ class AttendanceController extends Controller
 
     private function lockedAttendanceMessage(): string
     {
-        return 'This attendance is locked. Admin must unlock it before edit or delete.';
+        return 'Attendance for this date is locked and cannot be deleted.';
     }
 
     private function lockedMonthlyAttendanceMessage(): string
