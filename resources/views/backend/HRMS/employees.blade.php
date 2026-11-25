@@ -997,7 +997,7 @@
 
             <div class="add-reset-buttons">
                 <button type="button" class="btn btn-secondary" id="reset-button">Reset</button>
-                @if (request()->route()->getName() !== 'employee')
+                @if (!request()->routeIs('employee'))
                     <a href="{{ url('employee') }}" class="btn btn-primary">Add New</a>
                 @endif
             </div>
@@ -1007,74 +1007,133 @@
         </div>
     </div>
     <div class="separator-breadcrumb border-top"></div>
-    <div class="row">
+    <div class="row" id="employee-list-section">
         <div class="col-md-12 mb-4">
-            <div class="breadcrumb">
-                <h1 class="me-2">List of Saved Employees :-</h1>
-                <form method="GET" action="{{ route('employee') }}" class="d-flex align-items-end gap-2 ms-auto">
-                    <div>
-                        <label for="employee_status_filter" class="form-label mb-1">Employee Status</label>
-                        <select name="employee_status" id="employee_status_filter" class="form-control">
-                            <option value="">All</option>
-                            <option value="active" @selected(request('employee_status') === 'active')>Active</option>
-                            <option value="inactive" @selected(request('employee_status') === 'inactive')>Inactive</option>
-                            <option value="retired" @selected(request('employee_status') === 'retired')>Retired</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Filter</button>
-                    <a href="{{ route('employee') }}" class="btn btn-secondary">Reset</a>
-                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#employeeExportColumnsModal">Export Employees CSV</button>
-                </form>
-
-                <div class="modal fade" id="employeeExportColumnsModal" tabindex="-1" aria-labelledby="employeeExportColumnsModalLabel" aria-hidden="true">
-                    <div class="modal-dialog modal-lg">
-                        <form method="GET" action="{{ route('employees.export.csv') }}" class="modal-content">
-                            @if(request('employee_status'))
-                                <input type="hidden" name="employee_status" value="{{ request('employee_status') }}">
-                            @endif
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="employeeExportColumnsModalLabel">Choose CSV Columns</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <p class="mb-0 text-muted">Select the employee details to include in the CSV.</p>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleEmployeeExportColumns">Clear all</button>
-                                </div>
-                                @php
-                                    $employeeExportColumns = [
-                                        'sr_no' => 'Sr. No', 'employee_id' => 'Employee ID', 'name' => 'Name', 'email' => 'Email', 'phone' => 'Phone',
-                                        'date_of_birth' => 'Date of Birth', 'department' => 'Department', 'staff_type' => 'Staff Type', 'position' => 'Position', 'permanent_address' => 'Permanent Address',
-                                        'bank_name' => 'Bank Name', 'account_number' => 'Account Number', 'biometric_id' => 'Biometric ID', 'highest_education' => 'Highest Education',
-                                        'institution' => 'Institution', 'experience_years' => 'Experience Years', 'emergency_contact_name' => 'Emergency Contact Name',
-                                        'emergency_contact_phone' => 'Emergency Contact Phone', 'pan' => 'PAN', 'aadhar' => 'Aadhar', 'esic_number' => 'ESIC Number',
-                                        'uan_number' => 'UAN Number', 'samagra_id' => 'Samagra ID', 'ayushman_number' => 'Ayushman Number', 'joining_date' => 'Joining Date', 'confirmation_date' => 'Confirmation Date', 'employment_status' => 'Employment Status', 'is_vacation' => 'Is Vacation',
-                                    ];
-                                @endphp
-                                <div class="row">
-                                    @foreach($employeeExportColumns as $key => $label)
-                                        <div class="col-md-4 mb-2">
-                                            <div class="form-check">
-                                                <input class="form-check-input employee-export-column" type="checkbox" name="columns[]" value="{{ $key }}" id="employee_export_{{ $key }}" checked>
-                                                <label class="form-check-label" for="employee_export_{{ $key }}">{{ $label }}</label>
-                                            </div>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" class="btn btn-success">Download CSV</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-            </div>
-            <div class="separator-breadcrumb border-top"></div>
-
             <div class="card text-start">
                 <div class="card-body">
+                    <!-- Nav Tabs: Active vs Deactivate (like Student Registrations) -->
+                    <ul class="nav nav-pills mb-3 border-bottom pb-2" id="employeeStatusTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link {{ ($statusFilter ?? 'active') === 'active' ? 'active' : '' }}" href="{{ route('employee', ['status' => 'active']) }}#employee-list-section">
+                                <i class="i-Checked-User me-1"></i> Active
+                                <span class="badge {{ ($statusFilter ?? 'active') === 'active' ? 'bg-white text-primary' : 'bg-success text-white' }} ms-1">{{ $activeCount ?? count($stream) }}</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {{ in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true) ? 'active' : '' }}" href="{{ route('employee', ['status' => 'deactivate']) }}#employee-list-section">
+                                <i class="i-Close-Window me-1"></i> Deactivate
+                                <span class="badge {{ in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true) ? 'bg-white text-danger' : 'bg-secondary text-white' }} ms-1">{{ $deactivateCount ?? 0 }}</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {{ ($statusFilter ?? '') === 'all' ? 'active' : '' }}" href="{{ route('employee', ['status' => 'all']) }}#employee-list-section">
+                                <i class="i-Business-Man me-1"></i> All Employees
+                                <span class="badge {{ ($statusFilter ?? '') === 'all' ? 'bg-white text-dark' : 'bg-light text-dark' }} ms-1">{{ $totalCount ?? 0 }}</span>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- Card Header: Title & Action Buttons -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom gap-2">
+                        <div class="d-flex align-items-center">
+                            <h4 class="card-title mb-0 me-2">
+                                @if(in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true))
+                                    Deactivated Employees
+                                @elseif(($statusFilter ?? '') === 'all')
+                                    All Employees
+                                @else
+                                    Active Employees
+                                @endif
+                            </h4>
+                            <span class="badge {{ in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true) ? 'bg-secondary text-white' : (($statusFilter ?? '') === 'all' ? 'bg-dark text-white' : 'bg-success text-white') }} border" id="employee_status_badge">
+                                {{ count($stream) }} {{ in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true) ? 'Deactivated' : (($statusFilter ?? '') === 'all' ? 'Total' : 'Active') }}
+                            </span>
+                        </div>
+
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            @if(!in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true))
+                            <a href="{{ route('employee', ['status' => 'deactivate']) }}#employee-list-section" class="btn btn-outline-secondary btn-sm position-relative">
+                                <i class="i-Close-Window me-1"></i> Deactivated Employees
+                                @if(isset($deactivateCount) && $deactivateCount > 0)
+                                    <span class="badge bg-secondary text-white ms-1">{{ $deactivateCount }}</span>
+                                @endif
+                            </a>
+                            @else
+                            <a href="{{ route('employee', ['status' => 'active']) }}#employee-list-section" class="btn btn-outline-success btn-sm position-relative">
+                                <i class="i-Checked-User me-1"></i> Active Employees
+                                @if(isset($activeCount) && $activeCount > 0)
+                                    <span class="badge bg-success text-white ms-1">{{ $activeCount }}</span>
+                                @endif
+                            </a>
+                            @endif
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#employeeExportColumnsModal">
+                                <i class="i-File-CSV me-1"></i> Export Employees CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Search Bar: Arranged properly above table -->
+                    <div class="row align-items-center mb-3">
+                        <div class="col-12 col-md-8 col-lg-6">
+                            <div class="input-group student-search-box shadow-sm">
+                                <span class="input-group-text bg-light fw-bold text-primary">
+                                    <i class="i-Search-on-Cloud me-1"></i> Search
+                                </span>
+                                <input type="text" id="live_employee_search" class="form-control" placeholder="Search Employee Name, ESS Code, Phone, Staff Type, Shift..." autocomplete="off">
+                                <button class="btn btn-outline-secondary" type="button" id="clear_live_employee_search" title="Clear Search">
+                                    Clear
+                                </button>
+                            </div>
+                            <small class="text-muted d-block mt-1" style="font-size: 11px;">
+                                <i class="i-Information me-1 text-primary"></i> Instant search as you type: Name, Code, Phone, Staff Type, Shift
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Modal for Export Columns -->
+                    <div class="modal fade" id="employeeExportColumnsModal" tabindex="-1" aria-labelledby="employeeExportColumnsModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <form method="GET" action="{{ route('employees.export.csv') }}" class="modal-content">
+                                <input type="hidden" name="status" value="{{ $statusFilter ?? 'active' }}">
+                                <input type="hidden" name="employee_status" value="{{ $statusFilter ?? 'active' }}">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="employeeExportColumnsModalLabel">Choose CSV Columns ({{ in_array(($statusFilter ?? ''), ['deactivate', 'deactivated', 'inactive'], true) ? 'Deactivated' : (($statusFilter ?? '') === 'all' ? 'All' : 'Active') }})</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <p class="mb-0 text-muted">Select the employee details to include in the CSV.</p>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleEmployeeExportColumns">Clear all</button>
+                                    </div>
+                                    @php
+                                        $employeeExportColumns = [
+                                            'sr_no' => 'Sr. No', 'employee_id' => 'Employee ID', 'name' => 'Name', 'email' => 'Email', 'phone' => 'Phone',
+                                            'date_of_birth' => 'Date of Birth', 'department' => 'Department', 'staff_type' => 'Staff Type', 'position' => 'Position', 'permanent_address' => 'Permanent Address',
+                                            'bank_name' => 'Bank Name', 'account_number' => 'Account Number', 'biometric_id' => 'Biometric ID', 'highest_education' => 'Highest Education',
+                                            'institution' => 'Institution', 'experience_years' => 'Experience Years', 'emergency_contact_name' => 'Emergency Contact Name',
+                                            'emergency_contact_phone' => 'Emergency Contact Phone', 'pan' => 'PAN', 'aadhar' => 'Aadhar', 'esic_number' => 'ESIC Number',
+                                            'uan_number' => 'UAN Number', 'samagra_id' => 'Samagra ID', 'ayushman_number' => 'Ayushman Number', 'joining_date' => 'Joining Date', 'confirmation_date' => 'Confirmation Date', 'employment_status' => 'Employment Status', 'is_vacation' => 'Is Vacation',
+                                        ];
+                                    @endphp
+                                    <div class="row">
+                                        @foreach($employeeExportColumns as $key => $label)
+                                            <div class="col-md-4 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input employee-export-column" type="checkbox" name="columns[]" value="{{ $key }}" id="employee_export_{{ $key }}" checked>
+                                                    <label class="form-check-label" for="employee_export_{{ $key }}">{{ $label }}</label>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-success">Download CSV</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="display table table-striped table-bordered" id="zero_configuration_table"
                             style="width: 100%">
@@ -1093,7 +1152,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-
+                                @php $i = 0; @endphp
                                 @if ($stream->isNotEmpty())
                                     @foreach ($stream as $streams)
                                         <?php $notificationData1 = json_decode($streams->json_str, true); ?>
@@ -1107,7 +1166,20 @@
                                             <td class="uperletter">{{ $streams->shift->shiftType->shift_type_name ?? 'N/A' }}</td>
                                             <td class="uperletter">{{ $streams->staffType->staff_type_name ?? 'N/A' }}</td>
                                             <td>{{ !empty($streams->date_of_joining) ? date('d-m-Y', strtotime($streams->date_of_joining)) : 'N/A' }}</td>
-                                            <td class="uperletter">{{ $streams->employee_status ?? 'N/A' }}</td>
+                                            <td>
+                                                @php
+                                                    $rawEmpStatus = strtolower(trim($streams->employee_status ?? ''));
+                                                @endphp
+                                                @if($rawEmpStatus === 'active')
+                                                    <span class="badge bg-success text-white">Active</span>
+                                                @elseif($rawEmpStatus === 'inactive')
+                                                    <span class="badge bg-secondary text-white">Inactive</span>
+                                                @elseif($rawEmpStatus === 'retired')
+                                                    <span class="badge bg-warning text-dark">Retired</span>
+                                                @else
+                                                    <span class="badge bg-light text-dark">{{ $streams->employee_status ?? 'N/A' }}</span>
+                                                @endif
+                                            </td>
                                             <td class='d-flex'>
                                                 <a class="btn btn-primary m-1"
                                                     href="{{ url('view-employee') . '/' . $streams->id }}">Edit</a>
@@ -1777,6 +1849,61 @@
         });
     </script>
 
+    <style>
+        #employeeStatusTabs .nav-link {
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: #4b5563;
+        }
+        #employeeStatusTabs .nav-link.active {
+            background-color: #6366f1;
+            color: #fff;
+        }
+        #employeeStatusTabs .nav-link:hover:not(.active) {
+            background-color: #f3f4f6;
+        }
+        .student-search-box {
+            min-width: 280px;
+            max-width: 500px;
+        }
+    </style>
 
+    <script>
+        jQuery(document).ready(function ($) {
+            function applyLiveEmployeeSearch(query) {
+                query = (query || '').trim();
+                if ($.fn.DataTable && $.fn.DataTable.isDataTable('#zero_configuration_table')) {
+                    $('#zero_configuration_table').DataTable().search(query).draw();
+                } else {
+                    var tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+                    $('#zero_configuration_table tbody tr').each(function () {
+                        var row = $(this);
+                        if (row.find('td').length <= 1) {
+                            return;
+                        }
+                        if (tokens.length === 0) {
+                            row.show();
+                            return;
+                        }
+                        var rowText = row.text().toLowerCase();
+                        var matches = tokens.every(function (t) {
+                            return rowText.indexOf(t) > -1;
+                        });
+                        row.toggle(matches);
+                    });
+                }
+            }
+
+            $(document).on('keyup input', '#live_employee_search', function () {
+                applyLiveEmployeeSearch($(this).val());
+            });
+
+            $(document).on('click', '#clear_live_employee_search', function () {
+                $('#live_employee_search').val('');
+                applyLiveEmployeeSearch('');
+            });
+        });
+    </script>
 
 @endsection

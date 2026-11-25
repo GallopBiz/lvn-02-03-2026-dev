@@ -116,15 +116,40 @@
 @endphp
 
 @php
-    $rawBatch = $json['admission_session'] ?? $json['intended_session'] ?? $json['batch'] ?? $json['batch_no'] ?? $student->session_name ?? '';
+    $targetSession = $json['admission_session'] ?? $json['intended_session'] ?? null;
     $isNextYear = (!empty($student->next_year) && ($student->next_year == 1 || $student->next_year === '1'))
-        || (!empty($json['next_year']) && ($json['next_year'] == 1 || $json['next_year'] === '1'));
+        || (!empty($json['next_year']) && ($json['next_year'] == 1 || $json['next_year'] === '1'))
+        || (isset($feeHeads) && $feeHeads->isNotEmpty());
 
-    $cleanBatch = !empty($rawBatch) ? preg_replace('/-+/', '-', preg_replace('/[\s_\/]+/', '-', trim($rawBatch))) : 'N/A';
-    if ($isNextYear && preg_match('/^(\d{4})[-_](\d{4})$/', $rawBatch, $m)) {
-        $formattedBatch = ((int)$m[1] + 1) . '-' . ((int)$m[2] + 1);
+    if (!empty($targetSession) && preg_match('/^(\d{4})[-_](\d{4})$/', trim($targetSession), $m)) {
+        // Explicit target admission session is already specified (e.g. 2027_2028 -> 2027-2028). Do not double-increment!
+        $formattedBatch = $m[1] . '-' . $m[2];
     } else {
-        $formattedBatch = $cleanBatch;
+        $baseSession = $json['batch'] ?? $json['batch_no'] ?? $student->session_name ?? session('db_names') ?? '2026_2027';
+        if (preg_match('/^(\d{4})[-_](\d{4})$/', trim($baseSession), $m)) {
+            $startYear = (int)$m[1];
+            $endYear = (int)$m[2];
+
+            $currentSession = $student->session_name ?? session('db_names') ?? '2026_2027';
+            $currStart = null;
+            if (preg_match('/^(\d{4})[-_](\d{4})$/', trim($currentSession), $cm)) {
+                $currStart = (int)$cm[1];
+            }
+
+            if ($isNextYear) {
+                // If base batch is not already the next academic year, advance by 1
+                if ($currStart !== null && $startYear <= $currStart) {
+                    $startYear = $currStart + 1;
+                    $endYear = $currStart + 2;
+                } elseif ($currStart === null) {
+                    $startYear += 1;
+                    $endYear += 1;
+                }
+            }
+            $formattedBatch = $startYear . '-' . $endYear;
+        } else {
+            $formattedBatch = !empty($baseSession) ? preg_replace('/-+/', '-', preg_replace('/[\s_\/]+/', '-', trim($baseSession))) : '2027-2028';
+        }
     }
     $firstFee = $feeHeads->first();
     $rawDate = null;

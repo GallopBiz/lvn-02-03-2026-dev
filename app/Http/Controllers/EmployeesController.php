@@ -42,20 +42,55 @@ class EmployeesController extends Controller
 
     public function index(Request $request)
     {
-        $employeeStatus = $request->input('employee_status');
+        $statusFilter = strtolower(trim((string) ($request->input('status') ?? $request->input('employee_status') ?? 'active')));
+        if (!in_array($statusFilter, ['active', 'deactivate', 'deactivated', 'inactive', 'retired', 'all'], true)) {
+            $statusFilter = 'active';
+        }
 
-        $stream = HrmsEmployee::with(['addresses', 'biometricDetails', 'shift.shiftType', 'staffType'])
-            ->when(in_array($employeeStatus, self::EMPLOYEE_STATUSES, true), function ($query) use ($employeeStatus) {
-                $query->where('employee_status', $employeeStatus);
-            })
-            ->get();
+        $activeCount = HrmsEmployee::where('employee_status', 'active')->count();
+        $deactivateCount = HrmsEmployee::where(function ($query) {
+            $query->whereIn('employee_status', ['inactive', 'retired'])
+                  ->orWhere('employee_status', '!=', 'active')
+                  ->orWhereNull('employee_status');
+        })->count();
+        $totalCount = HrmsEmployee::count();
+
+        $query = HrmsEmployee::with(['addresses', 'biometricDetails', 'shift.shiftType', 'staffType']);
+
+        if ($statusFilter === 'active') {
+            $query->where('employee_status', 'active');
+        } elseif (in_array($statusFilter, ['deactivate', 'deactivated', 'inactive'], true)) {
+            $query->where(function ($q) {
+                $q->whereIn('employee_status', ['inactive', 'retired'])
+                  ->orWhere('employee_status', '!=', 'active')
+                  ->orWhereNull('employee_status');
+            });
+        } elseif ($statusFilter === 'retired') {
+            $query->where('employee_status', 'retired');
+        }
+        // if 'all', no status filter is applied
+
+        $stream = $query->get();
         $deparments = HrmsDepartment::all();
 
         $staffTypes = HrmsStaffType::all();
         $shifts = HrmsShift::all();
 
         $positions = HrmsPosition::all();
-        return view('backend.HRMS.employees', compact('stream', 'deparments', 'positions', 'staffTypes', 'shifts', 'employeeStatus'));
+        $employeeStatus = $statusFilter;
+
+        return view('backend.HRMS.employees', compact(
+            'stream',
+            'deparments',
+            'positions',
+            'staffTypes',
+            'shifts',
+            'employeeStatus',
+            'statusFilter',
+            'activeCount',
+            'deactivateCount',
+            'totalCount'
+        ));
     }
 
 
@@ -384,8 +419,9 @@ class EmployeesController extends Controller
     }
 
 
-    public function view($id)
+    public function view($id, Request $request = null)
     {
+        $request = $request ?? request();
         $stream_master = HrmsEmployee::with([
             'addresses',
             'emergencyContacts',
@@ -401,15 +437,56 @@ class EmployeesController extends Controller
             return redirect()->route('employee')->with('error', 'Employee not found.');
         }
 
-        $stream = HrmsEmployee::all();
+        $statusFilter = strtolower(trim((string) ($request->input('status') ?? $request->input('employee_status') ?? 'active')));
+        if (!in_array($statusFilter, ['active', 'deactivate', 'deactivated', 'inactive', 'retired', 'all'], true)) {
+            $statusFilter = 'active';
+        }
+
+        $activeCount = HrmsEmployee::where('employee_status', 'active')->count();
+        $deactivateCount = HrmsEmployee::where(function ($query) {
+            $query->whereIn('employee_status', ['inactive', 'retired'])
+                  ->orWhere('employee_status', '!=', 'active')
+                  ->orWhereNull('employee_status');
+        })->count();
+        $totalCount = HrmsEmployee::count();
+
+        $query = HrmsEmployee::with(['addresses', 'biometricDetails', 'shift.shiftType', 'staffType']);
+
+        if ($statusFilter === 'active') {
+            $query->where('employee_status', 'active');
+        } elseif (in_array($statusFilter, ['deactivate', 'deactivated', 'inactive'], true)) {
+            $query->where(function ($q) {
+                $q->whereIn('employee_status', ['inactive', 'retired'])
+                  ->orWhere('employee_status', '!=', 'active')
+                  ->orWhereNull('employee_status');
+            });
+        } elseif ($statusFilter === 'retired') {
+            $query->where('employee_status', 'retired');
+        }
+        // if 'all', no status filter is applied
+
+        $stream = $query->get();
         $deparments = HrmsDepartment::all();
 
         $staffTypes = HrmsStaffType::all();
         $shifts = HrmsShift::all();
 
         $positions = HrmsPosition::all();
+        $employeeStatus = $statusFilter;
 
-        return view('backend.HRMS.employees', compact('stream_master', 'stream', 'deparments', 'positions', 'staffTypes', 'shifts'));
+        return view('backend.HRMS.employees', compact(
+            'stream_master',
+            'stream',
+            'deparments',
+            'positions',
+            'staffTypes',
+            'shifts',
+            'employeeStatus',
+            'statusFilter',
+            'activeCount',
+            'deactivateCount',
+            'totalCount'
+        ));
     }
 
     public function store(Request $request)
@@ -1101,7 +1178,10 @@ private function processEmployeeRow($row)
 	
 	public function exportEmployeesCsv(Request $request)
 	{
-		$employeeStatus = $request->input('employee_status');
+		$employeeStatus = strtolower(trim((string) ($request->input('employee_status') ?? $request->input('status') ?? 'active')));
+		if (!in_array($employeeStatus, ['active', 'deactivate', 'deactivated', 'inactive', 'retired', 'all'], true)) {
+			$employeeStatus = 'active';
+		}
 		$availableColumns = [
 			'sr_no' => 'Sr. No',
 			'employee_id' => 'Employee ID',
@@ -1139,7 +1219,7 @@ private function processEmployeeRow($row)
 		));
 
 		if (empty($selectedColumns)) {
-			return redirect()->route('employee', array_filter(['employee_status' => $employeeStatus]))
+			return redirect()->route('employee', ['status' => $employeeStatus])
 				->with('error', 'Please select at least one column to export.');
 		}
 
@@ -1155,8 +1235,18 @@ private function processEmployeeRow($row)
 			'emergencyContacts',
 			'statutoryInformation',
 		])
-			->when(in_array($employeeStatus, self::EMPLOYEE_STATUSES, true), function ($query) use ($employeeStatus) {
-				$query->where('employee_status', $employeeStatus);
+			->when($employeeStatus === 'active', function ($query) {
+				$query->where('employee_status', 'active');
+			})
+			->when(in_array($employeeStatus, ['deactivate', 'deactivated', 'inactive'], true), function ($query) {
+				$query->where(function ($q) {
+					$q->whereIn('employee_status', ['inactive', 'retired'])
+					  ->orWhere('employee_status', '!=', 'active')
+					  ->orWhereNull('employee_status');
+				});
+			})
+			->when($employeeStatus === 'retired', function ($query) {
+				$query->where('employee_status', 'retired');
 			})
 			->get();
 
