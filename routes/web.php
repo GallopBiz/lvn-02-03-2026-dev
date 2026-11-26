@@ -980,6 +980,7 @@ Route::post('change_password', [Changepassword::class, 'create']);
     Route::get('view-student-ledger/{id}', [FeesTypesMasterController::class, 'view_student_ledger'])->name('view-student-ledger');
     Route::post('student-ledger-receipt-challan', [FeesreceiptchallanController::class, 'student_ledger_receipt_challan'])->name('student-ledger-receipt-challan');
     Route::get('fees-receipt-print/{id}', [FeesTypesMasterController::class, 'print_challan_receipt'])->name('fees-receipt.print');
+    Route::match(['post', 'delete'], 'feesreceiptchallan-delete/{id}', [FeesTypesMasterController::class, 'delete_feesreceiptchallan'])->name('feesreceiptchallan.destroy');
     Route::post('student-view-part', [FeesreceiptchallanController::class, 'student_view_part'])->name('student-view-part');
 
     Route::get('bus-fees-master', [busfeesmasterController::class, 'index'])->name('bus-fees-master');

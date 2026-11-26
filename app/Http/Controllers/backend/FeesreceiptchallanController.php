@@ -203,7 +203,13 @@ $next_voucher_no = $next_voucher_no[0]->Auto_increment ?? 1;
         $generate_due_chat = json_decode($generate_due_j[0]['json_str']);
         $generate_due_chat_ar = json_decode($generate_due_j[0]['json_str'],true);
 
-        $due_chart_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id','=',$request->post('student_id'))->get();
+        $due_chart_data = DB::connection('dynamic')->table('feesreceiptchallan')
+            ->select('str_json')
+            ->where('student_id', '=', $request->post('student_id'))
+            ->where(function ($q) {
+                $q->whereNull('is_delete')->orWhere('is_delete', 0);
+            })
+            ->get();
         $data2 = [];
         $advance_received = 0;
         $tuition_amount_ = 0;

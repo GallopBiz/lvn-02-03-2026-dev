@@ -56,6 +56,23 @@
             <h1>Student Ledger :</h1>
           </div>
           <div class="separator-breadcrumb border-top"></div>
+
+          @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('success') }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+          @endif
+          @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ session('error') }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+          @endif
             <div class="row">
                 <div class="col-md-12">
                     <div class="card mb-4">
@@ -386,6 +403,19 @@
                                     @if(!empty($row['challan_id']))
                                       <a href="{{ url('fees-receipt-print/' . $row['challan_id']) }}" target="_blank" class="text-primary text-decoration-underline" style="font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;">Print Receipt</a>
                                     @endif
+                                    @if(!empty($row['challan_id']) && \App\Services\PermissionService::isAdmin())
+                                      @if(!empty($row['is_online']))
+                                        <span class="badge badge-light text-muted border" title="Online payment records (Razorpay) cannot be deleted" style="font-size: 11px; padding: 4px 6px;">
+                                          <i class="i-Lock-2 mr-1"></i> Online
+                                        </span>
+                                      @else
+                                        <form method="POST" action="{{ route('feesreceiptchallan.destroy', $row['challan_id']) }}" class="d-inline m-0" onsubmit="return confirm('Are you sure you want to delete this fee receipt entry? This action cannot be undone.');">
+                                          @csrf
+                                          @method('DELETE')
+                                          <button type="submit" class="btn btn-danger btn-sm" title="Delete Fee Receipt" style="font-size: 12px; padding: 2px 8px;">Delete</button>
+                                        </form>
+                                      @endif
+                                    @endif
                                   </div>
                                 @elseif(!empty($student_data) && $row['amount_cr']!=='' && str_contains($row['remarks'], 'Opening Balance') && !empty($student_data->scholar_no))
                                   <a href="{{ url('admission-receipt/' . $student_data->scholar_no) }}{{ !empty($row['receipt_number']) ? '?receipt=' . $row['receipt_number'] : '' }}" target="_blank" class="text-primary text-decoration-underline" style="font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;">Print Receipt</a>
@@ -592,25 +622,26 @@
                           $data = json_decode($object->str_json, true);
                           // print_r($data);
                           // // Extract relevant data
-                          $head_name = explode(',', $data['head_name']);
-                          $head_due_amount = explode(',', $data['head_due_amount']);
-                          $head_rec_ammount1 = explode(',', $data['head_rec_ammount']);
+                          $head_name = explode(',', $data['head_name'] ?? '');
+                          $head_due_amount = explode(',', $data['head_due_amount'] ?? '');
+                          $head_rec_ammount1 = explode(',', $data['head_rec_ammount'] ?? '');
                           $rec_ammount = array_sum($head_rec_ammount1);
-                          $by_cash = $data['by_cash'];
-                          $total_dueamount = $data['grand_total_due']; // Extract the "total_dueamount" value
-                          $payment_by_select = $data['payment_by_select'];
+                          $by_cash = $data['by_cash'] ?? 0;
+                          $total_dueamount = $data['grand_total_due'] ?? 0; // Extract the "total_dueamount" value
+                          $payment_by_select = $data['payment_by_select'] ?? '';
 
                           // // Create an array to hold remarks for each fee item
                           $remarks = [];
                           for ($i = 0; $i < count($head_name); $i++) {
-                              $remarks[] = $head_name[$i] . ' ( ' . $head_due_amount[$i] . ' )';
+                              $due_amt_str = $head_due_amount[$i] ?? '0';
+                              $remarks[] = $head_name[$i] . ' ( ' . $due_amt_str . ' )';
                           }
 
                           // // Add a row for 'by_cash' and 'total_dueamount' and display remarks and head_name
                           echo '<tr>';
                           echo "<td>$sno</td>";
                           echo '<td>' . $object->due_upto . '</td>';
-                          echo '<td>' . $data['payment_date']. '</td>';
+                          echo '<td>' . ($data['payment_date'] ?? '') . '</td>';
                           echo "<td>$by_cash</td>";
                           echo '<td>0</td>';
                           echo '<td>' . $payment_by_select . '</td>'; // Display payment_by_select as remarks

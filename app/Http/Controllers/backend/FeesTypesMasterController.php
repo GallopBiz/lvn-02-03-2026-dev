@@ -12,6 +12,7 @@ use App\Http\Requests\StoreFileRequest;
 use PDF;
 use Illuminate\Support\Facades\Config;
 use Carbon\Carbon;
+use App\Services\PermissionService;
 
 class FeesTypesMasterController extends Controller
 {
@@ -163,14 +164,25 @@ class FeesTypesMasterController extends Controller
 
         $totalnextyear = DB::connection('dynamic')->table('totalnextyear')->where('scholar_no',$request->scholar_number)->get();
         
-        $feesreceiptchallan_student_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id',$student_id)->get();
+        $feesreceiptchallan_student_data = DB::connection('dynamic')->table('feesreceiptchallan')
+            ->select('str_json')
+            ->where('student_id', $student_id)
+            ->where(function($q) {
+                $q->whereNull('is_delete')->orWhere('is_delete', 0);
+            })
+            ->get();
 
         if(!empty($feesreceiptchallan_student_data[0])){
             $feesreceiptchallan_student_data_json = json_decode($feesreceiptchallan_student_data[0]->str_json);
             // $name_formno = $feesreceiptchallan_student_data_json->name_formno;
         }
 
-        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $student_id)->get();
+        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')
+            ->where('student_id', $student_id)
+            ->where(function($q) {
+                $q->whereNull('is_delete')->orWhere('is_delete', 0);
+            })
+            ->get();
 
         $student_data = DB::connection('dynamic')->table('student_registration')->where('id', $student_id)->first();
 
@@ -377,12 +389,14 @@ class FeesTypesMasterController extends Controller
                         
                 //     }
                 // }
-                $data = json_decode($object->str_json, true);
-                $head_names = explode(',', $data['head_name']);
-                $head_rec_amounts = explode(',', $data['head_rec_ammount']);
-                $term_str = explode(',', $data['term_str']);
+                $data = json_decode($object->str_json, true) ?: [];
+                $head_names = explode(',', (string)($data['head_name'] ?? ''));
+                $head_rec_amounts = explode(',', (string)($data['head_rec_ammount'] ?? ''));
+                $term_str = explode(',', (string)($data['term_str'] ?? ''));
                 
-                $payment_date = \Carbon\Carbon::parse($data['payment_date'])->format('d-m-Y');
+                $payment_date = !empty($data['payment_date']) 
+                    ? \Carbon\Carbon::parse($data['payment_date'])->format('d-m-Y')
+                    : ($object->created_at ? \Carbon\Carbon::parse($object->created_at)->format('d-m-Y') : '');
                 $due_upto = $object->due_upto;
                 $remark = "";
                 for ($i = 0; $i < count($head_names); $i++) {
@@ -412,6 +426,7 @@ class FeesTypesMasterController extends Controller
 					}
 				}
                 $remark .= "Voucher No. ".$object->id. " CHALLAN:".  $gatewayId." / MODE: ".$data["payment_by_select"]." / BY: ".$data["from_employee"];
+                $isOnline = $this->isOnlinePaymentRecord($object);
                 $mergedRows[] = [
                         'type' => 'cr',
                         'due_date' => $due_upto,
@@ -422,6 +437,7 @@ class FeesTypesMasterController extends Controller
                         'settle_date' => $settle_date,
                         'source' => 'feesreceiptchallan',
                         'challan_id' => $object->id,
+                        'is_online' => $isOnline,
                     ];
             }
         }
@@ -547,19 +563,118 @@ class FeesTypesMasterController extends Controller
 
 
 
-    public function  student_ledger_delete($id)
+    /**
+     * Delete a manually entered fee receipt/challan entry.
+     * Restricted to Admin only. Online payment gateway records (e.g. Razorpay) cannot be deleted.
+     */
+    public function delete_feesreceiptchallan($id)
     {
-        // echo $id;
-        // exit;
-        $a = explode('-',$id);
-        $b = $a[1];        
-        $c = $a[0];
-        // print_r($c);exit;
-        $delete_resp = DB::connection('dynamic')->table($c)->where('id', $b);
-        //CommanModel::soft_delete($c,['id'=>$b]);
-        if($delete_resp=='TRUE'){
+        if (!PermissionService::isAdmin()) {
+            return redirect()->back()->with('error', 'Unauthorized: Only administrators can delete fee receipt entries.');
+        }
+
+        $challan = DB::connection('dynamic')->table('feesreceiptchallan')->where('id', $id)->first();
+
+        if (!$challan) {
+            return redirect()->back()->with('error', 'Fee receipt/challan record not found.');
+        }
+
+        if ((int)$challan->is_delete === 1) {
+            return redirect()->back()->with('error', 'Fee receipt/challan entry is already deleted.');
+        }
+
+        if ($this->isOnlinePaymentRecord($challan)) {
+            return redirect()->back()->with('error', 'Online payment records (Razorpay) cannot be deleted. Only manually entered payment records can be deleted.');
+        }
+
+        DB::connection('dynamic')->table('feesreceiptchallan')->where('id', $id)->update([
+            'is_delete' => 1,
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Fee receipt/challan #' . $id . ' has been deleted successfully.');
+    }
+
+    /**
+     * Determine if a feesreceiptchallan record is an online payment (e.g. Razorpay).
+     *
+     * @param  object|array  $challan
+     * @return bool
+     */
+    public function isOnlinePaymentRecord($challan): bool
+    {
+        if (!$challan) {
+            return false;
+        }
+
+        $challanObj = is_array($challan) ? (object) $challan : $challan;
+
+        // 1. Check old_fee_rec_no for Razorpay payment id (pay_...) or transaction id (txn_...)
+        $oldRec = strtolower(trim((string)($challanObj->old_fee_rec_no ?? '')));
+        if ($oldRec !== '' && $oldRec !== '0' && (str_contains($oldRec, 'pay_') || str_contains($oldRec, 'txn_'))) {
+            return true;
+        }
+
+        // 2. Parse str_json
+        $json = is_array($challanObj->str_json ?? null)
+            ? $challanObj->str_json
+            : (json_decode($challanObj->str_json ?? '', true) ?: []);
+
+        // 3. Check from_employee for RAZORPAY or GATEWAY
+        $fromEmp = strtoupper(trim((string)($json['from_employee'] ?? '')));
+        if ($fromEmp === 'RAZORPAY' || str_contains($fromEmp, 'RAZORPAY') || str_contains($fromEmp, 'GATEWAY')) {
+            return true;
+        }
+
+        // 4. Check challan_id / transaction_id starting with txn_ or pay_
+        $challanId = trim((string)($json['challan_id'] ?? ''));
+        if ($challanId !== '' && (str_starts_with(strtolower($challanId), 'txn_') || str_starts_with(strtolower($challanId), 'pay_'))) {
+            return true;
+        }
+
+        // 5. Check payment_by_select == ONLINE with transaction id
+        $paymentBy = strtoupper(trim((string)($json['payment_by_select'] ?? '')));
+        if ($paymentBy === 'ONLINE' && !empty($challanId)) {
+            return true;
+        }
+
+        // 6. Check student_online_fee_payments table for matching transaction or payment gateway id
+        if (!empty($challanId)) {
+            $onlineRecordExists = DB::connection('dynamic')->table('student_online_fee_payments')
+                ->where('transaction_id', $challanId)
+                ->orWhere('payment_gateway_transaction_id', $challanId)
+                ->exists();
+            if ($onlineRecordExists) {
+                return true;
+            }
+        }
+
+        // 7. Check if old_fee_rec_no has multiple segments including pay_
+        if ($oldRec !== '' && $oldRec !== '0') {
+            $parts = explode('__', $oldRec);
+            foreach ($parts as $part) {
+                $trimmed = trim($part);
+                if ($trimmed !== '' && (str_starts_with(strtolower($trimmed), 'txn_') || str_starts_with(strtolower($trimmed), 'pay_'))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public function student_ledger_delete($id)
+    {
+        $a = explode('-', $id);
+        if (isset($a[1]) && $a[0] === 'feesreceiptchallan') {
+            return $this->delete_feesreceiptchallan($a[1]);
+        }
+        $b = $a[1] ?? $id;        
+        $c = $a[0] ?? 'feesreceiptchallan';
+        $delete_resp = DB::connection('dynamic')->table($c)->where('id', $b)->update(['is_delete' => 1]);
+        if($delete_resp){
             return redirect('cancle_student_ledger')->with('success', 'Record successfully removed');
-        }elseif($delete_resp=='FALSE'){
+        }else{
             return redirect('cancle_student_ledger')->with('error', 'Record not removed');
         }
     }
@@ -577,7 +692,12 @@ class FeesTypesMasterController extends Controller
         }
 
         $totalnextyear = DB::connection('dynamic')->table('totalnextyear')->where('scholar_no', $student_data->scholar_no)->get();
-        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $student_id)->get();
+        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')
+            ->where('student_id', $student_id)
+            ->where(function($q) {
+                $q->whereNull('is_delete')->orWhere('is_delete', 0);
+            })
+            ->get();
         $data_student_name = DB::connection('dynamic')->table('student_registration')->select('student_name', 'id', 'scholar_no')->get();
 
         $course_fees_data = DB::connection('dynamic')->table('generate_duechartstatus')
@@ -607,14 +727,14 @@ class FeesTypesMasterController extends Controller
 
         $student_id = $id;
 
-        $feesreceiptchallan_student_data = DB::table('feesreceiptchallan')->select('str_json')->where('student_id',$student_id)->get();
+        $feesreceiptchallan_student_data = DB::table('feesreceiptchallan')->select('str_json')->where('student_id',$student_id)->where(function($q) { $q->whereNull('is_delete')->orWhere('is_delete', 0); })->get();
 
         if(!empty($feesreceiptchallan_student_data[0])){
             $feesreceiptchallan_student_data_json = json_decode($feesreceiptchallan_student_data[0]->str_json);
             // $name_formno = $feesreceiptchallan_student_data_json->name_formno;
         }
 
-        $challan_data = DB::table('feesreceiptchallan')->where('student_id', $student_id)->get();
+        $challan_data = DB::table('feesreceiptchallan')->where('student_id', $student_id)->where(function($q) { $q->whereNull('is_delete')->orWhere('is_delete', 0); })->get();
 
         $student_data = DB::table('student_registration')->where('id', $student_id)->first();
 
@@ -633,14 +753,14 @@ class FeesTypesMasterController extends Controller
             foreach($student_data as $student_data1){ 
         $totalnextyear = DB::connection('dynamic')->table('totalnextyear')->where('scholar_no',$student_data1->scholar_no)->get();
         
-         $feesreceiptchallan_student_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id',$student_data1->id)->get();
+         $feesreceiptchallan_student_data = DB::connection('dynamic')->table('feesreceiptchallan')->select('str_json')->where('student_id',$student_data1->id)->where(function($q) { $q->whereNull('is_delete')->orWhere('is_delete', 0); })->get();
 
         if(!empty($feesreceiptchallan_student_data[0])){
             $feesreceiptchallan_student_data_json = json_decode($feesreceiptchallan_student_data[0]->str_json);
             // $name_formno = $feesreceiptchallan_student_data_json->name_formno;
         }
 
-        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $student_data1->id)->get();
+        $challan_data = DB::connection('dynamic')->table('feesreceiptchallan')->where('student_id', $student_data1->id)->where(function($q) { $q->whereNull('is_delete')->orWhere('is_delete', 0); })->get();
 
         $student_data = DB::connection('dynamic')->table('student_registration')->where('id', $student_data1->id)->first();
 
@@ -658,8 +778,8 @@ class FeesTypesMasterController extends Controller
     {
         $challan = DB::connection('dynamic')->table('feesreceiptchallan')->where('id', $id)->first();
 
-        if (!$challan) {
-            return redirect()->back()->with('error', 'Challan record not found.');
+        if (!$challan || (int)$challan->is_delete === 1) {
+            return redirect()->back()->with('error', 'Challan record not found or has been deleted.');
         }
 
         $json = json_decode($challan->str_json, true) ?: [];
