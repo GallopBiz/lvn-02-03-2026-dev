@@ -39,6 +39,19 @@
 
         <div class="separator-breadcrumb border-top"></div>
 
+        @if(session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <strong>Attention:</strong> {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+
         <form id="progress-form" class="p-4 progress-form"
             action="{{ !empty($stream_master) ? url('store-leaverequests') : url('save-leaverequests') }}" method="post">
             @if (!empty($stream_master))
@@ -322,6 +335,9 @@
                         const option = document.createElement('option');
                         option.value = leaveType.id;
                         option.text = leaveType.name;
+                        option.setAttribute('data-is-paid', leaveType.is_paid ? '1' : '0');
+                        option.setAttribute('data-balance', leaveType.available_balance !== null && leaveType.available_balance !== undefined ? leaveType.available_balance : '');
+                        option.setAttribute('data-has-cl-balance', leaveType.has_cl_balance ? '1' : '0');
                         leaveTypeSelect.appendChild(option);
                     });
 
@@ -348,6 +364,73 @@
     }
 
     setupDynamicLeaveTypeUpdate('employee_id', 'leave_type_id');
+
+    function checkLeaveBalanceAlert(selectElement, showAlert = true) {
+        if (!selectElement) return true;
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        if (!selectedOption || !selectedOption.value) return true;
+
+        const isPaid = selectedOption.getAttribute('data-is-paid');
+        const balanceAttr = selectedOption.getAttribute('data-balance');
+        const balance = balanceAttr !== '' && balanceAttr !== null ? parseFloat(balanceAttr) : null;
+        const hasClBalance = selectedOption.getAttribute('data-has-cl-balance') === '1';
+        const isLeaveApplication = (selectedOption.value == '6' || isPaid === '0' || selectedOption.text.toLowerCase().includes('leave application'));
+
+        // Validation for Leave Application:
+        // If staff member has an available balance in CL-T or Casual Leave, they should not be allowed to select or submit a Leave Application.
+        if (isLeaveApplication && hasClBalance) {
+            if (showAlert) {
+                const clAlertMsg = 'You still have available leave balance (CL-T / Casual Leave). Please use your available leave balance before applying for Leave Application.';
+                const clAlertHtml = 'You still have available leave balance (CL-T / Casual Leave).<br><br>Please use your available leave balance before applying for <strong style="color: #0d6efd; font-weight: 700; background: #e7f1ff; padding: 3px 8px; border-radius: 4px; border: 1px solid #b6d4fe; display: inline-block;">Leave Application</strong>.';
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Available Leave Balance',
+                        html: clAlertHtml,
+                        confirmButtonColor: '#0d6efd',
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    alert(clAlertMsg);
+                }
+            }
+            selectElement.value = '';
+            return false;
+        }
+
+        // Validation for paid leave types:
+        if (isPaid === '1' && balance !== null && balance <= 0) {
+            if (showAlert) {
+                const alertHtml = 'You do not have any available leave balance for this leave type.<br><br>Please submit a <strong style="color: #0d6efd; font-weight: 700; background: #e7f1ff; padding: 3px 8px; border-radius: 4px; border: 1px solid #b6d4fe; display: inline-block;">Leave Application</strong> instead.';
+                const alertMsg = 'You do not have any available leave balance for this leave type. Please submit a Leave Application instead.';
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Available Leave Balance',
+                        html: alertHtml,
+                        confirmButtonColor: '#0d6efd',
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    alert(alertMsg);
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    document.getElementById('progress-form')?.addEventListener('submit', function (e) {
+        const leaveTypeSelect = document.getElementById('leave_type_id');
+        if (leaveTypeSelect && !checkLeaveBalanceAlert(leaveTypeSelect, true)) {
+            e.preventDefault();
+            return false;
+        }
+    });
+
+    document.getElementById('leave_type_id')?.addEventListener('change', function () {
+        checkLeaveBalanceAlert(this, true);
+    });
 
     if (window.jQuery && $.fn.select2) {
         if (!$('#employee_id').data('select2')) {

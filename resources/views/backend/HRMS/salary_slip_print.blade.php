@@ -223,7 +223,7 @@ $statutory = optional($report->employee->statutoryInformation);
                     </tr>
                     @if (($report->late_deduction_amount ?? 0) > 0)
                         <tr>
-                            <td>Leave Without Pay</td>
+                            <td>Leave Application</td>
                             <td class="amount">{{ round($report->late_deduction_amount) }}</td>
                         </tr>
                     @endif

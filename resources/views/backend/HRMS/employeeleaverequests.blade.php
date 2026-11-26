@@ -110,7 +110,13 @@
                                                 @endphp
                                             @endif
                                         </td>
-                                        <td class="uperletter">{{ $streams->leaveType->name ?? 'N/A' }}</td>
+                                        <td class="uperletter">
+                                            @if ($streams->leave_type_id == 6 || optional($streams->leaveType)->is_paid === 0 || stripos(optional($streams->leaveType)->name ?? '', 'Leave Application') !== false)
+                                                <span class="badge bg-warning text-dark px-2 py-1" style="font-size: 0.85rem; border: 1px solid #d39e00;">{{ $streams->leaveType->name ?? 'Leave Application' }}</span>
+                                            @else
+                                                {{ $streams->leaveType->name ?? 'N/A' }}
+                                            @endif
+                                        </td>
                                         <td>
                                             @if($streams->is_half_day)
                                                 {{ ucfirst($streams->half_day_type) }} Half
@@ -128,9 +134,16 @@
                                                     <div class="modal-content">
                                                         <form method="POST" action="{{ route('employeeleaves.update', $streams->id) }}">
                                                             @csrf
-                                                            <div class="modal-header">
+                                                            @php
+                                                                $isAppLwp = ($streams->leave_type_id == 6 || optional($streams->leaveType)->is_paid === 0 || stripos(optional($streams->leaveType)->name ?? '', 'Leave Application') !== false);
+                                                                $period = \Carbon\CarbonPeriod::create($streams->start_date, $streams->end_date);
+                                                            @endphp
+                                                            <div class="modal-header {{ $isAppLwp ? 'bg-light' : '' }}">
                                                                 <h5 class="modal-title" id="viewModalLabel{{ $streams->id }}">
                                                                     Leave Request - {{ $streams->employee->first_name }} {{ $streams->employee->last_name }}
+                                                                    @if ($isAppLwp)
+                                                                        <span class="badge bg-warning text-dark ms-2" style="font-size: 0.85rem; border: 1px solid #d39e00; vertical-align: middle;">Leave Application</span>
+                                                                    @endif
                                                                 </h5>
                                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                                             </div>
@@ -141,9 +154,15 @@
                                                                 </p>
                                                                 <p><strong>Reason:</strong> {{ $streams->reason }}</p>
 
-                                                                @php
-                                                                    $period = \Carbon\CarbonPeriod::create($streams->start_date, $streams->end_date);
-                                                                @endphp
+                                                                @if ($isAppLwp)
+                                                                    <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center" style="background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 6px;">
+                                                                        <span style="font-size: 0.95rem;">
+                                                                            <strong>Requested as:</strong> 
+                                                                            <span class="badge bg-warning text-dark px-2 py-1 ms-1" style="font-size: 0.9rem; font-weight: 700; border: 1px solid #d39e00;">Leave Application</span>
+                                                                            <span class="text-muted ms-2">(Unpaid leave / Leave Without Pay)</span>
+                                                                        </span>
+                                                                    </div>
+                                                                @endif
 
                                                                 <div class="table-responsive mt-3">
                                                                     <table class="table table-bordered">
@@ -151,7 +170,6 @@
                                                                             <tr>
                                                                                 <th>Date</th>
                                                                                 <th>Leave Type</th>
-                                                                                <th>LWP</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody>
@@ -159,14 +177,15 @@
                                                                                 <tr>
                                                                                     <td>{{ $date->format('d-m-Y') }}</td>
                                                                                     <td>
-                                                                                        <select name="leave_types[{{ $date->format('Y-m-d') }}]" class="form-select" required>
+                                                                                        <select name="leave_types[{{ $date->format('Y-m-d') }}]" class="form-select {{ $isAppLwp ? 'border-warning' : '' }}" required>
                                                                                             @foreach ($leaveTypesByStaffType->get($streams->employee->staff_type_id, collect()) as $type)
-                                                                                                <option value="{{ $type->id }}">{{ $type->name }}</option>
+                                                                                                <option value="{{ $type->id }}" 
+                                                                                                    {{ $type->id == $streams->leave_type_id ? 'selected' : '' }}
+                                                                                                >
+                                                                                                    {{ $type->name }}
+                                                                                                </option>
                                                                                             @endforeach
                                                                                         </select>
-                                                                                    </td>
-                                                                                    <td class="text-center">
-                                                                                        <input type="checkbox" name="lwp_dates[]" value="{{ $date->format('Y-m-d') }}">
                                                                                     </td>
                                                                                 </tr>
                                                                             @endforeach

@@ -30,6 +30,43 @@ use App\Services\Hrms\CasualLeaveBalanceService;
 
 class LeaverequestsController extends Controller
 {
+        public function hasAvailableCasualLeaveBalance($employeeId): bool
+        {
+            $employee = HrmsEmployee::find($employeeId);
+            if (!$employee) {
+                return false;
+            }
+
+            $clTypeIds = HrmsLeaveType::where(function ($q) {
+                $q->whereIn('id', [1, 5])
+                    ->orWhere('name', 'like', '%Casual Leave%')
+                    ->orWhere('name', 'like', '%CL - T%')
+                    ->orWhere('name', 'like', '%CL-T%')
+                    ->orWhere('name', 'like', '%CL %')
+                    ->orWhere('name', 'like', 'CL%');
+            })->where('id', '!=', 6)->pluck('id')->toArray();
+
+            if (empty($clTypeIds)) {
+                $clTypeIds = [1, 5];
+            }
+
+            $targetTypeIds = $clTypeIds;
+            if ($employee->staff_type_id) {
+                $allocated = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)
+                    ->whereIn('leave_type_id', $clTypeIds)
+                    ->pluck('leave_type_id')
+                    ->toArray();
+                if (!empty($allocated)) {
+                    $targetTypeIds = $allocated;
+                }
+            }
+
+            return HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
+                ->whereIn('leave_type_id', $targetTypeIds)
+                ->where('balance', '>', 0)
+                ->exists();
+        }
+
         // Staff-only: Return leave types with balance for logged-in staff
         public function getLeaveTypesStaff(Request $request)
         {
@@ -38,17 +75,33 @@ class LeaverequestsController extends Controller
             $employee = HrmsEmployee::findOrFail($employeeId);
             $leaveTypeIds = HrmsLeaveStaffAllocation::where('hrms_staff_type_id', $employee->staff_type_id)
                 ->pluck('leave_type_id');
+            if (!$leaveTypeIds->contains(6)) {
+                $leaveTypeIds->push(6);
+            }
             $leaveTypes = HrmsLeaveType::whereIn('id', $leaveTypeIds)->get();
+            $hasClBalance = $this->hasAvailableCasualLeaveBalance($employeeId);
+
             foreach ($leaveTypes as $leaveType) {
-                if (!$leaveType->is_paid) {
+                $isLwp = ((int) $leaveType->id === 6)
+                    || ((int) $leaveType->is_paid === 0)
+                    || (stripos($leaveType->name, 'without pay') !== false)
+                    || (stripos($leaveType->name, 'leave application') !== false);
+
+                $leaveType->has_cl_balance = $hasClBalance ? 1 : 0;
+
+                if ($isLwp) {
+                    $leaveType->name = 'Leave Application';
+                    $leaveType->available_balance = null;
                     continue;
                 }
 
                 $employeeLeaveBalance = HrmsEmployeeLeaveBalance::where('employee_id', $employeeId)
                     ->where('leave_type_id', $leaveType->id)
                     ->first();
-                $balance = $employeeLeaveBalance ? rtrim(rtrim(number_format($employeeLeaveBalance->balance, 1, '.', ''), '0'), '.') : '0';
-                $leaveType->name = $leaveType->name . ' (' . $balance . ' available)';
+                $balance = $employeeLeaveBalance ? (float) $employeeLeaveBalance->balance : 0.0;
+                $leaveType->available_balance = $balance;
+                $formattedBalance = rtrim(rtrim(number_format($balance, 1, '.', ''), '0'), '.');
+                $leaveType->name = $leaveType->name . ' (' . $formattedBalance . ' available)';
             }
             return response()->json($leaveTypes);
         }
@@ -78,9 +131,19 @@ class LeaverequestsController extends Controller
         $employeeId = $request->employee_id;
         // Always show all leave types
         $leaveTypes = HrmsLeaveType::all();
+        $hasClBalance = $this->hasAvailableCasualLeaveBalance($employeeId);
 
         foreach ($leaveTypes as $leaveType) {
-            if (!$leaveType->is_paid) {
+            $isLwp = ((int) $leaveType->id === 6)
+                || ((int) $leaveType->is_paid === 0)
+                || (stripos($leaveType->name, 'without pay') !== false)
+                || (stripos($leaveType->name, 'leave application') !== false);
+
+            $leaveType->has_cl_balance = $hasClBalance ? 1 : 0;
+
+            if ($isLwp) {
+                $leaveType->name = 'Leave Application';
+                $leaveType->available_balance = null;
                 continue;
             }
 
@@ -88,8 +151,10 @@ class LeaverequestsController extends Controller
                 ->where('leave_type_id', $leaveType->id)
                 ->first();
 
-            $balance = $employeeLeaveBalance ? rtrim(rtrim(number_format($employeeLeaveBalance->balance, 1, '.', ''), '0'), '.') : '0';
-            $leaveType->name = $leaveType->name . ' (' . $balance . ' available)';
+            $balance = $employeeLeaveBalance ? (float) $employeeLeaveBalance->balance : 0.0;
+            $leaveType->available_balance = $balance;
+            $formattedBalance = rtrim(rtrim(number_format($balance, 1, '.', ''), '0'), '.');
+            $leaveType->name = $leaveType->name . ' (' . $formattedBalance . ' available)';
         }
 
         return response()->json($leaveTypes);
@@ -184,12 +249,42 @@ class LeaverequestsController extends Controller
 
         $leaveType = HrmsLeaveType::find($leaveTypeId);
 
-        if (!$isHalfDay && $leaveType->is_paid && (!$leaveBalance || $leaveBalance->balance < $daysRequested)) {
-            Log::warning('Insufficient leave balance.', [
-                'available_balance' => optional($leaveBalance)->balance,
-                'required' => $daysRequested
-            ]);
-            return back()->with('error', 'Insufficient leave balance.');
+        $isLwp = ((int) $leaveTypeId === 6)
+            || ($leaveType && (int) $leaveType->is_paid === 0)
+            || ($leaveType && (stripos($leaveType->name, 'without pay') !== false || stripos($leaveType->name, 'leave application') !== false));
+
+        // Validation for Leave Application:
+        // If a staff member has an available balance in CL-T or Casual Leave, they should not be allowed to select or submit a Leave Application.
+        if ($isLwp) {
+            if ($this->hasAvailableCasualLeaveBalance($employeeId)) {
+                Log::warning('Leave Application rejected because employee still has available CL-T / Casual Leave balance.', [
+                    'employee_id' => $employeeId,
+                    'leave_type_id' => $leaveTypeId
+                ]);
+                return back()->withInput()->with('error', 'You still have available leave balance (CL-T / Casual Leave). Please use your available leave balance before applying for Leave Application.');
+            }
+        }
+
+        // For all leave types except LWP / Leave Application:
+        // If available leave balance is zero, staff should not be allowed to submit a leave request.
+        if (!$isLwp) {
+            $availableBalance = (float) ($leaveBalance ? $leaveBalance->balance : 0);
+            if ($availableBalance <= 0) {
+                Log::warning('Leave request rejected due to zero balance.', [
+                    'employee_id' => $employeeId,
+                    'leave_type_id' => $leaveTypeId,
+                    'available_balance' => $availableBalance
+                ]);
+                return back()->withInput()->with('error', 'You do not have any available leave balance for this leave type. Please submit a Leave Application instead.');
+            }
+
+            if (!$isHalfDay && $availableBalance < $daysRequested) {
+                Log::warning('Insufficient leave balance.', [
+                    'available_balance' => $availableBalance,
+                    'required' => $daysRequested
+                ]);
+                return back()->withInput()->with('error', 'Insufficient leave balance.');
+            }
         }
 
         $today = now();
@@ -222,9 +317,9 @@ class LeaverequestsController extends Controller
             $request,
             &$clDaysDeducted
         ) {
-            if ($isHalfDay) {
+            if ($isHalfDay && $leaveType && $leaveType->is_paid) {
                 $clDaysDeducted = app(CasualLeaveBalanceService::class)->deduct($employee, 0.5);
-            } elseif ($leaveType->is_paid) {
+            } elseif ($leaveType && $leaveType->is_paid && $leaveBalance) {
                 $leaveBalance->balance -= $daysRequested;
                 $leaveBalance->save();
                 Log::info('Leave balance updated.', ['new_balance' => $leaveBalance->balance]);
@@ -281,6 +376,16 @@ class LeaverequestsController extends Controller
         $leaveAllocatedIds = $leaveAllocated->pluck('leave_type_id')->toArray();
         $leaveTypes = HrmsLeaveType::whereIn('id', $leaveAllocatedIds)->get();
         foreach ($leaveTypes as $leaveType) {
+            $isLwp = ((int) $leaveType->id === 6)
+                || ((int) $leaveType->is_paid === 0)
+                || (stripos($leaveType->name, 'without pay') !== false)
+                || (stripos($leaveType->name, 'leave application') !== false);
+
+            if ($isLwp) {
+                $leaveType->name = 'Leave Application';
+                continue;
+            }
+
             $employeeLeaveBalance=HrmsEmployeeLeaveBalance::where('employee_id', $stream_master->employee_id)->where('leave_type_id', $leaveType->id)->first();
             if(!is_null($employeeLeaveBalance)){
                 $leaveType->name = $leaveType->name.'('.$employeeLeaveBalance->balance.' available)';

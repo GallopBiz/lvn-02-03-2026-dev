@@ -95,6 +95,22 @@ class EmployeePayrollController extends Controller
 		return false;
 	}
 
+	private function isLwpLeaveRequest($leaveRequest): bool
+	{
+		$isPaid = optional($leaveRequest->leaveType)->is_paid;
+		if ($isPaid !== null && (int) $isPaid === 0) {
+			return true;
+		}
+		if ((int) $leaveRequest->leave_type_id === 6) {
+			return true;
+		}
+		$typeName = optional($leaveRequest->leaveType)->name ?? '';
+		if ($typeName !== '' && (stripos($typeName, 'without pay') !== false || stripos($typeName, 'leave application') !== false)) {
+			return true;
+		}
+		return false;
+	}
+
 	private function getApprovedHalfDayDates(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate)
 	{
 		return $employee->leaveRequest
@@ -102,8 +118,7 @@ class EmployeePayrollController extends Controller
 				$status = strtolower(trim((string) $leaveRequest->status));
 				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
 
-				$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
-				if ($status !== 'approved' || !$isHalfDay || $isPaid == 0) {
+				if ($status !== 'approved' || !$isHalfDay || $this->isLwpLeaveRequest($leaveRequest)) {
 					return false;
 				}
 
@@ -133,8 +148,8 @@ class EmployeePayrollController extends Controller
 					return false;
 				}
 
-				$isPaid = optional($leaveRequest->leaveType)->is_paid ?? 1;
-				if (!in_array($status, ['rejected', 'pending'], true) && !($status === 'approved' && $isPaid == 0)) {
+				$isLwp = $this->isLwpLeaveRequest($leaveRequest);
+				if (!in_array($status, ['rejected', 'pending'], true) && !($status === 'approved' && $isLwp)) {
 					return false;
 				}
 
@@ -147,6 +162,41 @@ class EmployeePayrollController extends Controller
 			->flatMap(function ($leaveRequest) {
 				$period = Carbon::parse($leaveRequest->start_date)->toPeriod(Carbon::parse($leaveRequest->end_date));
 				return collect($period)->map(fn ($day) => $day->format('Y-m-d'));
+			})
+			->unique()
+			->values()
+			->toArray();
+	}
+
+	private function getDeductibleFullDayLwpDates(HrmsEmployee $employee, Carbon $startDate, Carbon $endDate): array
+	{
+		return $employee->leaveRequest
+			->filter(function ($leaveRequest) use ($startDate, $endDate) {
+				$status = strtolower(trim((string) $leaveRequest->status));
+				$isHalfDay = in_array(strtolower(trim((string) $leaveRequest->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+
+				if ($isHalfDay || !$this->isLwpLeaveRequest($leaveRequest)) {
+					return false;
+				}
+
+				if (!in_array($status, ['approved', 'rejected', 'pending'], true)) {
+					return false;
+				}
+
+				$leaveStart = Carbon::parse($leaveRequest->start_date);
+				$leaveEnd = Carbon::parse($leaveRequest->end_date);
+				return ($leaveStart->gte($startDate) && $leaveStart->lte($endDate))
+					|| ($leaveEnd->gte($startDate) && $leaveEnd->lte($endDate))
+					|| ($leaveStart->lte($startDate) && $leaveEnd->gte($endDate));
+			})
+			->flatMap(function ($leaveRequest) use ($startDate, $endDate) {
+				$leaveStart = Carbon::parse($leaveRequest->start_date)->max($startDate);
+				$leaveEnd = Carbon::parse($leaveRequest->end_date)->min($endDate);
+				if ($leaveStart->lte($leaveEnd)) {
+					$period = $leaveStart->toPeriod($leaveEnd);
+					return collect($period)->map(fn ($day) => $day->format('Y-m-d'));
+				}
+				return collect();
 			})
 			->unique()
 			->values()
@@ -249,7 +299,7 @@ class EmployeePayrollController extends Controller
 				'employeeDeductions' => fn($q) => $q->whereHas('salary', fn($sq) => $sq->where('is_active', 1)),
 				'children' => fn($q) => $q->whereHas('salary', fn($sq) => $sq->where('is_active', 1)),
 				'loans' => fn($q) => $q->where('is_active', 1),
-				'leaveRequest',
+				'leaveRequest.leaveType',
 				'biometricDetails',
 				'staffType',
 				'leaveBalances'
@@ -311,6 +361,7 @@ class EmployeePayrollController extends Controller
 					$deductibleHalfDayDates = $this->getDeductibleHalfDayDates($employee, $startDate, $endDate);
 					$allHalfDayDates = array_values(array_unique(array_merge($approvedHalfDayDates, $deductibleHalfDayDates)));
 					$rejectedOrUnpaidHalfDays = count($deductibleHalfDayDates) * 0.5;
+					$deductibleFullDayLwpDates = $this->getDeductibleFullDayLwpDates($employee, $startDate, $endDate);
 					$lateComingCount = 0;
 					$unapprovedHalfDaysFromBiometric = 0;
 					if ($biometricRequired) {
@@ -376,7 +427,9 @@ class EmployeePayrollController extends Controller
 						: $workingDays;
 					$leaveDates = [];
 					foreach ($employee->leaveRequest as $lr) {
-						if ($lr->status === 'Approved') {
+						$lrStatus = strtolower(trim((string) $lr->status));
+						$lrIsHalfDay = in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+						if ($lrStatus === 'approved' && !$lrIsHalfDay && !$this->isLwpLeaveRequest($lr)) {
 							$period = Carbon::parse($lr->start_date)->toPeriod(Carbon::parse($lr->end_date));
 							foreach ($period as $d) {
 								$leaveDates[$d->format('Y-m-d')] = true;
@@ -401,10 +454,12 @@ class EmployeePayrollController extends Controller
 					$dateCursor = $startDate->copy();
 					while ($dateCursor->lte($endDate)) {
 						$dateStr = $dateCursor->format('Y-m-d');
-						if (in_array($dateStr, $attendanceDates)) {
-							$allDates[$dateStr] = 'present';
-						} elseif (in_array($dateStr, $holidayDates) || $dateCursor->dayOfWeek === Carbon::SUNDAY) {
+						if (in_array($dateStr, $holidayDates) || $dateCursor->dayOfWeek === Carbon::SUNDAY) {
 							$allDates[$dateStr] = 'holiday';
+						} elseif (in_array($dateStr, $deductibleFullDayLwpDates, true)) {
+							$allDates[$dateStr] = 'absent';
+						} elseif (in_array($dateStr, $attendanceDates)) {
+							$allDates[$dateStr] = 'present';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
 						} elseif (in_array($dateStr, $deductibleHalfDayDates, true)) {
@@ -643,7 +698,7 @@ class EmployeePayrollController extends Controller
 				'employeeDeductions' => fn($q) => $q->whereHas('salary', fn($sq) => $sq->where('is_active', 1)),
 				'children' => fn($q) => $q->whereHas('salary', fn($sq) => $sq->where('is_active', 1)),
 				'loans' => fn($q) => $q->where('is_active', 1),
-				'leaveRequest',
+				'leaveRequest.leaveType',
 				'biometricDetails',
 			'staffType',
 			'leaveBalances'
@@ -720,6 +775,7 @@ class EmployeePayrollController extends Controller
 				$deductibleHalfDayDates = $this->getDeductibleHalfDayDates($employee, $startDate, $endDate);
 				$allHalfDayDates = array_values(array_unique(array_merge($approvedHalfDayDates, $deductibleHalfDayDates)));
 				$rejectedOrUnpaidHalfDays = count($deductibleHalfDayDates) * 0.5;
+				$deductibleFullDayLwpDates = $this->getDeductibleFullDayLwpDates($employee, $startDate, $endDate);
 				$lateComingCount = 0;
 				$unapprovedHalfDaysFromBiometric = 0;
 
@@ -798,7 +854,9 @@ class EmployeePayrollController extends Controller
 
 					$leaveDates = [];
 					foreach ($employee->leaveRequest as $lr) {
-						if ($lr->status === 'Approved') {
+						$lrStatus = strtolower(trim((string) $lr->status));
+						$lrIsHalfDay = in_array(strtolower(trim((string) $lr->is_half_day)), ['1', 'true', 'yes', 'on'], true);
+						if ($lrStatus === 'approved' && !$lrIsHalfDay && !$this->isLwpLeaveRequest($lr)) {
 							$period = Carbon::parse($lr->start_date)->toPeriod(Carbon::parse($lr->end_date));
 							foreach ($period as $d) {
 								$leaveDates[$d->format('Y-m-d')] = true;
@@ -833,10 +891,12 @@ class EmployeePayrollController extends Controller
 					$dateCursor = $startDate->copy();
 					while ($dateCursor->lte($endDate)) {
 						$dateStr = $dateCursor->format('Y-m-d');
-						if (in_array($dateStr, $attendanceDates)) {
-							$allDates[$dateStr] = 'present';
-						} elseif (in_array($dateStr, $holidayDates) || $dateCursor->dayOfWeek === Carbon::SUNDAY) {
+						if (in_array($dateStr, $holidayDates) || $dateCursor->dayOfWeek === Carbon::SUNDAY) {
 							$allDates[$dateStr] = 'holiday';
+						} elseif (in_array($dateStr, $deductibleFullDayLwpDates, true)) {
+							$allDates[$dateStr] = 'absent';
+						} elseif (in_array($dateStr, $attendanceDates)) {
+							$allDates[$dateStr] = 'present';
 						} elseif (isset($leaveDates[$dateStr])) {
 							$allDates[$dateStr] = 'leave';
 						} elseif (in_array($dateStr, $deductibleHalfDayDates, true)) {
@@ -1319,7 +1379,7 @@ class EmployeePayrollController extends Controller
 				$leaveDays = 0.5;
 			}
 
-			if (strtolower(trim((string) $leaveRequest->status)) === 'approved') {
+			if (strtolower(trim((string) $leaveRequest->status)) === 'approved' && !$this->isLwpLeaveRequest($leaveRequest)) {
 				$approvedLeaves += $leaveDays;
 			} else {
 				$unapprovedLeaves += $leaveDays;

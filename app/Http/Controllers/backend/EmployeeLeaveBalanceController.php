@@ -17,10 +17,12 @@ class EmployeeLeaveBalanceController extends Controller
     {
         $search = $request->input('search');
 
-        // ✅ Get only active leave types (exclude soft-deleted + LWP)
+        // ✅ Get only active leave types (exclude soft-deleted + LWP / Leave Application)
         $leaveTypes = DB::table('hrms_leave_types')
             ->whereNull('deleted_at')
-            ->where('name', '!=', 'Leave Without Pay')
+            ->whereNotIn('name', ['Leave Without Pay', 'Leave Application'])
+            ->where('id', '!=', 6)
+            ->where('is_paid', '!=', 0)
             ->get();
 
         // ✅ Build query with joins (exclude deleted balances + deleted leave types + LWP)
@@ -30,7 +32,9 @@ class EmployeeLeaveBalanceController extends Controller
             ->join('hrms_leave_types as lt', function ($join) {
                 $join->on('elb.leave_type_id', '=', 'lt.id')
                      ->whereNull('lt.deleted_at')
-                     ->where('lt.name', '!=', 'Leave Without Pay'); // exclude LWP
+                     ->whereNotIn('lt.name', ['Leave Without Pay', 'Leave Application'])
+                     ->where('lt.id', '!=', 6)
+                     ->where('lt.is_paid', '!=', 0); // exclude LWP / Leave Application
             })
             ->select(
                 'emp.id as employee_id',
@@ -92,7 +96,9 @@ class EmployeeLeaveBalanceController extends Controller
 
         $validEmployeeIds = HrmsEmployee::whereIn('id', $employeeIds)->pluck('id')->map(fn($id) => (string) $id)->all();
         $validLeaveTypeIds = HrmsLeaveType::whereIn('id', $leaveTypeIds)
-            ->where('name', '!=', 'Leave Without Pay')
+            ->whereNotIn('name', ['Leave Without Pay', 'Leave Application'])
+            ->where('id', '!=', 6)
+            ->where('is_paid', '!=', 0)
             ->pluck('id')
             ->map(fn($id) => (string) $id)
             ->all();
@@ -168,7 +174,9 @@ class EmployeeLeaveBalanceController extends Controller
 
                 $employeeExists = HrmsEmployee::where('id', $employeeId)->exists();
                 $leaveTypeExists = HrmsLeaveType::where('id', $leaveTypeId)
-                    ->where('name', '!=', 'Leave Without Pay')
+                    ->whereNotIn('name', ['Leave Without Pay', 'Leave Application'])
+                    ->where('id', '!=', 6)
+                    ->where('is_paid', '!=', 0)
                     ->exists();
 
                 if (!$employeeExists || !$leaveTypeExists) {
@@ -201,7 +209,9 @@ class EmployeeLeaveBalanceController extends Controller
             ->get();
 
         $leaveTypes = HrmsLeaveType::whereNull('deleted_at')
-            ->where('name', '!=', 'Leave Without Pay')
+            ->whereNotIn('name', ['Leave Without Pay', 'Leave Application'])
+            ->where('id', '!=', 6)
+            ->where('is_paid', '!=', 0)
             ->orderBy('name')
             ->get();
 
