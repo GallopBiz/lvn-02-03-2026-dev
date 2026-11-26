@@ -311,4 +311,53 @@ class DailyAttendanceDateRangeAndDeleteTest extends TestCase
         $lockedResponse->assertSessionHas('error', 'Attendance for this date is locked and cannot be deleted.');
         $this->assertEquals(0, $lockedAtt->fresh()->is_delete);
     }
+
+    public function test_students_for_class_does_not_leak_students_when_class_id_matches_another_class_name()
+    {
+        $controller = app(\App\Http\Controllers\Academic\AttendanceController::class);
+        $method = new \ReflectionMethod($controller, 'studentsForClass');
+        $method->setAccessible(true);
+
+        // Class 9 in DB has id 12
+        $class9 = Classes::where('class_name', '09')->where('id', 12)->first();
+        if (!$class9) {
+            $class9 = Classes::updateOrCreate(['id' => 12], ['class_name' => '09', 'section_name' => 'Kautilya', 'is_delete' => 0]);
+        }
+
+        $studentClass12 = \App\Models\Student_registration::updateOrCreate(
+            ['form_number' => 'TEST_CLS12_LEAK'],
+            [
+                'scholar_no' => '999901',
+                'student_name' => 'Class 12 Student',
+                'class_name' => '12',
+                'section_name' => 'Kautilya',
+                'registration_date' => '2026-04-01',
+            ]
+        );
+
+        $studentClass9 = \App\Models\Student_registration::updateOrCreate(
+            ['form_number' => 'TEST_CLS09_VALID'],
+            [
+                'scholar_no' => '999902',
+                'student_name' => 'Class 09 Student',
+                'class_name' => '09',
+                'section_name' => 'Kautilya',
+                'registration_date' => '2026-04-01',
+            ]
+        );
+
+        try {
+            // Fetch students for Class 9 using classId 12
+            $students = $method->invoke($controller, 12, 'Kautilya', false)->get();
+
+            // Must include Class 09 student
+            $this->assertTrue($students->contains('id', $studentClass9->id), 'Class 9 student must be included');
+
+            // Must NOT include Class 12 student
+            $this->assertFalse($students->contains('id', $studentClass12->id), 'Class 12 student must NOT leak into Class 9');
+        } finally {
+            $studentClass12->delete();
+            $studentClass9->delete();
+        }
+    }
 }

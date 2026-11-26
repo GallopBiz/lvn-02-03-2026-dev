@@ -1732,7 +1732,6 @@ class AttendanceController extends Controller
 
         $classAliases = array_unique(array_filter([
             $className,
-            (string) $classId,
             ltrim((string) $className, '0'),
             is_numeric($className) ? sprintf('%02d', (int) $className) : null,
             class_exists(\App\Academic\AcademicHelper::class) ? \App\Academic\AcademicHelper::normalizeClassIdentifier($className) : null,
@@ -1853,7 +1852,6 @@ class AttendanceController extends Controller
 
         $classAliases = array_unique(array_filter([
             $className,
-            (string) $classId,
             ltrim((string) $className, '0'),
             is_numeric($className) ? sprintf('%02d', (int) $className) : null,
             class_exists(\App\Academic\AcademicHelper::class) ? \App\Academic\AcademicHelper::normalizeClassIdentifier($className) : null,
