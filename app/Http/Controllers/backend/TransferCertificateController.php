@@ -315,7 +315,7 @@ class TransferCertificateController extends Controller
         $subjects = $this->subjectsForStudent((int) $student->id, $subjectClassName);
         $attendance = $this->attendanceForStudent((int) $student->id, $sessionName, $student->class_name, $student->scholar_no);
         $dateOfBirth = $this->dateForInput($student->date_of_birth ?: ($json['student_dob'] ?? null));
-        $categoryAndCaste = $this->resolveStudentCategoryAndCaste($student, $sessionName);
+        $category = $this->resolveStudentCategory($student, $sessionName);
 
         return response()->json([
             'id' => $student->id,
@@ -328,7 +328,8 @@ class TransferCertificateController extends Controller
             'session_name' => $this->displayValue($sessionName),
             'mother_name' => $this->displayValue($json['mother_name'] ?? $json['mothername'] ?? null),
             'father_name' => $this->displayValue($json['student_father_name'] ?? $json['fathername'] ?? $json['father_name'] ?? null),
-            'caste' => $this->displayValue($categoryAndCaste),
+            'caste' => $this->displayValue($category),
+            'category' => $this->displayValue($category),
             'nationality' => $this->displayValue($json['nationality'] ?? 'Indian'),
             'date_of_admitted' => $this->dateForInput($json['admission_date'] ?? $student->registration_date ?? null),
             'class_to_which_admitted' => $this->displayValue($json['admitted_class'] ?? $json['class_to_which_admitted'] ?? $json['classname'] ?? $student->application_for ?? null),
@@ -705,9 +706,9 @@ class TransferCertificateController extends Controller
     }
 
     /**
-     * Resolve student Category and Caste inline across registration columns, json_str, and sessions
+     * Resolve student Category inline across registration columns, json_str, and sessions
      */
-    private function resolveStudentCategoryAndCaste($student, ?string $sessionName = null): string
+    private function resolveStudentCategory($student, ?string $sessionName = null): string
     {
         if (!$student) {
             return '';
@@ -715,13 +716,12 @@ class TransferCertificateController extends Controller
 
         $json = json_decode($student->json_str ?? '{}', true) ?: [];
         $rawCategory = $json['category'] ?? ($json['student_category'] ?? ($student->category ?? null));
-        $rawCaste = $json['student_caste'] ?? ($json['caste'] ?? ($json['caste_name'] ?? ($json['cast'] ?? ($student->caste ?? null))));
 
         $scholarNo = $student->scholar_no ?? ($json['scholar_no'] ?? null);
         $studentId = $student->id;
 
-        // If either category or caste is missing, check other session databases
-        if (empty($rawCategory) || empty($rawCaste) || in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+        // If category is missing, check other session databases
+        if (empty($rawCategory) || in_array(strtolower(trim((string) $rawCategory)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
             $sessions = $this->getAvailableAcademicDatabases();
 
             foreach ($sessions as $db) {
@@ -736,17 +736,9 @@ class TransferCertificateController extends Controller
 
                 if ($st) {
                     $sJson = json_decode($st->json_str ?? '{}', true) ?: [];
-                    if (empty($rawCategory)) {
-                        $rawCategory = $sJson['category'] ?? ($sJson['student_category'] ?? ($st->category ?? null));
-                    }
-                    if (empty($rawCaste) || in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
-                        $candidateCaste = $sJson['student_caste'] ?? ($sJson['caste'] ?? ($sJson['caste_name'] ?? ($sJson['cast'] ?? ($st->caste ?? null))));
-                        if (!empty($candidateCaste) && !in_array(strtolower(trim((string) $candidateCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
-                            $rawCaste = $candidateCaste;
-                        }
-                    }
-
-                    if (!empty($rawCategory) && !empty($rawCaste) && !in_array(strtolower(trim((string) $rawCaste)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+                    $candidateCategory = $sJson['category'] ?? ($sJson['student_category'] ?? ($st->category ?? null));
+                    if (!empty($candidateCategory) && !in_array(strtolower(trim((string) $candidateCategory)), ['0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
+                        $rawCategory = $candidateCategory;
                         break;
                     }
                 }
@@ -756,58 +748,17 @@ class TransferCertificateController extends Controller
         // Clean & normalize Category
         $rawCategory = is_string($rawCategory) ? trim($rawCategory) : '';
         if (in_array(strtolower($rawCategory), ['', '0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
-            $rawCategory = null;
+            return '';
         }
 
-        $categoryDisplay = null;
-        if ($rawCategory) {
-            $upperCat = strtoupper($rawCategory);
-            if (in_array($upperCat, ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED', 'OPEN'])) {
-                $categoryDisplay = 'General';
-            } elseif (in_array($upperCat, ['OBC', 'SC', 'ST'])) {
-                $categoryDisplay = $upperCat;
-            } else {
-                $categoryDisplay = ucfirst(trim($rawCategory));
-            }
+        $upperCat = strtoupper($rawCategory);
+        if (in_array($upperCat, ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED', 'OPEN'])) {
+            return 'General';
+        } elseif (in_array($upperCat, ['OBC', 'SC', 'ST'])) {
+            return $upperCat;
         }
 
-        // Clean & resolve Caste
-        $rawCaste = is_string($rawCaste) ? trim($rawCaste) : '';
-        if (is_numeric($rawCaste) && (int) $rawCaste > 0) {
-            $casteName = DB::connection('dynamic')->table('caste_name')->where('id', (int) $rawCaste)->value('caste_name');
-            if ($casteName) {
-                $rawCaste = trim((string) $casteName);
-            }
-        }
-
-        if (in_array(strtolower($rawCaste), ['', '0', 'select', '-', '--', 'null', 'none', 'na', 'n/a'])) {
-            $rawCaste = null;
-        }
-
-        // Remove redundancy if caste merely duplicates category
-        if ($categoryDisplay && $rawCaste) {
-            if (strcasecmp($categoryDisplay, $rawCaste) === 0) {
-                $rawCaste = null;
-            } elseif ($categoryDisplay === 'General' && in_array(strtoupper($rawCaste), ['GEN', 'GEN.', 'GENERAL', 'UR', 'OPEN'])) {
-                $rawCaste = null;
-            }
-        }
-
-        if ($categoryDisplay && $rawCaste) {
-            $casteFormatted = (strtoupper($rawCaste) === $rawCaste || strtolower($rawCaste) === $rawCaste)
-                ? ucwords(strtolower($rawCaste))
-                : $rawCaste;
-            return "{$categoryDisplay} (Category) - {$casteFormatted} (Caste)";
-        } elseif ($categoryDisplay) {
-            return $categoryDisplay;
-        } elseif ($rawCaste) {
-            $casteFormatted = (strtoupper($rawCaste) === $rawCaste || strtolower($rawCaste) === $rawCaste)
-                ? ucwords(strtolower($rawCaste))
-                : $rawCaste;
-            return "{$casteFormatted} (Caste)";
-        }
-
-        return '';
+        return ucfirst(trim($rawCategory));
     }
 
     /**

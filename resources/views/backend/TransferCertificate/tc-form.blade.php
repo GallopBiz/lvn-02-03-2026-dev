@@ -111,7 +111,7 @@
                         <input type="text" name="tc_form_data[father_name]" id="tc_father_name" class="form-control" value="{{ $pick('father_name') }}">
                     </div>
                     <div class="form-group">
-                        <label>Category & Caste (Whether SC/ST)</label>
+                        <label>Category (Whether SC/ST)</label>
                         <input type="text" name="tc_form_data[caste]" id="tc_caste" class="form-control" value="{{ $pick('caste') }}">
                     </div>
                     <div class="form-group">

@@ -110,12 +110,37 @@
     $tcMetaValue = $metaIssueDate ? "{$tcSeqNo}/{$metaIssueDate}" : $tcSeqNo;
     $penApaarId = $value('pen_apaar_id') ?: trim($value('pen_no') . ($value('apaar_id') ? ' / ' . $value('apaar_id') : ''));
 
+    $categoryValue = $value('category') ?: $value('caste');
+    if (!empty($categoryValue)) {
+        $rawCatVal = trim((string) $categoryValue);
+        if (preg_match('/^(.*?)\s*\(Category\)/i', $rawCatVal, $m)) {
+            $categoryValue = trim($m[1]);
+        } elseif (str_contains($rawCatVal, '-')) {
+            $parts = explode('-', $rawCatVal, 2);
+            $firstPart = trim($parts[0]);
+            $upperFirst = strtoupper($firstPart);
+            if (in_array($upperFirst, ['GENERAL', 'GEN', 'GEN.', 'OBC', 'SC', 'ST', 'UR', 'OPEN', 'UNRESERVED'])) {
+                $categoryValue = in_array($upperFirst, ['GEN', 'GEN.', 'GENERAL', 'UR', 'OPEN', 'UNRESERVED']) ? 'General' : $upperFirst;
+            } else {
+                $categoryValue = $firstPart;
+            }
+        } elseif (preg_match('/^(.*?)\s*\(Caste\)$/i', $rawCatVal, $m)) {
+            $rawCat = $student['category'] ?? ($student['student_category'] ?? null);
+            if ($rawCat) {
+                $upperRaw = strtoupper(trim($rawCat));
+                $categoryValue = in_array($upperRaw, ['GEN', 'GEN.', 'GENERAL', 'UR', 'OPEN', 'UNRESERVED']) ? 'General' : (in_array($upperRaw, ['OBC', 'SC', 'ST']) ? $upperRaw : ucfirst(trim($rawCat)));
+            } else {
+                $categoryValue = '';
+            }
+        }
+    }
+
     $rows = [
         ['label' => 'Name of Student', 'value' => $studentName],
         ['label' => 'Mother\'s / Guardian\'s Name', 'value' => $motherName],
         ['label' => 'Father\'s / Guardian\'s Name', 'value' => $fatherName],
         ['label' => 'Nationality', 'value' => $value('nationality', 'INDIAN')],
-        ['label' => 'Whether the candidate belongs to SC or ST', 'value' => $value('caste')],
+        ['label' => 'Whether the candidate belongs to SC or ST', 'value' => $categoryValue],
         ['label' => 'Date of admission in the school with Class', 'value' => trim($admissionDate . ($admittedClass ? ' ' . $formatClass($admittedClass) : ''))],
         ['label' => 'Date of birth (in Christian Era)', 'label_note' => 'according to admission register', 'split' => [
             ['label' => 'In figures', 'value' => $dob, 'is_dob' => true],
