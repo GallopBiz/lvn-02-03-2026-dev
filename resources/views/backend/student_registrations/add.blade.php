@@ -246,7 +246,7 @@
                                         <!-- <span class="student_dob_msg validation_err"></span> -->
                                     </div>
                                     <div class="col-md-4 form-group mb-3">
-                                        <label for="firstName1">Gender</label>
+                                        <label for="firstName1">Gender<b class="validation_err">*</b></label>
                                         <select id="gender" class="form-control" name="gender" required>
                                             <option value="" disabled selected>Please select</option>
                                             @foreach(config('global.gender') as $each)
@@ -422,12 +422,12 @@
                                         <input name="vaccaination" class="form-control uperletter" id="vaccaination" type="text" placeholder="Enter vaccaination" />
                                     </div>
                                     <div class="col-md-4 form-group mb-3">
-                                        <label for="address">Scholer SSSM ID :</label>
-                                        <input class="form-control" id="sssmid" type="text" placeholder="Enter SSSMID " name="SSSMID" maxlength="9" pattern="\d{3}-\d{3}-\d{4}" onkeyup="this.value = this.value.replace(/[^0-9-]/g, '');check7();" return false; /><span class="fathermobile_for_msg validation_err" id="validation_err7"></span>
+                                        <label for="sssmid">Scholar SSSM ID :</label>
+                                        <input class="form-control uperletter" id="sssmid" type="text" placeholder="Enter SSSMID " name="SSSMID" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, '');check7();" onkeyup="this.value = this.value.replace(/[^0-9]/g, '');check7();" /><span class="fathermobile_for_msg validation_err" id="validation_err7"></span>
                                     </div>
 									<div class="col-md-4 form-group mb-3">
                                         <label for="family_SSSMID">Family SSSM ID :</label>
-                                        <input class="form-control" id="family_SSSMID" type="text" placeholder="Enter SSSMID" name="family_SSSMID" maxlength="8" pattern="\d{8}" onkeyup="this.value = this.value.replace(/[^0-9]/g, '');check8();" /><span class="validation_err" id="validation_err_family_sssmid"></span>
+                                        <input class="form-control" id="family_SSSMID" type="text" placeholder="Enter SSSMID" name="family_SSSMID" maxlength="8" oninput="this.value = this.value.replace(/[^0-9]/g, '');check8();" onkeyup="this.value = this.value.replace(/[^0-9]/g, '');check8();" /><span class="validation_err" id="validation_err_family_sssmid"></span>
                                     </div>
 
                                     <div class="col-md-4 form-group mb-3">
@@ -883,28 +883,28 @@
                                 </div>
 
 
-                                <h4>Student Bank Details</h4>
+                                <h4>Student Bank Details<b class="validation_err">*</b></h4>
 
 
                                 <div class="col-md-4 form-group mb-3">
-                                    <label for="siblings_school">Bank Name</label>
+                                    <label for="siblings_school">Bank Name<b class="validation_err">*</b></label>
                                     <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter name" name="bankName" required>
                                 </div>
 
                                 <div class="col-md-4 form-group mb-3">
-                                    <label for="siblings_school">Branch Name</label>
+                                    <label for="siblings_school">Branch Name<b class="validation_err">*</b></label>
                                     <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter branch" name="branchName" required>
                                 </div>
 
 
                                 <div class="col-md-4 form-group mb-3">
-                                    <label for="siblings_school">Account Number</label>
+                                    <label for="siblings_school">Account Number<b class="validation_err">*</b></label>
                                     <input class="form-control date4" id="picker2-" type="text" placeholder="Enter accont number" name="account_number" required>
                                 </div>
 
 
                                 <div class="col-md-4 form-group mb-3">
-                                    <label for="siblings_school">IFSC Code</label>
+                                    <label for="siblings_school">IFSC Code<b class="validation_err">*</b></label>
                                     <input class="form-control date4 uperletter" id="picker2-" type="text" placeholder="Enter ifsc code" name="ifsc_code" required>
                                 </div>
 
@@ -1666,6 +1666,20 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
             $('.batch_dob_msg').text("");
         }
 
+        var sssmVal = $('#sssmid').val();
+        if (sssmVal && sssmVal.trim() !== '') {
+            var sssmClean = sssmVal.replace(/[^0-9]/g, '');
+            if (sssmClean.length !== 9) {
+                $('#validation_err7').text("SSSM ID must be exactly 9 digits!");
+                missing.push("SSSM ID (must be exactly 9 digits)");
+                if (!firstInvalid) firstInvalid = $('#sssmid');
+            } else {
+                $('#validation_err7').text("");
+            }
+        } else {
+            $('#validation_err7').text("");
+        }
+
         var famSSSM = $('#family_SSSMID').val();
         if (famSSSM && famSSSM.trim() !== '') {
             var famClean = famSSSM.replace(/[^0-9]/g, '');
@@ -2206,10 +2220,12 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
     function check7() {
         var mobile = document.getElementById('sssmid');
         var message = document.getElementById('validation_err7');
-        if (mobile.value.length != 9) {
-            message.innerHTML = "required 9 digits, match requested format!"
-        } else {
-            message.innerHTML = "";
+        if (mobile && message) {
+            if (mobile.value.length != 9 && mobile.value.length != 0) {
+                message.innerHTML = "SSSM ID must be exactly 9 digits!";
+            } else {
+                message.innerHTML = "";
+            }
         }
     }
 
@@ -2229,10 +2245,12 @@ $('input[name="present_address"]').val(response.inq_str_data.address);
     function check9() {
         var mobile = document.getElementById('AadharNo');
         var message = document.getElementById('validation_err9');
-        if (mobile.value.length != 12) {
-            message.innerHTML = "required 12 digits, match requested format!"
-        } else {
-            message.innerHTML = "";
+        if (mobile && message) {
+            if (mobile.value.length != 12 && mobile.value.length != 0) {
+                message.innerHTML = "Aadhar No. must be exactly 12 digits!";
+            } else {
+                message.innerHTML = "";
+            }
         }
     }
     $(window).ready(function() {

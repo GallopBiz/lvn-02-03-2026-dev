@@ -1913,6 +1913,28 @@ public function perstudueamount($id){
             $mergedPostData['studentname'] = $studentNameVal;
         }
 
+        if (array_key_exists('SSSMID', $postData_html)) {
+            $mergedPostData['SSSMID'] = $postData_html['SSSMID'] ?? '';
+        }
+        if (array_key_exists('mother_tongue', $postData_html)) {
+            $mergedPostData['mother_tongue'] = $postData_html['mother_tongue'] ?? '';
+        }
+        if (array_key_exists('family_SSSMID', $postData_html)) {
+            $mergedPostData['family_SSSMID'] = $postData_html['family_SSSMID'] ?? '';
+        }
+        if (array_key_exists('fatherSSSMID', $postData_html)) {
+            $mergedPostData['fatherSSSMID'] = $postData_html['fatherSSSMID'] ?? '';
+        }
+        if (array_key_exists('motherSSSMID', $postData_html)) {
+            $mergedPostData['motherSSSMID'] = $postData_html['motherSSSMID'] ?? '';
+        }
+        if (array_key_exists('remarks', $postData_html)) {
+            $mergedPostData['remarks'] = $postData_html['remarks'] ?? '';
+        }
+        if (array_key_exists('vaccaination', $postData_html)) {
+            $mergedPostData['vaccaination'] = $postData_html['vaccaination'] ?? '';
+        }
+
         $isNextYearVal = 0;
         if (isset($postData_html['next_year'])) {
             $isNextYearVal = (!empty($postData_html['next_year']) && ($postData_html['next_year'] == 1 || $postData_html['next_year'] === '1')) ? 1 : 0;

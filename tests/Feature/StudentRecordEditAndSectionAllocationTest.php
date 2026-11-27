@@ -148,6 +148,57 @@ class StudentRecordEditAndSectionAllocationTest extends TestCase
     }
 
     /**
+     * Verify that when SSSMID, mother_tongue, and family_SSSMID are emptied/removed on edit, they are saved as empty.
+     */
+    public function test_clearing_optional_sssmid_mother_tongue_and_family_sssmid_saves_empty_values()
+    {
+        $scholarNo = 'SCH_CLR_' . rand(10000, 99999);
+        $this->createdScholarNos[] = $scholarNo;
+
+        $initialJson = [
+            'scholar_no' => $scholarNo,
+            'studentname' => 'Clear Test Student',
+            'classname' => '05',
+            'session_name' => '2025_2026',
+            'SSSMID' => '123456789',
+            'mother_tongue' => 'Hindi',
+            'family_SSSMID' => '98765432',
+        ];
+
+        $studentId = DB::connection('dynamic')->table('student_registration')->insertGetId([
+            'scholar_no' => $scholarNo,
+            'student_name' => 'Clear Test Student',
+            'class_name' => '05',
+            'session_name' => '2025_2026',
+            'status' => 'r',
+            'json_str' => json_encode($initialJson),
+            'registration_date' => '2025-04-01',
+        ]);
+
+        // Submit edit form with SSSMID, mother_tongue, and family_SSSMID completely cleared (empty strings)
+        $editPayload = [
+            'id' => $studentId,
+            'scholar_no' => $scholarNo,
+            'classname' => '05',
+            'session_name' => '2025_2026',
+            'SSSMID' => '',
+            'mother_tongue' => '',
+            'family_SSSMID' => '',
+        ];
+
+        $response = $this->post('/saveeditregistration', $editPayload);
+        $response->assertStatus(302);
+
+        $updated = DB::connection('dynamic')->table('student_registration')->where('id', $studentId)->first();
+        $this->assertNotNull($updated);
+
+        $updatedJson = json_decode($updated->json_str, true);
+        $this->assertEquals('', $updatedJson['SSSMID'] ?? '');
+        $this->assertEquals('', $updatedJson['mother_tongue'] ?? '');
+        $this->assertEquals('', $updatedJson['family_SSSMID'] ?? '');
+    }
+
+    /**
      * Task 3: Stream-based Section Assignment for Class 11 and Class 12:
      * Science -> Kautilya, Humanities/Commerce -> Ramanujan during registration.
      */
